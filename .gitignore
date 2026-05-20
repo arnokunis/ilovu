@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Xcode — per-user state (schemes, breakpoints, window positions)
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+
+# Xcode — build artifacts (regenerated on every build)
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager local state
+.swiftpm/
+.build/
