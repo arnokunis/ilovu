@@ -20,12 +20,7 @@ struct UsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     header
-
-                    if memoryStore.memories.isEmpty {
-                        emptyState
-                    } else {
-                        memoryList
-                    }
+                    contentBelowHeader
                 }
             }
         }
@@ -73,12 +68,20 @@ struct UsView: View {
         return count == 1 ? "1 memory" : "\(count) memories"
     }
 
-    // MARK: - Memory list
+    // MARK: - Content below header
+    // Daily question always shown; the vault below either lists
+    // memories or shows the warm "first memory waiting" empty state.
 
-    private var memoryList: some View {
+    private var contentBelowHeader: some View {
         VStack(spacing: 16) {
-            ForEach(memoryStore.sortedByDate) { memory in
-                memoryCard(memory)
+            DailyQuestionCard()
+
+            if memoryStore.memories.isEmpty {
+                emptyState
+            } else {
+                ForEach(memoryStore.sortedByDate) { memory in
+                    memoryCard(memory)
+                }
             }
         }
         .padding(20)
@@ -159,9 +162,9 @@ struct UsView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 64))
+                .font(.system(size: 56))
                 .foregroundStyle(Color.louvCoral.opacity(0.55))
-                .padding(.top, 60)
+                .padding(.top, 32)
 
             Text("Your first memory is waiting 💕")
                 .font(.system(size: 20, weight: .bold))
@@ -173,8 +176,8 @@ struct UsView: View {
                 .foregroundStyle(.gray)
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 60)
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 32)
     }
 }
 

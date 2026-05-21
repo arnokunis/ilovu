@@ -1,29 +1,354 @@
 // NearYouView.swift
-// Placeholder for the Near You tab. Will eventually show local date
-// venues, events, and pop-ups based on location. Stubbed for now.
+// The real Near You tab — a swipe deck for local events, modelled
+// to feel identical to the date-card SwipeView. Same drag physics,
+// same threshold, same LIKE/NOPE stamps, same haptics, same coin-
+// flip match. The only differences are the data type (LocalEvent
+// instead of DateCard), the filter (Category instead of Difficulty),
+// and the card content (event meta + optional rating row).
+//
+// Events here are sample data from SampleEvents. Later this list
+// becomes results from Google Places + Eventbrite — the swipe deck
+// itself doesn't change.
 
 import SwiftUI
 
 struct NearYouView: View {
+
+    // MARK: - State
+
+    @State private var deck: [LocalEvent] = SampleEvents.all
+    @State private var dragOffset: CGSize = .zero
+
+    // Set on a right-swipe match. Parent (MainTabView) watches and
+    // presents EventMatchView via .fullScreenCover. Same pattern as
+    // the date card matchedCard binding.
+    @Binding var matchedEvent: LocalEvent?
+
+    // Tapping a card (without swiping) sets this. MainTabView owns
+    // the actual sheet so that both the tap-to-detail path and the
+    // View-Details-from-match path can present the same screen.
+    @Binding var eventToShow: LocalEvent?
+
+    @State private var selectedCategory: LocalEvent.Category? = nil
+
+    // Same threshold as SwipeView — keeps the muscle memory identical.
+    private let swipeThreshold: CGFloat = 120
+
+    private var visibleDeck: [LocalEvent] {
+        guard let selectedCategory else { return deck }
+        return deck.filter { $0.category == selectedCategory }
+    }
+
+    // MARK: - Body
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
 
-            VStack(spacing: 12) {
-                Text("Near You")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(Color.deepRose)
+            VStack(spacing: 16) {
+                header
+                    .padding(.top, 8)
 
-                Text("Local events coming soon")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.gray)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                filterPills
+
+                Spacer()
+
+                ZStack {
+                    if visibleDeck.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(Array(visibleDeck.prefix(2).enumerated()), id: \.element.id) { index, event in
+                            cardView(for: event)
+                                .zIndex(Double(1 - index))
+                        }
+                    }
+                }
+                .frame(maxWidth: 340, maxHeight: 480)
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                actionButtons
+                    .padding(.bottom, 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 4) {
+            Text("iLovu")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.louvCoral)
+            Text("Near You 📍")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(Color.deepRose)
+            Text("Events near you this week")
+                .font(.system(size: 13))
+                .foregroundStyle(.gray)
+        }
+    }
+
+    // MARK: - Card
+
+    @ViewBuilder
+    private func cardView(for event: LocalEvent) -> some View {
+        let isTop = event.id == visibleDeck.first?.id
+
+        // Identical stamp opacity math to SwipeView — both decks share
+        // the same SwipeStamp view so the rendering is literally the
+        // same code, only the opacity-drive math is duplicated locally.
+        let likeOpacity = isTop ? min(max(dragOffset.width / swipeThreshold, 0), 1) : 0
+        let nopeOpacity = isTop ? min(max(-dragOffset.width / swipeThreshold, 0), 1) : 0
+
+        EventCardContent(event: event)
+            .frame(width: 340, height: 480)
+            .background(Color.white)
+            .overlay(alignment: .topLeading) {
+                SwipeStamp(text: "LIKE", color: .matchGreen, rotation: -18)
+                    .opacity(likeOpacity)
+            }
+            .overlay(alignment: .topTrailing) {
+                SwipeStamp(text: "NOPE", color: .passRed, rotation: 18)
+                    .opacity(nopeOpacity)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.deepRose.opacity(0.12), lineWidth: 1)
+            )
+            .louvShadow()
+            .scaleEffect(isTop ? 1.0 : 0.95)
+            .rotationEffect(isTop ? .degrees(Double(dragOffset.width / 20)) : .degrees(-3))
+            .offset(isTop ? dragOffset : .zero)
+            .gesture(dragGesture)
+            // Tap (with no significant drag) opens the event detail.
+            // DragGesture's default minimumDistance (10pt) means a real
+            // tap doesn't accidentally trigger the drag, and vice versa.
+            .onTapGesture {
+                eventToShow = event
+            }
+            .allowsHitTesting(isTop)
+    }
+
+    // MARK: - Drag Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                dragOffset = value.translation
+            }
+            .onEnded { value in
+                if value.translation.width > swipeThreshold {
+                    completeSwipe(direction: .right)
+                } else if value.translation.width < -swipeThreshold {
+                    completeSwipe(direction: .left)
+                } else {
+                    withAnimation(LouvAnimation.spring) {
+                        dragOffset = .zero
+                    }
+                }
+            }
+    }
+
+    // MARK: - Swipe Completion
+
+    private enum SwipeDirection { case left, right }
+
+    private func completeSwipe(direction: SwipeDirection) {
+        let topEvent = visibleDeck.first
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        withAnimation(LouvAnimation.spring) {
+            dragOffset.width = direction == .right ? 600 : -600
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(LouvAnimation.spring) {
+                if let topEvent {
+                    deck.removeAll { $0.id == topEvent.id }
+                }
+                dragOffset = .zero
+            }
+
+            // Same 50/50 coin flip as the date card deck — we're
+            // simulating the partner also swiping right since real
+            // partner sync isn't wired yet.
+            if direction == .right, let event = topEvent, Bool.random() {
+                matchedEvent = event
             }
         }
+    }
+
+    // MARK: - Action Buttons
+
+    private var actionButtons: some View {
+        HStack(spacing: 40) {
+            Button {
+                guard !visibleDeck.isEmpty else { return }
+                completeSwipe(direction: .left)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.gray)
+                    .frame(width: 64, height: 64)
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .louvShadow()
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                guard !visibleDeck.isEmpty else { return }
+                completeSwipe(direction: .right)
+            } label: {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .background(LouvGradient.coral)
+                    .clipShape(Circle())
+                    .louvShadow()
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Filter Pills
+
+    private var filterPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                filterPill(label: "All",          value: nil)
+                filterPill(label: "Music",        value: .music)
+                filterPill(label: "Food & Drink", value: .foodDrink)
+                filterPill(label: "Arts",         value: .arts)
+                filterPill(label: "Outdoors",     value: .outdoors)
+                filterPill(label: "Nightlife",    value: .nightlife)
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
+    @ViewBuilder
+    private func filterPill(label: String, value: LocalEvent.Category?) -> some View {
+        let isSelected = selectedCategory == value
+
+        Button {
+            withAnimation(LouvAnimation.spring) {
+                selectedCategory = value
+            }
+        } label: {
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isSelected ? .white : .gray)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background {
+                    if isSelected {
+                        LouvGradient.coral
+                    } else {
+                        Color(white: 0.92)
+                    }
+                }
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Text("That's everything in this category 📍")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(Color.deepRose)
+                .multilineTextAlignment(.center)
+            Text("Try a different filter, or check back next week.")
+                .font(.system(size: 14))
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+    }
+}
+
+// MARK: - EventCardContent
+// The contents of a single event card. Mirrors CardContent's shape
+// from SwipeView (emoji top, title + secondary line, optional row,
+// description, pills at the bottom) so both decks read the same way.
+private struct EventCardContent: View {
+    let event: LocalEvent
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Spacer()
+
+            Text(event.emoji)
+                .font(.system(size: 64))
+
+            VStack(spacing: 4) {
+                Text(event.title)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.deepRose)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+
+                Text("\(event.venue) · \(event.date)")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+
+            // Rating row — only shown when we have review data.
+            // String(format:) gives "4.7" not "4.70" or "4.7000...".
+            if let rating = event.rating, let reviewCount = event.reviewCount {
+                HStack(spacing: 6) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13))
+                    Text(String(format: "%.1f", rating))
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("·")
+                        .foregroundStyle(.gray)
+                    Text("\(reviewCount.formatted()) reviews")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                }
+                .foregroundStyle(Color.louvCoral)
+            }
+
+            Text(event.description)
+                .font(.system(size: 14))
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .lineLimit(3)
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                pill(text: event.category.rawValue, background: .louvCoral)
+                pill(text: event.price,             background: .louvOrange)
+            }
+            .padding(.bottom, 20)
+        }
+    }
+
+    private func pill(text: String, background: Color) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(background)
+            .clipShape(Capsule())
     }
 }
 
 #Preview {
-    NearYouView()
+    NearYouView(matchedEvent: .constant(nil), eventToShow: .constant(nil))
 }

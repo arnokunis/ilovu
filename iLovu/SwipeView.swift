@@ -102,12 +102,14 @@ struct SwipeView: View {
             // Stamps go BEFORE clipShape so the rounded corners mask them
             // if they happen to overflow. Border overlay stays AFTER clipShape
             // so the stroke renders on top of everything.
+            // SwipeStamp lives in its own file — NearYouView uses the same
+            // view for its event swipe deck so the two decks feel identical.
             .overlay(alignment: .topLeading) {
-                swipeStamp(text: "LIKE", color: .matchGreen, rotation: -18)
+                SwipeStamp(text: "LIKE", color: .matchGreen, rotation: -18)
                     .opacity(likeOpacity)
             }
             .overlay(alignment: .topTrailing) {
-                swipeStamp(text: "NOPE", color: .passRed, rotation: 18)
+                SwipeStamp(text: "NOPE", color: .passRed, rotation: 18)
                     .opacity(nopeOpacity)
             }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -124,25 +126,6 @@ struct SwipeView: View {
             .gesture(dragGesture)
             // Only the top card should accept touches — back cards are decorative.
             .allowsHitTesting(isTop)
-    }
-
-    // MARK: - Swipe Stamp
-    // The "LIKE" / "NOPE" badge that fades in as the user drags the card.
-    // Outlined chunky text, tilted like a real ink stamp.
-    @ViewBuilder
-    private func swipeStamp(text: String, color: Color, rotation: Double) -> some View {
-        Text(text)
-            .font(.system(size: 36, weight: .heavy))
-            .tracking(2)
-            .foregroundStyle(color)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(color, lineWidth: 3)
-            )
-            .rotationEffect(.degrees(rotation))
-            .padding(24)
     }
 
     // MARK: - Drag Gesture

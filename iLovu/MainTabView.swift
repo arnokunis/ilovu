@@ -23,10 +23,21 @@ struct MainTabView: View {
     // Owned here so the full-screen cover can sit on the TabView itself.
     @State private var matchedCard: DateCard?
 
+    // Same pattern for the Near You event swipe deck — a separate
+    // binding because event matches present a different celebration
+    // (EventMatchView with Book Now + Add to Calendar) than date
+    // card matches (MatchView with Plan This Date).
+    @State private var matchedEvent: LocalEvent?
+
     // When set, MissionDetailView is presented as a sheet over the
     // tab bar. Set by the "Plan This Date" flow after the match
     // celebration has dismissed.
     @State private var missionToPlan: Mission?
+
+    // The EventDetailView sheet is owned here so two flows can
+    // present it: tapping an event card on NearYouView, or tapping
+    // View Details on the event match celebration.
+    @State private var eventToShow: LocalEvent?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -38,7 +49,7 @@ struct MainTabView: View {
                 .tabItem { Label("Cards", systemImage: "square.stack") }
                 .tag(AppTab.cards)
 
-            NearYouView()
+            NearYouView(matchedEvent: $matchedEvent, eventToShow: $eventToShow)
                 .tabItem { Label("Near You", systemImage: "mappin.and.ellipse") }
                 .tag(AppTab.nearYou)
 
@@ -69,6 +80,25 @@ struct MainTabView: View {
         // tapping a mission on the Home dashboard.
         .sheet(item: $missionToPlan) { mission in
             MissionDetailView(mission: mission)
+        }
+        // Event match celebration — independent of the date card
+        // match cover above. Only one of these is ever visible at
+        // a time because matchedCard and matchedEvent are bound to
+        // separate decks.
+        .fullScreenCover(item: $matchedEvent) { event in
+            EventMatchView(event: event) {
+                // View Details tapped — same delayed-present trick as
+                // the mission flow, so the cover can finish dismissing
+                // before the sheet starts coming up.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    eventToShow = event
+                }
+            }
+        }
+        // Event detail sheet. Two flows feed it: a tap on the Near You
+        // deck, and the View Details button on EventMatchView.
+        .sheet(item: $eventToShow) { event in
+            EventDetailView(event: event)
         }
     }
 }
