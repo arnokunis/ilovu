@@ -17,3 +17,6 @@ DerivedData/
 # Swift Package Manager local state
 .swiftpm/
 .build/
+
+# Secrets — API keys, never commit
+Secrets.swift
