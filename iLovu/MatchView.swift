@@ -11,6 +11,11 @@ struct MatchView: View {
     // user knows exactly which date idea they just matched on.
     let card: DateCard
 
+    // Called when the user taps "Plan This Date". The parent (MainTabView)
+    // uses this to add a Mission to the store and present MissionDetailView
+    // after the cover dismisses. Defaulted to a no-op so previews still work.
+    var onPlanThisDate: (Mission) -> Void = { _ in }
+
     // SwiftUI's built-in dismiss action. Works because we're presented
     // via .fullScreenCover from the parent. Calling it slides us away.
     @Environment(\.dismiss) private var dismiss
@@ -54,7 +59,11 @@ struct MatchView: View {
                     // Primary CTA — white pill, coral text. Stands out
                     // strongly against the gradient.
                     Button {
-                        // No planning flow yet — just dismiss for now.
+                        // Hand a fresh Mission up to the parent, then
+                        // dismiss ourselves. The parent waits for the
+                        // cover to finish dismissing before opening
+                        // MissionDetailView.
+                        onPlanThisDate(Mission(from: card))
                         dismiss()
                     } label: {
                         Text("Plan This Date")
