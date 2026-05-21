@@ -32,8 +32,10 @@ struct MatchView: View {
                 Spacer()
 
                 // The hero heart. starts tiny, overshoots, settles.
+                // Trimmed from 120pt to 80pt so the mini matched card below
+                // has room to breathe on smaller phones.
                 Text("💖")
-                    .font(.system(size: 120))
+                    .font(.system(size: 80))
                     .scaleEffect(heartScale)
 
                 // Headline.
@@ -41,12 +43,9 @@ struct MatchView: View {
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(.white)
 
-                // Which card matched, so the moment feels specific.
-                Text(card.title)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                // A miniature of the actual card that matched — much more
+                // emotionally specific than just rendering the title in text.
+                MiniMatchedCard(card: card)
 
                 Spacer()
 
@@ -101,6 +100,52 @@ struct MatchView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - MiniMatchedCard
+// A small floating rendering of the card that triggered the match.
+// Way more specific than just showing the title in text — the user
+// sees the actual thing they matched on, in card form.
+private struct MiniMatchedCard: View {
+    let card: DateCard
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(card.emoji)
+                .font(.system(size: 56))
+
+            Text(card.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.deepRose)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+
+            HStack(spacing: 6) {
+                pill(text: card.difficulty.rawValue, background: .louvCoral)
+                pill(text: card.estimatedCost.rawValue, background: .louvOrange)
+            }
+        }
+        .padding(.vertical, 20)
+        .padding(.horizontal, 16)
+        .frame(width: 240)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        // Stronger shadow than louvShadow — we're floating on a saturated
+        // gradient, so the card needs more separation to feel lifted.
+        .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
+        // Slight tilt sells the "floating polaroid" feeling.
+        .rotationEffect(.degrees(-4))
+    }
+
+    private func pill(text: String, background: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(background)
+            .clipShape(Capsule())
     }
 }
 

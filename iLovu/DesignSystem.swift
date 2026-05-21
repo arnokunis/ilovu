@@ -25,6 +25,10 @@ extension Color {
 
     // Apple-style success green — used when a couple gets a match.
     static let matchGreen = Color(red: 52/255, green: 199/255, blue: 89/255)    // #34C759
+
+    // Pass red — the "NOPE" swipe stamp. Sharper and more saturated than
+    // louvCoral so the brand coral stays associated with positive moments.
+    static let passRed = Color(red: 230/255, green: 57/255, blue: 70/255)       // #E63946
 }
 
 // MARK: - Gradients

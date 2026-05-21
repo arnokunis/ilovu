@@ -91,9 +91,25 @@ struct SwipeView: View {
     private func cardView(for card: DateCard) -> some View {
         let isTop = card.id == visibleDeck.first?.id
 
+        // Stamps fade in proportionally to drag progress toward the threshold,
+        // and only ever show on the top card. Clamped 0...1.
+        let likeOpacity = isTop ? min(max(dragOffset.width / swipeThreshold, 0), 1) : 0
+        let nopeOpacity = isTop ? min(max(-dragOffset.width / swipeThreshold, 0), 1) : 0
+
         CardContent(card: card)
             .frame(width: 340, height: 480)
             .background(Color.white)
+            // Stamps go BEFORE clipShape so the rounded corners mask them
+            // if they happen to overflow. Border overlay stays AFTER clipShape
+            // so the stroke renders on top of everything.
+            .overlay(alignment: .topLeading) {
+                swipeStamp(text: "LIKE", color: .matchGreen, rotation: -18)
+                    .opacity(likeOpacity)
+            }
+            .overlay(alignment: .topTrailing) {
+                swipeStamp(text: "NOPE", color: .passRed, rotation: 18)
+                    .opacity(nopeOpacity)
+            }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -108,6 +124,25 @@ struct SwipeView: View {
             .gesture(dragGesture)
             // Only the top card should accept touches — back cards are decorative.
             .allowsHitTesting(isTop)
+    }
+
+    // MARK: - Swipe Stamp
+    // The "LIKE" / "NOPE" badge that fades in as the user drags the card.
+    // Outlined chunky text, tilted like a real ink stamp.
+    @ViewBuilder
+    private func swipeStamp(text: String, color: Color, rotation: Double) -> some View {
+        Text(text)
+            .font(.system(size: 36, weight: .heavy))
+            .tracking(2)
+            .foregroundStyle(color)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(color, lineWidth: 3)
+            )
+            .rotationEffect(.degrees(rotation))
+            .padding(24)
     }
 
     // MARK: - Drag Gesture
