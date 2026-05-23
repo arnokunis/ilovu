@@ -39,13 +39,17 @@ struct MainTabView: View {
     // View Details on the event match celebration.
     @State private var eventToShow: LocalEvent?
 
+    // Tapped-but-not-swiped date card. Lives here for symmetry with
+    // eventToShow — the detail sheet sits above the tab bar.
+    @State private var cardToShow: DateCard?
+
     var body: some View {
         TabView(selection: $selectedTab) {
             HomeView(selectedTab: $selectedTab)
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag(AppTab.home)
 
-            SwipeView(matchedCard: $matchedCard)
+            SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow)
                 .tabItem { Label("Cards", systemImage: "square.stack") }
                 .tag(AppTab.cards)
 
@@ -99,6 +103,12 @@ struct MainTabView: View {
         // deck, and the View Details button on EventMatchView.
         .sheet(item: $eventToShow) { event in
             EventDetailView(event: event)
+        }
+        // Date card detail sheet. Driven by tapping a card on the
+        // Cards deck — swipes still like/nope through SwipeView's
+        // drag gesture, only true taps land here.
+        .sheet(item: $cardToShow) { card in
+            DateCardDetailView(card: card)
         }
     }
 }

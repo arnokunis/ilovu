@@ -23,6 +23,10 @@ struct SwipeView: View {
     // ContentView's .fullScreenCover sees it and shows MatchView.
     @Binding var matchedCard: DateCard?
 
+    // Tapping a card (without swiping) sets this. MainTabView owns
+    // the actual sheet — same pattern as NearYouView's eventToShow.
+    @Binding var cardToShow: DateCard?
+
     // Currently selected difficulty filter. nil = "All" (show every card).
     // Changing this immediately changes the deck the user sees.
     @State private var selectedDifficulty: DateCard.Difficulty? = nil
@@ -124,6 +128,12 @@ struct SwipeView: View {
             // Only the top card follows the finger.
             .offset(isTop ? dragOffset : .zero)
             .gesture(dragGesture)
+            // Tap (with no significant drag) opens the card detail.
+            // DragGesture's default minimumDistance (10pt) means a real
+            // tap doesn't accidentally trigger the drag, and vice versa.
+            .onTapGesture {
+                cardToShow = card
+            }
             // Only the top card should accept touches — back cards are decorative.
             .allowsHitTesting(isTop)
     }
@@ -345,5 +355,5 @@ private struct CardContent: View {
 // MARK: - Preview
 // .constant(nil) gives us a fake binding for previewing without a real parent.
 #Preview {
-    SwipeView(matchedCard: .constant(nil))
+    SwipeView(matchedCard: .constant(nil), cardToShow: .constant(nil))
 }

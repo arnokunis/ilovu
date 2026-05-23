@@ -22,6 +22,8 @@ struct DateCard: Identifiable, Equatable, Codable {
     let difficulty: Difficulty       // How much time/effort this date needs.
     let estimatedCost: Cost          // Rough money commitment.
     let category: Category           // The vibe — cosy, foodie, adventure, etc.
+    let whyItWorks: String           // Bespoke per-card line shown on the detail sheet.
+    let tips: [String]               // Bespoke per-card practical tips on the detail sheet.
 
     // MARK: - Difficulty
     // An enum because difficulty has a fixed set of options.
