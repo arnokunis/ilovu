@@ -8,6 +8,25 @@
 
 import SwiftUI
 
+// Safety-net date suggestion used by HomeView only if SampleCards.all is
+// ever empty. Defined at file scope (not as a static on HomeView) because
+// referencing a struct-level static from a @State default expression can
+// confuse SourceKit and cascade "type not found" errors across the file.
+private let homeFallbackCard = DateCard(
+    title: "Take five together",
+    description: "Sit for five minutes with no phones — share one good thing about today each.",
+    emoji: "💕",
+    difficulty: .micro,
+    estimatedCost: .free,
+    category: .cosy,
+    whyItWorks: "Even tiny moments of focused attention count as a date.",
+    tips: [
+        "Set a five-minute timer.",
+        "Phones face-down on the table.",
+        "Take turns sharing — no interrupting."
+    ]
+)
+
 struct HomeView: View {
 
     // Binding to MainTabView's selected tab. HomeView doesn't own the
@@ -57,7 +76,10 @@ struct HomeView: View {
 
     // Picked once per HomeView instance (~once per app launch) so the
     // suggestion stays stable while the user looks at the dashboard.
-    @State private var tonightsCard: DateCard = SampleCards.all.randomElement()!
+    // Falls back to `homeFallbackCard` (file scope, above) if SampleCards.all
+    // is ever empty — in practice it never is, but `??` keeps the init
+    // non-crashing.
+    @State private var tonightsCard: DateCard = SampleCards.all.randomElement() ?? homeFallbackCard
 
     // Drives the brief "Nudge sent! 💕" toast at the top of the screen.
     @State private var showNudgeConfirmation: Bool = false
