@@ -20,3 +20,4 @@ DerivedData/
 
 # Secrets — API keys, never commit
 Secrets.swift
+GoogleService-Info.plist
