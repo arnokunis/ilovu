@@ -14,6 +14,13 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
 
     var body: some View {
+        // TEMPORARY: routing straight to SignInView to build-test Apple → Firebase
+        // sign-in. To restore the real app flow, change this to `mainFlow`.
+        SignInView()
+    }
+
+    // The real entry flow. Swap `body` back to this once sign-in is verified.
+    private var mainFlow: some View {
         ZStack {
             if hasCompletedOnboarding {
                 MainTabView()
