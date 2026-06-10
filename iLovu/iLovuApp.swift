@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseCore
 
 @main
 struct iLovuApp: App {
@@ -16,6 +17,11 @@ struct iLovuApp: App {
     // reads and writes the same shared lists.
     @State private var missionStore = MissionStore()
     @State private var memoryStore  = MemoryStore()
+
+    // Connect to Firebase at launch (reads GoogleService-Info.plist).
+    init() {
+        FirebaseApp.configure()
+    }
 
     var body: some Scene {
         WindowGroup {
