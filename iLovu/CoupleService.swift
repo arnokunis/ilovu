@@ -128,12 +128,14 @@ final class CoupleService {
     static let inviteURLHost   = "invite"
 
     /// Builds the shareable deep link for an invite token.
-    static func inviteURL(token: String) -> URL {
+    /// `nonisolated`: pure string work, safe to call off the main actor.
+    nonisolated static func inviteURL(token: String) -> URL {
         URL(string: "\(inviteURLScheme)://\(inviteURLHost)/\(token)")!
     }
 
     /// Extracts the token from an incoming invite link, or nil if `url` isn't one.
-    static func inviteToken(from url: URL) -> String? {
+    /// `nonisolated`: pure parsing, no actor state touched.
+    nonisolated static func inviteToken(from url: URL) -> String? {
         guard url.scheme == inviteURLScheme, url.host == inviteURLHost else { return nil }
         // ilovu://invite/<token> -> pathComponents ["/", "<token>"]
         guard let token = url.pathComponents.first(where: { $0 != "/" }), !token.isEmpty else {
