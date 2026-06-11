@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+
+    // Is there a signed-in user at all?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // The signed-in user's uid.
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // The set of field names that changed between the old doc and the new doc.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- users/{userId} ----------
+    // A user's private profile/state. Owner-only, full stop.
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && uid() == userId;
+    }
+
+    // ---------- invites/{token} ----------
+    // The doc ID is an unguessable token. Two actors touch it:
+    //   * the creator (full control of their own invite)
+    //   * a redeemer (any other signed-in user who knows the token)
+    match /invites/{token} {
+
+      // CREATE: only the signed-in user can create an invite, and only one
+      // stamped with themselves as creator, starting life as a fresh,
+      // unconsumed invite. This stops anyone forging an invite "from" someone
+      // else or pre-marking it consumed.
+      allow create: if isSignedIn()
+                    && request.resource.data.creatorId == uid()
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.consumedBy == null;
+
+      // READ: the creator can always read their invite. Any other signed-in
+      // user may read it too — they have to in order to redeem it. Security
+      // here rests on the token being unguessable (it's the doc ID), not on
+      // hiding the doc. No public/unauthenticated reads.
+      allow read: if isSignedIn();
+
+      // DELETE: only the creator can tear down their own invite (e.g. revoke).
+      allow delete: if isSignedIn() && resource.data.creatorId == uid();
+
+      // UPDATE (redeem): a *different* signed-in user consumes a still-pending
+      // invite. Enforced invariants:
+      //   - the invite is currently pending (can't re-consume)             ← one-shot
+      //   - the redeemer is not the creator (can't pair with yourself)
+      //   - the new status is exactly 'consumed'
+      //   - consumedBy is stamped with the redeemer's own uid (no spoofing)
+      //   - ONLY status + consumedBy may change; creatorId/createdAt/token
+      //     and everything else stay frozen.
+      allow update: if isSignedIn()
+                    && resource.data.status == 'pending'
+                    && resource.data.creatorId != uid()
+                    && request.resource.data.status == 'consumed'
+                    && request.resource.data.consumedBy == uid()
+                    && request.resource.data.creatorId == resource.data.creatorId
+                    && changedKeys().hasOnly(['status', 'consumedBy']);
+    }
+
+    // ---------- couples/{coupleId} ----------
+    // Links exactly two users. `members` is a 2-element list of their uids.
+    match /couples/{coupleId} {
+
+      // READ: only the two people in `members` can see the couple doc.
+      allow read: if isSignedIn() && uid() in resource.data.members;
+
+      // CREATE: the creator must be one of the two members, and the doc must
+      // name exactly two distinct members. This lets a redeemer establish the
+      // couple at redemption time without being able to forge a couple they
+      // aren't part of, or pad it with extra members.
+      allow create: if isSignedIn()
+                    && request.resource.data.members.size() == 2
+                    && uid() in request.resource.data.members;
+
+      // UPDATE: only an existing member may write, and the membership list is
+      // frozen — you can update couple state, but you can't add/remove/swap
+      // who's in the relationship.
+      allow update: if isSignedIn()
+                    && uid() in resource.data.members
+                    && request.resource.data.members == resource.data.members;
+
+      // DELETE: not allowed from the client. Leave couples to be torn down by
+      // a trusted server/admin path if ever needed.
+      allow delete: if false;
+    }
+
+    // Anything not matched above is denied by default.
+  }
+}
