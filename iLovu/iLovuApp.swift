@@ -18,6 +18,11 @@ struct iLovuApp: App {
     @State private var missionStore = MissionStore()
     @State private var memoryStore  = MemoryStore()
 
+    // Firestore-backed invite/couple system. Constructing it touches no Firebase
+    // (its Firestore handle is resolved lazily per call), so a plain default is
+    // safe here even though it runs before configure() in init.
+    @State private var coupleService = CoupleService()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -36,6 +41,7 @@ struct iLovuApp: App {
                 .environment(missionStore)
                 .environment(memoryStore)
                 .environment(authState)
+                .environment(coupleService)
         }
     }
 }

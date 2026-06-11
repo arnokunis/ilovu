@@ -16,6 +16,9 @@ struct UsView: View {
     // Drives the full-screen memory viewer when a card is tapped.
     @State private var selectedMemory: Memory?
 
+    // Presents the partner-pairing sheet (create / redeem an invite).
+    @State private var showPairing = false
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -29,6 +32,9 @@ struct UsView: View {
         }
         .fullScreenCover(item: $selectedMemory) { memory in
             MemoryDetailView(memory: memory)
+        }
+        .sheet(isPresented: $showPairing) {
+            PairingView()
         }
     }
 
@@ -77,6 +83,8 @@ struct UsView: View {
 
     private var contentBelowHeader: some View {
         VStack(spacing: 16) {
+            connectButton
+
             DailyQuestionCard()
 
             if memoryStore.memories.isEmpty {
@@ -90,6 +98,31 @@ struct UsView: View {
             signOutButton
         }
         .padding(20)
+    }
+
+    // MARK: - Connect with partner
+
+    private var connectButton: some View {
+        Button {
+            showPairing = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "heart.circle.fill")
+                    .font(.system(size: 22))
+                Text("Connect with your partner")
+                    .font(.system(size: 16, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(LouvGradient.coral)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Sign Out
@@ -209,4 +242,5 @@ struct UsView: View {
     UsView()
         .environment(MemoryStore())
         .environment(AuthState())
+        .environment(CoupleService())
 }
