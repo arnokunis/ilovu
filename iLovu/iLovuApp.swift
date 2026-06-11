@@ -18,9 +18,16 @@ struct iLovuApp: App {
     @State private var missionStore = MissionStore()
     @State private var memoryStore  = MemoryStore()
 
-    // Connect to Firebase at launch (reads GoogleService-Info.plist).
+    // Tracks Firebase auth state so ContentView can route signed-in vs
+    // signed-out. Built in init() — see below for why it isn't a default.
+    @State private var authState: AuthState
+
+    // Connect to Firebase at launch (reads GoogleService-Info.plist), then
+    // create AuthState. Order matters: AuthState observes Auth.auth(), which
+    // requires FirebaseApp.configure() to have already run.
     init() {
         FirebaseApp.configure()
+        _authState = State(initialValue: AuthState())
     }
 
     var body: some Scene {
@@ -28,6 +35,7 @@ struct iLovuApp: App {
             ContentView()
                 .environment(missionStore)
                 .environment(memoryStore)
+                .environment(authState)
         }
     }
 }

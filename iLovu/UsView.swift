@@ -10,6 +10,9 @@ struct UsView: View {
 
     @Environment(MemoryStore.self) private var memoryStore
 
+    // App-level auth state, used by the Sign Out button below.
+    @Environment(AuthState.self) private var authState
+
     // Drives the full-screen memory viewer when a card is tapped.
     @State private var selectedMemory: Memory?
 
@@ -83,8 +86,29 @@ struct UsView: View {
                     memoryCard(memory)
                 }
             }
+
+            signOutButton
         }
         .padding(20)
+    }
+
+    // MARK: - Sign Out
+
+    private var signOutButton: some View {
+        Button(role: .destructive) {
+            authState.signOut()
+        } label: {
+            Text("Sign Out")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.passRed)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.white)
+                .clipShape(Capsule())
+                .louvShadow()
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 8)
     }
 
     private func memoryCard(_ memory: Memory) -> some View {
@@ -184,4 +208,5 @@ struct UsView: View {
 #Preview {
     UsView()
         .environment(MemoryStore())
+        .environment(AuthState())
 }
