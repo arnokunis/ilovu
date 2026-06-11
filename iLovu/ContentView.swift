@@ -16,6 +16,17 @@ struct ContentView: View {
     // Only consulted once the user is signed in.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
 
+    // A token captured from an invite deep link, held until the user is signed
+    // in (redeeming needs auth). `route` is what actually drives the sheet.
+    @State private var pendingInviteToken: String?
+    @State private var route: InviteRoute?
+
+    // Identifiable wrapper so we can present via `.sheet(item:)`.
+    private struct InviteRoute: Identifiable {
+        let id = UUID()
+        let token: String
+    }
+
     var body: some View {
         ZStack {
             switch authState.status {
@@ -36,6 +47,25 @@ struct ContentView: View {
         // Cross-fades between sign-in, onboarding, and the tab app as auth
         // state changes.
         .animation(.easeInOut(duration: 0.35), value: authState.status)
+        // Invite deep links (ilovu://invite/<token>). Works from a cold or warm
+        // launch and from any tab, since it's hosted here at the root.
+        .onOpenURL { url in
+            guard let token = CoupleService.inviteToken(from: url) else { return }
+            pendingInviteToken = token
+            presentInviteIfReady()
+        }
+        // If the link arrived while signed out, present it once sign-in lands.
+        .onChange(of: authState.status) { _, _ in presentInviteIfReady() }
+        .sheet(item: $route) { route in
+            PairingView(autoRedeem: route.token)
+        }
+    }
+
+    // Only present the redeem sheet once the user is actually signed in.
+    private func presentInviteIfReady() {
+        guard case .signedIn = authState.status, let token = pendingInviteToken else { return }
+        route = InviteRoute(token: token)
+        pendingInviteToken = nil
     }
 
     // Signed-in users still go through onboarding once before reaching the

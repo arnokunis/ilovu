@@ -119,6 +119,29 @@ final class CoupleService {
         return try query.documents.first?.data(as: Couple.self)
     }
 
+    // MARK: - Deep links
+    // Invite links use a custom URL scheme: ilovu://invite/<token>. A custom
+    // scheme keeps this server-free (no domain / apple-app-site-association);
+    // the tradeoff is the link only resolves if the app is installed.
+
+    static let inviteURLScheme = "ilovu"
+    static let inviteURLHost   = "invite"
+
+    /// Builds the shareable deep link for an invite token.
+    static func inviteURL(token: String) -> URL {
+        URL(string: "\(inviteURLScheme)://\(inviteURLHost)/\(token)")!
+    }
+
+    /// Extracts the token from an incoming invite link, or nil if `url` isn't one.
+    static func inviteToken(from url: URL) -> String? {
+        guard url.scheme == inviteURLScheme, url.host == inviteURLHost else { return nil }
+        // ilovu://invite/<token> -> pathComponents ["/", "<token>"]
+        guard let token = url.pathComponents.first(where: { $0 != "/" }), !token.isEmpty else {
+            return nil
+        }
+        return token
+    }
+
     // MARK: - Token
 
     /// 16 cryptographically-random bytes → Crockford base32 (~26 chars, 128 bits

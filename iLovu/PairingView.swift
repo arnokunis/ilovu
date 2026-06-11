@@ -14,6 +14,10 @@ struct PairingView: View {
     @Environment(AuthState.self) private var authState
     @Environment(\.dismiss) private var dismiss
 
+    // When set (deep link: ilovu://invite/<token>), the screen prefills this
+    // code and redeems it automatically on appear. nil for the normal manual flow.
+    var autoRedeem: String? = nil
+
     // What the screen is showing right now. We start in `.loading` while we
     // check whether the user is already in a couple, so we never flash the
     // "invite your partner" UI at someone who's already paired.
@@ -60,7 +64,7 @@ struct PairingView: View {
                 }
             }
         }
-        .task { await loadCouple() }
+        .task { await start() }
     }
 
     // MARK: - States
@@ -115,7 +119,11 @@ struct PairingView: View {
                     .background(Color.blushCream)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                ShareLink(item: shareMessage(for: inviteToken)) {
+                ShareLink(
+                    item: CoupleService.inviteURL(token: inviteToken),
+                    subject: Text("Join me on iLovu"),
+                    message: Text("Be my partner on iLovu 💕 Tap to connect.")
+                ) {
                     primaryLabel("Share invite", systemImage: "square.and.arrow.up")
                 }
             } else {
@@ -187,11 +195,17 @@ struct PairingView: View {
         .opacity(isWorking ? 0.6 : 1)
     }
 
-    private func shareMessage(for token: String) -> String {
-        "Be my partner on iLovu 💕 Open the app, tap Connect, and enter this code: \(token)"
-    }
-
     // MARK: - Actions
+
+    // On appear: load the current couple, then — if we arrived via a deep link
+    // and aren't already paired — redeem the linked token automatically.
+    private func start() async {
+        await loadCouple()
+        if case .unpaired = phase, let autoRedeem {
+            redeemCode = autoRedeem
+            await redeem()
+        }
+    }
 
     private func loadCouple() async {
         // Skip in previews / unconfigured environments — touching Firestore or
