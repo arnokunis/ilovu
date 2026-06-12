@@ -357,32 +357,32 @@ struct EventDetailView: View {
     }
 
     // MARK: - Places fetch
-    // Fires on view appear via .task. Uses the ORIGINAL event's
-    // title + venue as the search query — not displayEvent, because
-    // a successful enrichment would change displayEvent's venue and
-    // we don't want subsequent re-fetches to chase the new name.
+    // Fires on view appear via .task. Goes through VenueCache, NOT
+    // PlacesService directly: the first lookup of a given query+area
+    // pays one billed Text Search and writes it to Firestore; repeats
+    // are free cache reads (stale entries refresh in the background).
+    // Uses the ORIGINAL event's title + venue as the query — not
+    // displayEvent — because a successful enrichment changes
+    // displayEvent's venue and we don't want re-fetches chasing it.
+    // The view's contract is unchanged: it still gets back an enriched
+    // LocalEvent, or silently keeps the sample data on any miss/failure.
 
     private func loadPlaceData() async {
-        let service = PlacesService()
-        guard service.hasAPIKey else { return }
+        let cache = VenueCache()
 
         let query = "\(event.title) \(event.venue)"
         let bias  = (latitude:  locationManager.coordinate.latitude,
                      longitude: locationManager.coordinate.longitude)
 
-        do {
-            let results = try await service.searchText(query: query, locationBias: bias)
-            guard let topMatch = results.first else { return }
+        // nil = cache miss AND no live match (or no API key, or offline).
+        // Same silent-fallback contract as before — sample data stays.
+        guard let cached = await cache.venue(forQuery: query, locationBias: bias) else { return }
 
-            let enriched = LocalEvent.enriching(event, with: topMatch, using: service)
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    self.enrichedEvent = enriched
-                }
+        let enriched = LocalEvent.enriching(event, with: cached)
+        await MainActor.run {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.enrichedEvent = enriched
             }
-        } catch {
-            // Silent fail — sample data stays on screen. The user
-            // doesn't need to know about a missed enrichment.
         }
     }
 
@@ -404,32 +404,30 @@ private enum CalendarFeedback {
 }
 
 // MARK: - LocalEvent enrichment
-// Merges a Google Place into a sample LocalEvent. The strategy:
-// keep our curated values for fields where we have stronger
-// editorial content (title, description, highlights), and adopt
-// Google's where ground truth wins (rating, reviews, address,
-// hours, photos, booking link). Falls back to the original any
-// time Google's field is empty.
+// Merges a CachedVenue (Google Places data — from the Firestore cache
+// or a fresh search, the caller can't tell) into a sample LocalEvent.
+// The strategy: keep our curated values for fields where we have
+// stronger editorial content (title, description, highlights), and
+// adopt Google's where ground truth wins (rating, reviews, address,
+// hours, photos, booking link). Falls back to the original any time
+// the cached field is empty.
 
 extension LocalEvent {
     static func enriching(
         _ original: LocalEvent,
-        with place: Place,
-        using service: PlacesService
+        with cached: CachedVenue
     ) -> LocalEvent {
 
-        // Up to 4 Google photo URLs. Each `Place.Photo` is just a
-        // resource name; service.photoURL builds the fetchable URL.
-        let photoURLs: [String] = (place.photos ?? []).prefix(4).compactMap {
-            service.photoURL(name: $0.name)?.absoluteString
-        }
+        // Up to 4 photo URLs — already built (with the API key) and
+        // stored as strings when the venue was cached.
+        let photoURLs: [String] = Array(cached.photoURLs.prefix(4))
 
         // Top 3 reviews mapped into our snippet shape. compactMap
         // drops any review missing the fields we need to render.
-        let snippets: [ReviewSnippet] = (place.reviews ?? []).prefix(3).compactMap { review in
+        let snippets: [ReviewSnippet] = cached.reviews.prefix(3).compactMap { review in
             guard
-                let text   = review.text?.text,
-                let author = review.authorAttribution?.displayName,
+                let text   = review.text,
+                let author = review.authorName,
                 let rating = review.rating
             else { return nil }
             // Google returns rating as a Double 1.0-5.0; our model
@@ -438,36 +436,29 @@ extension LocalEvent {
             return ReviewSnippet(author: author, rating: Int(rating.rounded()), text: text)
         }
 
-        // Pick a single readable hours line. "Open now" is the
-        // friendliest summary; otherwise show today's hours line.
-        let hours: String? = {
-            guard
-                let descriptions = place.regularOpeningHours?.weekdayDescriptions,
-                !descriptions.isEmpty
-            else { return nil }
-            if place.regularOpeningHours?.openNow == true {
-                return "Open now"
-            }
-            return descriptions.first
-        }()
+        // A single readable hours line. The cache deliberately does NOT
+        // store the volatile "open now" flag (it would be wrong the
+        // moment it's a few hours old), so unlike the old live path we
+        // can't show "Open now" — we show the first weekday hours line.
+        let hours: String? = cached.openingHoursWeekday?.first
 
         return LocalEvent(
             id:             original.id,
             title:          original.title,
-            venue:          place.displayName?.text  ?? original.venue,
+            venue:          cached.displayName.isEmpty ? original.venue : cached.displayName,
             date:           original.date,
             price:          original.price,
             category:       original.category,
             emoji:          original.emoji,
             description:    original.description,
-            rating:         place.rating             ?? original.rating,
-            reviewCount:    place.userRatingCount    ?? original.reviewCount,
-            address:        place.formattedAddress   ?? original.address,
-            openingHours:   hours                    ?? original.openingHours,
+            rating:         cached.rating          ?? original.rating,
+            reviewCount:    cached.userRatingCount  ?? original.reviewCount,
+            address:        cached.formattedAddress ?? original.address,
+            openingHours:   hours                   ?? original.openingHours,
             photos:         photoURLs.isEmpty ? original.photos        : photoURLs,
             highlights:     original.highlights,
             reviewSnippets: snippets.isEmpty  ? original.reviewSnippets : snippets,
-            bookingURL:     place.googleMapsUri      ?? original.bookingURL
+            bookingURL:     cached.googleMapsUri    ?? original.bookingURL
         )
     }
 }

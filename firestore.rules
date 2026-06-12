@@ -94,6 +94,30 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------- venues/{placeId} ----------
+    // Cached Google Places data, keyed by the resolved place.id. Venues aren't
+    // private, so reads are open to everyone (even unauthenticated). Writes are
+    // allowed for any signed-in user for v1.
+    //
+    // PRE-LAUNCH HARDENING: "any signed-in user can write" means a logged-in
+    // client could poison the cache (write a bad doc under a real placeId). The
+    // clean end-state is `allow write: if false` here and do all cache writes
+    // from a Cloud Function (Admin SDK bypasses rules) — same trajectory as the
+    // invite redemption hardening note. Accepted for v1.
+    match /venues/{placeId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ---------- venueQueries/{queryKey} ----------
+    // Pointer cache: a normalized free-text query + location bucket -> placeId,
+    // so repeat lookups skip the billed Text Search. Same posture as venues:
+    // world-readable, signed-in writes for v1, Cloud-Function-only later.
+    match /venueQueries/{queryKey} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Anything not matched above is denied by default.
   }
 }
