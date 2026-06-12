@@ -20,6 +20,9 @@ struct LocalEvent: Identifiable, Equatable {
 
     // Core fields — every event has these.
     let id: UUID
+    let cardId: String      // STABLE cross-device matching key (slug of title by
+                            // default, overridable). Two-player matching keys on
+                            // this, never on the per-instance `id`.
     let title: String
     let venue: String
     let date: String        // Short label e.g. "Fri 8pm". String for now;
@@ -47,6 +50,7 @@ struct LocalEvent: Identifiable, Equatable {
 
     init(
         id: UUID = UUID(),
+        cardId: String? = nil,
         title: String,
         venue: String,
         date: String,
@@ -64,6 +68,7 @@ struct LocalEvent: Identifiable, Equatable {
         bookingURL: String? = nil
     ) {
         self.id              = id
+        self.cardId          = cardId ?? Self.slug(title)
         self.title           = title
         self.venue           = venue
         self.date            = date
@@ -79,6 +84,16 @@ struct LocalEvent: Identifiable, Equatable {
         self.highlights      = highlights
         self.reviewSnippets  = reviewSnippets
         self.bookingURL      = bookingURL
+    }
+
+    /// Deterministic lowercase, hyphenated slug of a title — identical on both
+    /// partners' devices, which is what makes it a valid shared match key.
+    static func slug(_ title: String) -> String {
+        title
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
     }
 
     // MARK: - Nested types

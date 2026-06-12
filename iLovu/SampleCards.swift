@@ -2015,4 +2015,12 @@ enum SampleCards {
             ]
         )
     ]
+
+    /// Rebuilds a card from its stable cardId — used when an app-level match
+    /// listener gets a match doc (which stores only cardId + deck) and needs the
+    /// full card to present the celebration. Linear scan is fine for a one-shot
+    /// lookup on match delivery.
+    static func byId(_ cardId: String) -> DateCard? {
+        all.first { $0.cardId == cardId }
+    }
 }

@@ -11,14 +11,36 @@
 //   2. SwipeView stays a leaf view that just reports up via a binding.
 
 import SwiftUI
+import FirebaseFirestore
 
 struct MainTabView: View {
 
     // The shared mission list. Injected at the app root.
     @Environment(MissionStore.self) private var missionStore
 
+    // Couple link + matching, both injected at the app root. MainTabView is the
+    // right home for the matches listener: it outlives any single tab, so a match
+    // celebration can overlay the whole app no matter where the user is — and the
+    // partner who didn't complete the match still gets it here.
+    @Environment(CoupleService.self) private var coupleService
+    @Environment(MatchService.self) private var matchService
+
     // Cards is the headline feature so it's the default landing tab.
     @State private var selectedTab: AppTab = .cards
+
+    // The current couple's id, resolved once on appear. nil until resolved (or if
+    // the user isn't paired yet) — the swipe views fall back to placeholder
+    // matching while it's nil, and the listener only starts once we have it.
+    @State private var coupleId: String?
+
+    // The live matches listener. Held so we can detach it on disappear.
+    @State private var matchListener: ListenerRegistration?
+
+    // cardIds we've already celebrated on THIS device, persisted so old matches
+    // don't replay their celebration on every launch. Keyed per couple. The
+    // listener fires `.added` for every existing match on attach, so this guard
+    // is what turns "deliver all matches" into "celebrate only the new ones".
+    @State private var celebrated: Set<String> = []
 
     // Owned here so the full-screen cover can sit on the TabView itself.
     @State private var matchedCard: DateCard?
@@ -49,11 +71,11 @@ struct MainTabView: View {
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag(AppTab.home)
 
-            SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow)
+            SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow, coupleId: coupleId)
                 .tabItem { Label("Cards", systemImage: "square.stack") }
                 .tag(AppTab.cards)
 
-            NearYouView(matchedEvent: $matchedEvent, eventToShow: $eventToShow)
+            NearYouView(matchedEvent: $matchedEvent, eventToShow: $eventToShow, coupleId: coupleId)
                 .tabItem { Label("Near You", systemImage: "mappin.and.ellipse") }
                 .tag(AppTab.nearYou)
 
@@ -110,6 +132,70 @@ struct MainTabView: View {
         .sheet(item: $cardToShow) { card in
             DateCardDetailView(card: card)
         }
+        // Resolve the couple + start the matches listener once the tabs appear.
+        .task { await startMatching() }
+        // Detach the listener if this view ever goes away (hygiene — it normally
+        // lives for the whole signed-in session).
+        .onDisappear {
+            matchListener?.remove()
+            matchListener = nil
+        }
+    }
+
+    // MARK: - Matching
+
+    /// Resolves the current couple and attaches the app-level matches listener.
+    /// No-op if already started or if the user isn't paired (matching needs a
+    /// partner; until then the swipe views use the placeholder coin-flip).
+    private func startMatching() async {
+        guard coupleId == nil else { return }   // already resolved
+        do {
+            guard let couple = try await coupleService.currentCouple(),
+                  let id = couple.id else { return }
+            coupleId  = id
+            celebrated = loadCelebrated(for: id)
+            matchListener = matchService.observeMatches(coupleId: id) { match in
+                handleMatch(match)
+            }
+        } catch {
+            // Silent — without a resolvable couple there's simply no matching.
+        }
+    }
+
+    /// Called for every match the listener delivers (existing + live). Presents
+    /// the right celebration the first time we see each cardId, then remembers it
+    /// so it never replays. The match doc is id-only, so we rebuild the full card
+    /// from local sample data via SampleCards/SampleEvents.byId.
+    private func handleMatch(_ match: CardMatch) {
+        guard !celebrated.contains(match.cardId) else { return }
+        celebrated.insert(match.cardId)
+        persistCelebrated()
+
+        switch Deck(rawValue: match.deck) {
+        case .dates:
+            if let card = SampleCards.byId(match.cardId) { matchedCard = card }
+        case .events:
+            if let event = SampleEvents.byId(match.cardId) { matchedEvent = event }
+        case .none:
+            break
+        }
+    }
+
+    // MARK: - Celebrated-set persistence
+    // UserDefaults-backed, keyed per couple so re-pairing starts clean. Same
+    // lightweight local-persistence approach as MissionStore / MemoryStore.
+
+    private func celebratedKey(_ coupleId: String) -> String {
+        "celebratedMatches.\(coupleId)"
+    }
+
+    private func loadCelebrated(for coupleId: String) -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: celebratedKey(coupleId)) ?? [])
+    }
+
+    private func persistCelebrated() {
+        guard let coupleId else { return }
+        UserDefaults.standard.set(Array(celebrated), forKey: celebratedKey(coupleId))
     }
 }
 
@@ -125,4 +211,7 @@ enum AppTab: Hashable {
 
 #Preview {
     MainTabView()
+        .environment(MissionStore())
+        .environment(CoupleService())
+        .environment(MatchService())
 }

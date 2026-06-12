@@ -444,6 +444,7 @@ extension LocalEvent {
 
         return LocalEvent(
             id:             original.id,
+            cardId:         original.cardId,   // preserve the match key across enrichment
             title:          original.title,
             venue:          cached.displayName.isEmpty ? original.venue : cached.displayName,
             date:           original.date,

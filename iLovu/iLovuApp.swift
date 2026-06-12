@@ -23,6 +23,12 @@ struct iLovuApp: App {
     // safe here even though it runs before configure() in init.
     @State private var coupleService = CoupleService()
 
+    // Firestore-backed two-player matching. Like CoupleService, constructing it
+    // touches no Firebase (its handle is resolved lazily), so a plain default is
+    // safe at the app root. Injected so the swipe views can record likes and
+    // MainTabView can host the app-level matches listener.
+    @State private var matchService = MatchService()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -42,6 +48,7 @@ struct iLovuApp: App {
                 .environment(memoryStore)
                 .environment(authState)
                 .environment(coupleService)
+                .environment(matchService)
         }
     }
 }

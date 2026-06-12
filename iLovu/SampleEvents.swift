@@ -240,4 +240,12 @@ enum SampleEvents {
             reviewCount: nil
         )
     ]
+
+    /// Rebuilds an event from its stable cardId — used when an app-level match
+    /// listener gets a match doc (which stores only cardId + deck) and needs the
+    /// full event to present the celebration. Linear scan is fine for a one-shot
+    /// lookup on match delivery.
+    static func byId(_ cardId: String) -> LocalEvent? {
+        all.first { $0.cardId == cardId }
+    }
 }

@@ -29,6 +29,12 @@ struct NearYouView: View {
     // View-Details-from-match path can present the same screen.
     @Binding var eventToShow: LocalEvent?
 
+    // Current couple's id from MainTabView. Present => real likes via MatchService
+    // (celebration driven by MainTabView's listener); nil => placeholder coin-flip.
+    let coupleId: String?
+
+    @Environment(MatchService.self) private var matchService
+
     @State private var selectedCategory: LocalEvent.Category? = nil
 
     // Same threshold as SwipeView — keeps the muscle memory identical.
@@ -174,11 +180,16 @@ struct NearYouView: View {
                 dragOffset = .zero
             }
 
-            // Same 50/50 coin flip as the date card deck — we're
-            // simulating the partner also swiping right since real
-            // partner sync isn't wired yet.
-            if direction == .right, let event = topEvent, Bool.random() {
-                matchedEvent = event
+            // Right-swipe = a like. With a couple, record it for real — the
+            // match is detected and celebrated via MainTabView's listener (we
+            // don't set matchedEvent here). Without a couple, fall back to the
+            // placeholder coin-flip so the deck still celebrates in solo/preview.
+            if direction == .right, let event = topEvent {
+                if let coupleId {
+                    Task { await matchService.recordLike(coupleId: coupleId, cardId: event.cardId, deck: .events) }
+                } else if Bool.random() {
+                    matchedEvent = event
+                }
             }
         }
     }
@@ -350,5 +361,6 @@ private struct EventCardContent: View {
 }
 
 #Preview {
-    NearYouView(matchedEvent: .constant(nil), eventToShow: .constant(nil))
+    NearYouView(matchedEvent: .constant(nil), eventToShow: .constant(nil), coupleId: nil)
+        .environment(MatchService())
 }

@@ -27,6 +27,16 @@ struct SwipeView: View {
     // the actual sheet — same pattern as NearYouView's eventToShow.
     @Binding var cardToShow: DateCard?
 
+    // The current couple's id, passed down from MainTabView. When present, a
+    // right-swipe records a real like through MatchService and the celebration is
+    // driven by MainTabView's matches listener. When nil (not paired / preview),
+    // we keep the placeholder coin-flip so the deck still feels alive.
+    let coupleId: String?
+
+    // Records likes + creates match docs. Celebration itself is presented by
+    // MainTabView's listener, not here — see completeSwipe.
+    @Environment(MatchService.self) private var matchService
+
     // Currently selected difficulty filter. nil = "All" (show every card).
     // Changing this immediately changes the deck the user sees.
     @State private var selectedDifficulty: DateCard.Difficulty? = nil
@@ -193,10 +203,17 @@ struct SwipeView: View {
                 dragOffset = .zero
             }
 
-            // 50/50 coin flip on a right-swipe (the "like").
-            // No backend yet — we're simulating the other person also liking it.
-            if direction == .right, let card = topCard, Bool.random() {
-                matchedCard = card
+            // Right-swipe = a like. With a couple, record it for real: the
+            // match (if the partner already liked it too) is detected and
+            // celebrated via MainTabView's matches listener — we do NOT set
+            // matchedCard here. Without a couple, fall back to the placeholder
+            // coin-flip so the deck still celebrates in solo/preview.
+            if direction == .right, let card = topCard {
+                if let coupleId {
+                    Task { await matchService.recordLike(coupleId: coupleId, cardId: card.cardId, deck: .dates) }
+                } else if Bool.random() {
+                    matchedCard = card
+                }
             }
         }
     }
@@ -354,6 +371,8 @@ private struct CardContent: View {
 
 // MARK: - Preview
 // .constant(nil) gives us a fake binding for previewing without a real parent.
+// coupleId: nil keeps the preview on the placeholder coin-flip (no Firestore).
 #Preview {
-    SwipeView(matchedCard: .constant(nil), cardToShow: .constant(nil))
+    SwipeView(matchedCard: .constant(nil), cardToShow: .constant(nil), coupleId: nil)
+        .environment(MatchService())
 }
