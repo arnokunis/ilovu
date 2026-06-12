@@ -20,6 +20,14 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // Is the signed-in user one of the two members of this couple? Reads the
+    // parent couple doc, so it costs one document read per evaluated write —
+    // acceptable for v1. Used to scope the swipes/matches subcollections.
+    function isCoupleMember(coupleId) {
+      return isSignedIn()
+             && uid() in get(/databases/$(database)/documents/couples/$(coupleId)).data.members;
+    }
+
     // ---------- users/{userId} ----------
     // A user's private profile/state. Owner-only, full stop.
     match /users/{userId} {
@@ -92,6 +100,44 @@ service cloud.firestore {
       // DELETE: not allowed from the client. Leave couples to be torn down by
       // a trusted server/admin path if ever needed.
       allow delete: if false;
+    }
+
+    // ---------- couples/{coupleId}/swipes/{cardId} ----------
+    // Shared like record for two-player matching. Only RIGHT-swipes are stored;
+    // `likedBy` holds the uids who liked this card. Both members present => match.
+    // Scoped to the couple's two members, and a member may only add THEIR OWN uid
+    // to likedBy — they can't stamp the partner or remove an existing like.
+    match /couples/{coupleId}/swipes/{cardId} {
+      allow read: if isCoupleMember(coupleId);
+
+      // CREATE: the first liker writes a doc whose likedBy is exactly [self].
+      allow create: if isCoupleMember(coupleId)
+                    && request.resource.data.likedBy.hasOnly([uid()])
+                    && request.resource.data.likedBy.hasAll([uid()]);
+
+      // UPDATE: the second liker may only ADD self — no removals (hasAll(old)),
+      // no foreign additions (hasOnly(old + self)), and self must end up present.
+      allow update: if isCoupleMember(coupleId)
+                    && request.resource.data.likedBy.hasAll(resource.data.likedBy)
+                    && request.resource.data.likedBy.hasOnly(resource.data.likedBy.concat([uid()]))
+                    && request.resource.data.likedBy.hasAll([uid()]);
+
+      allow delete: if false;
+    }
+
+    // ---------- couples/{coupleId}/matches/{cardId} ----------
+    // Created when both members have liked a card. id-only (cardId + deck); the
+    // client rebuilds the card from local sample data. Immutable once made.
+    //
+    // PRE-LAUNCH HARDENING: a member could in principle create a match doc whose
+    // pair isn't truly mutual (the rules don't cross-check the swipes doc here).
+    // Trusted-partner risk, accepted for v1; the clean end-state is to create
+    // matches only from a Cloud Function that verifies both likes — same
+    // trajectory as the invite-redemption and venue-cache hardening notes.
+    match /couples/{coupleId}/matches/{cardId} {
+      allow read:   if isCoupleMember(coupleId);
+      allow create: if isCoupleMember(coupleId);
+      allow update, delete: if false;
     }
 
     // ---------- venues/{placeId} ----------
