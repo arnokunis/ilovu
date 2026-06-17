@@ -124,8 +124,13 @@ final class CoupleService {
     // scheme keeps this server-free (no domain / apple-app-site-association);
     // the tradeoff is the link only resolves if the app is installed.
 
-    static let inviteURLScheme = "ilovu"
-    static let inviteURLHost   = "invite"
+    // nonisolated: immutable Sendable constants that have nothing to do with the
+    // main actor — they only inherited its isolation from the @MainActor class.
+    // Marking them nonisolated lets the nonisolated parsing helpers below read
+    // them without crossing an isolation boundary. There's no mutable state and
+    // no race here; the @MainActor isolation was noise, not protection.
+    nonisolated static let inviteURLScheme = "ilovu"
+    nonisolated static let inviteURLHost   = "invite"
 
     /// Builds the shareable deep link for an invite token.
     /// `nonisolated`: pure string work, safe to call off the main actor.
