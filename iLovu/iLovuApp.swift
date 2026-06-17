@@ -30,6 +30,12 @@ struct iLovuApp: App {
     // MainTabView can host the app-level matches listener.
     @State private var matchService = MatchService()
 
+    // Firestore-backed mission sync. Mirrors local MissionStore mutations to
+    // couples/{id}/missions and feeds MainTabView's missions listener, so a
+    // date/time edit on one phone reaches the partner. Same lazy-Firebase,
+    // safe-to-default-construct shape as the services above.
+    @State private var missionService = MissionService()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -58,6 +64,18 @@ struct iLovuApp: App {
                 .environment(authState)
                 .environment(coupleService)
                 .environment(matchService)
+                .environment(missionService)
+                // Wire MissionStore's write-through sink once. Every local
+                // add/update then mirrors to Firestore for the current couple;
+                // when unpaired (coupleId nil) it's a no-op and missions stay
+                // local. Reads coupleId live, so it starts syncing the moment
+                // pairing completes — no relaunch needed.
+                .task {
+                    missionStore.remoteUpsert = { [coupleService, missionService] mission in
+                        guard let coupleId = coupleService.coupleId else { return }
+                        Task { await missionService.saveMission(coupleId: coupleId, mission: mission) }
+                    }
+                }
         }
     }
 }

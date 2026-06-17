@@ -140,6 +140,23 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- couples/{coupleId}/missions/{cardId} ----------
+    // The shared, syncable planning state for a matched date (status, scheduled
+    // date, budget, checklist). Doc id == cardId so both partners' apps write the
+    // same document — that's what makes a date/time edit on one phone reach the
+    // other. Either member may create OR update it (planning is collaborative;
+    // last write wins for v1). Scoped to the couple's two members.
+    //
+    // PRE-LAUNCH HARDENING: same trust posture as matches — a member could write
+    // arbitrary fields here. Field-shape validation (and, if ever needed, a
+    // server-authored write path) is deferred, consistent with the matches /
+    // invite-redemption / venue-cache notes above.
+    match /couples/{coupleId}/missions/{cardId} {
+      allow read:           if isCoupleMember(coupleId);
+      allow create, update: if isCoupleMember(coupleId);
+      allow delete:         if false;
+    }
+
     // ---------- venues/{placeId} ----------
     // Cached Google Places data, keyed by the resolved place.id. Venues aren't
     // private, so reads are open to everyone (even unauthenticated). Writes are

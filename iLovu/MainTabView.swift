@@ -25,16 +25,29 @@ struct MainTabView: View {
     @Environment(CoupleService.self) private var coupleService
     @Environment(MatchService.self) private var matchService
 
+    // Mirrors local mission edits to Firestore and feeds the missions listener
+    // below. Injected at the app root, same as the services above.
+    @Environment(MissionService.self) private var missionService
+
     // Cards is the headline feature so it's the default landing tab.
     @State private var selectedTab: AppTab = .cards
 
-    // The current couple's id, resolved once on appear. nil until resolved (or if
-    // the user isn't paired yet) — the swipe views fall back to placeholder
+    // The current couple's id now lives on the shared CoupleService (observable),
+    // so it updates the instant pairing completes — including for the partner who
+    // redeemed an invite mid-session. The swipe views fall back to placeholder
     // matching while it's nil, and the listener only starts once we have it.
-    @State private var coupleId: String?
+    private var coupleId: String? { coupleService.coupleId }
 
-    // The live matches listener. Held so we can detach it on disappear.
+    // The live matches listener, plus the coupleId it's attached for. We re-key
+    // the listener whenever coupleId changes (nil -> paired), which is exactly the
+    // transition the redeemer hits after redeeming. nil = not currently listening.
     @State private var matchListener: ListenerRegistration?
+    @State private var listeningCoupleId: String?
+
+    // The live missions listener, paired to the same couple as the match listener
+    // above. Delivers remote mission creates/edits (e.g. the partner setting a
+    // date/time) into the shared MissionStore.
+    @State private var missionListener: ListenerRegistration?
 
     // cardIds we've already celebrated on THIS device, persisted so old matches
     // don't replay their celebration on every launch. Keyed per couple. The
@@ -132,34 +145,77 @@ struct MainTabView: View {
         .sheet(item: $cardToShow) { card in
             DateCardDetailView(card: card)
         }
-        // Resolve the couple + start the matches listener once the tabs appear.
-        .task { await startMatching() }
-        // Detach the listener if this view ever goes away (hygiene — it normally
-        // lives for the whole signed-in session).
-        .onDisappear {
-            matchListener?.remove()
-            matchListener = nil
+        // On appear, resolve the couple from Firestore (covers a cold launch when
+        // already paired). This publishes into coupleService.couple, which flips
+        // coupleId and trips the onChange below.
+        .task {
+            _ = try? await coupleService.currentCouple()
+            syncCoupleListeners()
         }
+        // React the moment coupleId changes — most importantly nil -> paired right
+        // after the redeemer redeems an invite, without waiting for a relaunch.
+        .onChange(of: coupleId) { _, _ in syncCoupleListeners() }
+        // Detach the listeners if this view ever goes away (hygiene — they
+        // normally live for the whole signed-in session).
+        .onDisappear { detachCoupleListeners() }
     }
 
-    // MARK: - Matching
+    // MARK: - Couple listeners (matches + missions)
 
-    /// Resolves the current couple and attaches the app-level matches listener.
-    /// No-op if already started or if the user isn't paired (matching needs a
-    /// partner; until then the swipe views use the placeholder coin-flip).
-    private func startMatching() async {
-        guard coupleId == nil else { return }   // already resolved
-        do {
-            guard let couple = try await coupleService.currentCouple(),
-                  let id = couple.id else { return }
-            coupleId  = id
-            celebrated = loadCelebrated(for: id)
-            matchListener = matchService.observeMatches(coupleId: id) { match in
-                handleMatch(match)
-            }
-        } catch {
-            // Silent — without a resolvable couple there's simply no matching.
+    /// Attaches the app-level matches and missions listeners for the current
+    /// couple, re-keying if the couple changed and tearing down if we became
+    /// unpaired. Idempotent — safe to call from both the initial .task and every
+    /// coupleId change.
+    private func syncCoupleListeners() {
+        guard let id = coupleId else { return }     // not paired yet — nothing to attach
+        guard id != listeningCoupleId else { return } // already listening for this couple
+
+        detachCoupleListeners()
+        listeningCoupleId = id
+        celebrated = loadCelebrated(for: id)
+        matchListener = matchService.observeMatches(coupleId: id) { match in
+            handleMatch(match)
         }
+        missionListener = missionService.observeMissions(
+            coupleId: id,
+            onUpsert: { remote in applyRemoteMission(remote) },
+            onRemove: { cardId in missionStore.removeFromRemote(cardId: cardId) }
+        )
+    }
+
+    private func detachCoupleListeners() {
+        matchListener?.remove()
+        matchListener = nil
+        missionListener?.remove()
+        missionListener = nil
+        listeningCoupleId = nil
+    }
+
+    /// Rebuilds a full Mission from a synced RemoteMission (cardId -> DateCard via
+    /// the local sample deck, like CardMatch) and merges it into the store. Runs
+    /// on the main actor, so SampleCards access stays main-isolated. Skips cards
+    /// this build doesn't know about.
+    private func applyRemoteMission(_ remote: RemoteMission) {
+        guard let card = SampleCards.byId(remote.cardId) else { return }
+
+        let checklist = remote.checklist.map { item in
+            Mission.ChecklistItem(
+                id: UUID(uuidString: item.id) ?? UUID(),
+                title: item.title,
+                done: item.done
+            )
+        }
+
+        let mission = Mission(
+            card: card,
+            status: Mission.Status(rawValue: remote.status) ?? .upcoming,
+            scheduledDate: remote.scheduledDate?.dateValue(),
+            budget: remote.budget,
+            // A remote doc should always carry the 3 seed items; fall back to a
+            // fresh seed if it somehow arrived empty so the checklist UI isn't blank.
+            checklist: checklist.isEmpty ? Mission(from: card).checklist : checklist
+        )
+        missionStore.mergeFromRemote(mission)
     }
 
     /// Called for every match the listener delivers (existing + live). Presents

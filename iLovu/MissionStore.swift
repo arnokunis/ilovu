@@ -27,6 +27,14 @@ final class MissionStore {
     // missions through silent corruption.
     private let storageKey = "missions.v1"
 
+    // Sink for pushing a locally-mutated mission to Firestore. Injected once at
+    // the app root (iLovuApp) so MissionStore itself stays Firebase-free and
+    // previewable — when nil (previews, unpaired/offline) mutations are simply
+    // local. Set by the app to call MissionService.saveMission for the current
+    // couple. Remote-origin merges (mergeFromRemote) deliberately DON'T fire this,
+    // so an incoming update never echoes back out as a write.
+    var remoteUpsert: ((Mission) -> Void)?
+
     init() {
         load()
     }
@@ -38,6 +46,7 @@ final class MissionStore {
     func add(_ mission: Mission) {
         missions.append(mission)
         save()
+        remoteUpsert?(mission)
     }
 
     func update(_ mission: Mission) {
@@ -45,6 +54,41 @@ final class MissionStore {
         else { return }
         missions[index] = mission
         save()
+        remoteUpsert?(mission)
+    }
+
+    // MARK: - Remote sync
+    // Merges keyed on cardId, NOT the local UUID id: the two phones generate
+    // independent UUIDs for the same matched card, so cardId is the only stable
+    // cross-device identity. These are called by MainTabView's missions listener.
+
+    /// Applies a mission that arrived from Firestore. Replaces the existing local
+    /// mission for the same card (preserving its local `id` so SwiftUI list
+    /// identity stays stable), or appends it if we hadn't seen this card yet.
+    /// Does NOT push back out — this is the inbound half of the sync.
+    func mergeFromRemote(_ mission: Mission) {
+        if let index = missions.firstIndex(where: { $0.cardId == mission.cardId }) {
+            let preservedId = missions[index].id
+            missions[index] = Mission(
+                id: preservedId,
+                card: mission.card,
+                status: mission.status,
+                scheduledDate: mission.scheduledDate,
+                budget: mission.budget,
+                checklist: mission.checklist
+            )
+        } else {
+            missions.append(mission)
+        }
+        save()
+    }
+
+    /// Drops the local mission for `cardId` after a remote deletion. (We don't
+    /// delete missions from the client today, but this keeps the listener honest.)
+    func removeFromRemote(cardId: String) {
+        let before = missions.count
+        missions.removeAll { $0.cardId == cardId }
+        if missions.count != before { save() }
     }
 
     // MARK: - Queries

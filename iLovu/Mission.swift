@@ -41,6 +41,31 @@ struct Mission: Identifiable, Codable, Equatable {
         }
     }
 
+    // The card this mission was planned from. Doubles as the cross-device sync
+    // key: the Firestore mission doc id is this cardId, so both partners' apps
+    // converge on the same document (one mission per matched card).
+    var cardId: String { card.cardId }
+
+    // Full initializer — needed to rebuild a Mission from a synced Firestore doc
+    // (and to merge a remote update while preserving the local `id`). Defining
+    // `init(from:)` below suppressed the synthesized memberwise init, so this
+    // restores an explicit all-fields entry point.
+    init(
+        id: UUID = UUID(),
+        card: DateCard,
+        status: Status,
+        scheduledDate: Date?,
+        budget: String?,
+        checklist: [ChecklistItem]
+    ) {
+        self.id = id
+        self.card = card
+        self.status = status
+        self.scheduledDate = scheduledDate
+        self.budget = budget
+        self.checklist = checklist
+    }
+
     // Convenience initializer used when a swipe-right becomes a match.
     // Seeds the default 3-item checklist that every Mission starts with.
     init(from card: DateCard) {

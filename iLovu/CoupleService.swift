@@ -33,6 +33,19 @@ final class CoupleService {
     // cached default instance, so this is cheap to call per request.
     private var db: Firestore { Firestore.firestore() }
 
+    // The signed-in user's couple, once resolved. Observable (this class is
+    // @Observable) so the whole app reacts the MOMENT pairing completes — not
+    // just on next launch. This is the keystone the redeemer was missing: before,
+    // redeem() wrote to Firestore but updated nothing local, so MainTabView's
+    // coupleId stayed nil for the rest of the session. Now redeem() / currentCouple()
+    // publish here and every observer (MainTabView, the swipe decks) follows.
+    // nil = unknown or not paired.
+    private(set) var couple: Couple?
+
+    /// The current couple's document id, or nil if unpaired. The swipe decks and
+    /// the matches listener key off this.
+    var coupleId: String? { couple?.id }
+
     enum InviteError: LocalizedError {
         case notSignedIn
         case inviteNotFound
@@ -103,6 +116,13 @@ final class CoupleService {
             "members": [invite.creatorId, uid],
             "createdAt": FieldValue.serverTimestamp()
         ])
+
+        // Publish the new couple locally right away. This is what lets the
+        // redeemer's app flip from "unpaired" to "paired" mid-session — without
+        // it, the couple existed in Firestore but nothing on this device knew,
+        // so swipes kept hitting the solo coin-flip fallback. createdAt stays nil
+        // until a read resolves the server timestamp; we don't need it locally.
+        couple = Couple(id: coupleRef.documentID, members: [invite.creatorId, uid], createdAt: nil)
         return coupleRef.documentID
     }
 
@@ -110,13 +130,20 @@ final class CoupleService {
 
     /// The current user's couple, if they're in one. The couples read rule
     /// (uid must be in members) guarantees this only ever returns your own.
+    /// Caches the result into `couple` so observers (MainTabView) pick it up on a
+    /// cold launch the same way they pick up a fresh redeem.
+    @discardableResult
     func currentCouple() async throws -> Couple? {
         guard let uid = Auth.auth().currentUser?.uid else { throw InviteError.notSignedIn }
         let query = try await db.collection("couples")
             .whereField("members", arrayContains: uid)
             .limit(to: 1)
             .getDocuments()
-        return try query.documents.first?.data(as: Couple.self)
+        let resolved = try query.documents.first?.data(as: Couple.self)
+        // Don't clobber an already-published couple with a nil from a racing read
+        // (e.g. redeem() just set it but this query hasn't seen the write yet).
+        if let resolved { couple = resolved }
+        return resolved
     }
 
     // MARK: - Deep links
