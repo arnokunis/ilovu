@@ -12,8 +12,8 @@
 //      what stops a stolen token from being replayed.
 //
 // This view model only signs the user in and confirms the Firebase user.
-// It deliberately does NOT decide what the app shows next — auth-state
-// routing comes in a later step.
+// It deliberately does NOT decide what the app shows next — that's owned by
+// ContentView, which routes off AuthState the moment sign-in flips it.
 
 import Foundation
 import CryptoKit
@@ -32,11 +32,6 @@ final class AppleSignInViewModel {
     // True while Firebase is exchanging the credential, so the UI can show a
     // spinner and disable interaction.
     var isSigningIn = false
-
-    // Set once Firebase confirms the user. Temporary: it lets the sign-in
-    // screen show a "signed in" confirmation during build-testing, before we
-    // wire up real signed-in/signed-out routing.
-    var signedInUID: String?
 
     // The raw nonce for the in-flight request. We send Apple its SHA256 hash,
     // but Firebase needs this original value to verify the returned token, so
@@ -103,8 +98,9 @@ final class AppleSignInViewModel {
             let result = try await Auth.auth().signIn(with: firebaseCredential)
             let user = result.user
             errorMessage = nil
-            signedInUID = user.uid
-            // Temporary confirmation until auth-state routing exists.
+            // AuthState's listener fires on this same sign-in and routes the app
+            // out of SignInView; this view model just completes the credential
+            // exchange. Console line kept as a build-testing breadcrumb.
             print("✅ Firebase sign-in success — uid: \(user.uid), email: \(user.email ?? "none"), name: \(user.displayName ?? "none")")
         } catch {
             print("⚠️ Firebase sign-in error: \(error.localizedDescription)")
