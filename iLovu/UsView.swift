@@ -13,11 +13,20 @@ struct UsView: View {
     // App-level auth state, used by the Sign Out button below.
     @Environment(AuthState.self) private var authState
 
+    // The user's local profile photo, shown in the profile row.
+    @Environment(ProfileStore.self) private var profileStore
+
+    // The user's display name (same key as onboarding + the Home greeting).
+    @AppStorage("userName") private var userName: String = ""
+
     // Drives the full-screen memory viewer when a card is tapped.
     @State private var selectedMemory: Memory?
 
     // Presents the partner-pairing sheet (create / redeem an invite).
     @State private var showPairing = false
+
+    // Presents the edit-name / edit-photo sheet.
+    @State private var showEditProfile = false
 
     var body: some View {
         ZStack {
@@ -35,6 +44,9 @@ struct UsView: View {
         }
         .sheet(isPresented: $showPairing) {
             PairingView()
+        }
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileView()
         }
     }
 
@@ -83,6 +95,8 @@ struct UsView: View {
 
     private var contentBelowHeader: some View {
         VStack(spacing: 16) {
+            profileRow
+
             connectButton
 
             DailyQuestionCard()
@@ -98,6 +112,61 @@ struct UsView: View {
             signOutButton
         }
         .padding(20)
+    }
+
+    // MARK: - Profile (name + photo)
+    // Tappable row showing the user's avatar + name, opening the edit sheet.
+    // The entry point for setting a name after skipping onboarding, or changing
+    // either later.
+
+    private var profileRow: some View {
+        Button {
+            showEditProfile = true
+        } label: {
+            HStack(spacing: 14) {
+                avatar
+                    .frame(width: 52, height: 52)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(userName.isEmpty ? "Add your name" : userName)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color.deepRose)
+                    Text("Edit name & photo")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                }
+
+                Spacer()
+
+                Image(systemName: "pencil.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.louvCoral)
+            }
+            .padding(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        if let data = profileStore.photoData, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                LouvGradient.coral
+                Text(userName.trimmingCharacters(in: .whitespaces).isEmpty
+                     ? "💕"
+                     : String(userName.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
     }
 
     // MARK: - Connect with partner
@@ -243,4 +312,5 @@ struct UsView: View {
         .environment(MemoryStore())
         .environment(AuthState())
         .environment(CoupleService())
+        .environment(ProfileStore())
 }

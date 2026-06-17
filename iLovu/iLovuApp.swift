@@ -19,6 +19,10 @@ struct iLovuApp: App {
     @State private var missionStore = MissionStore()
     @State private var memoryStore  = MemoryStore()
 
+    // Local profile photo (name lives in @AppStorage and syncs via the couple
+    // doc). Owned here so the Us tab and any avatar share one instance.
+    @State private var profileStore = ProfileStore()
+
     // Firestore-backed invite/couple system. Constructing it touches no Firebase
     // (its Firestore handle is resolved lazily per call), so a plain default is
     // safe here even though it runs before configure() in init.
@@ -61,6 +65,7 @@ struct iLovuApp: App {
             ContentView()
                 .environment(missionStore)
                 .environment(memoryStore)
+                .environment(profileStore)
                 .environment(authState)
                 .environment(coupleService)
                 .environment(matchService)

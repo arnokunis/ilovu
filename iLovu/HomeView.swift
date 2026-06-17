@@ -43,9 +43,11 @@ struct HomeView: View {
     // Set during onboarding.
     @AppStorage("userName") private var userName: String = ""
 
-    // Not collected anywhere yet — placeholder for when partner sync is
-    // added. Falls back to "your partner" if empty.
-    @AppStorage("partnerName") private var partnerName: String = ""
+    // The couple link — the partner's name now rides on the shared couple doc
+    // (each member writes their own via CoupleService.setDisplayName), so we read
+    // it from here instead of a never-populated local placeholder. Resolves on
+    // launch / next currentCouple() fetch.
+    @Environment(CoupleService.self) private var coupleService
 
     // 0...5. Drives how many of the five flame emojis are lit.
     // Conceptually: one completed Mission = a big spark boost; a quick
@@ -141,6 +143,15 @@ struct HomeView: View {
             Text(greetingText)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Color.deepRose)
+
+            // The PARTNER's name (the member that isn't you), read off the
+            // couple's displayNames via CoupleService. Only shown once they've
+            // set one — otherwise we'd just print a placeholder.
+            if let partner = coupleService.partnerDisplayName {
+                Text("With \(partner) 💞")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.gray)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -340,7 +351,7 @@ struct HomeView: View {
 
     // Use the partner's name if we have one; otherwise warm fallback.
     private var nudgeTarget: String {
-        partnerName.isEmpty ? "your partner" : partnerName
+        coupleService.partnerDisplayName ?? "your partner"
     }
 
     private var nudgeButton: some View {
@@ -452,4 +463,5 @@ struct HomeView: View {
     HomeView(selectedTab: .constant(.home))
         .environment(MissionStore())
         .environment(MemoryStore())
+        .environment(CoupleService())
 }

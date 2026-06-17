@@ -290,6 +290,11 @@ private struct ProfileScreen: View {
                 TextField("e.g. Alex", text: $userName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 17))
+                    // Explicit dark text — the field sits on a hardcoded light
+                    // background, so the default label color is invisible (white)
+                    // in dark mode.
+                    .foregroundStyle(Color.deepRose)
+                    .tint(Color.louvCoral)
                     .padding(.vertical, 14)
                     .padding(.horizontal, 16)
                     .background(Color.white)

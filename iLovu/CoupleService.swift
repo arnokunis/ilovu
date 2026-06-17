@@ -46,6 +46,14 @@ final class CoupleService {
     /// the matches listener key off this.
     var coupleId: String? { couple?.id }
 
+    /// The partner's display name from the shared couple doc, or nil if unpaired
+    /// or they haven't set one yet. Reads the signed-in uid here so views (HomeView)
+    /// don't have to touch Auth/Firebase themselves.
+    var partnerDisplayName: String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return couple?.partnerName(currentUid: uid)
+    }
+
     enum InviteError: LocalizedError {
         case notSignedIn
         case inviteNotFound
@@ -123,6 +131,8 @@ final class CoupleService {
         // so swipes kept hitting the solo coin-flip fallback. createdAt stays nil
         // until a read resolves the server timestamp; we don't need it locally.
         couple = Couple(id: coupleRef.documentID, members: [invite.creatorId, uid], createdAt: nil)
+        // If a name was set while still unpaired, write it now that there's a couple.
+        await flushPendingDisplayName()
         return coupleRef.documentID
     }
 
@@ -142,8 +152,86 @@ final class CoupleService {
         let resolved = try query.documents.first?.data(as: Couple.self)
         // Don't clobber an already-published couple with a nil from a racing read
         // (e.g. redeem() just set it but this query hasn't seen the write yet).
-        if let resolved { couple = resolved }
+        if let resolved {
+            couple = resolved
+            // A name set before the couple loaded now has somewhere to go.
+            await flushPendingDisplayName()
+        }
         return resolved
+    }
+
+    // MARK: - Display name
+
+    // Where a name set before the couple is loaded (or while a write fails) is
+    // parked, so it isn't silently lost. Flushed by flushPendingDisplayName()
+    // once a couple is available — see currentCouple() / redeem().
+    private let pendingDisplayNameKey = "pendingDisplayName"
+
+    /// Publishes the signed-in user's display name onto the shared couple doc so
+    /// the partner can read it (couples/{id}.displayNames[myUid]). Uses a dot-path
+    /// update so only this user's entry changes; the couples update rule allows it
+    /// because `members` stays frozen. Mirrors into the published couple so local
+    /// observers refresh without a re-read.
+    ///
+    /// Robust against the timing race that dropped writes before: if `couple`
+    /// isn't loaded yet it resolves it first, and if it still can't (genuinely
+    /// unpaired) or the write fails, it parks the name to retry at the next
+    /// pairing / couple load instead of no-opping silently.
+    func setDisplayName(_ name: String) async {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            log("setDisplayName skipped — not signed in")
+            return
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // (#2) Resolve the couple if the in-memory state hasn't caught up yet —
+        // this is the race that silently dropped the redeemer's name.
+        if couple?.id == nil {
+            log("setDisplayName — couple not loaded, resolving…")
+            _ = try? await currentCouple()
+        }
+
+        guard let coupleId = couple?.id else {
+            // (#3) Genuinely unpaired — park it and bail without losing it.
+            UserDefaults.standard.set(trimmed, forKey: pendingDisplayNameKey)
+            log("setDisplayName — no couple yet, parked pending name '\(trimmed)'")
+            return
+        }
+
+        do {
+            try await db.collection("couples").document(coupleId)
+                .updateData(["displayNames.\(uid)": trimmed])
+            // Success — supersede any parked value and mirror locally.
+            UserDefaults.standard.removeObject(forKey: pendingDisplayNameKey)
+            var names = couple?.displayNames ?? [:]
+            names[uid] = trimmed
+            couple?.displayNames = names
+            log("setDisplayName — wrote '\(trimmed)' for \(uid) to couple \(coupleId)")
+        } catch {
+            // (#3) Park for retry — the name still lives locally in @AppStorage.
+            UserDefaults.standard.set(trimmed, forKey: pendingDisplayNameKey)
+            log("setDisplayName — write FAILED (\(error.localizedDescription)); parked pending name")
+        }
+    }
+
+    /// Writes any name parked by setDisplayName once a couple is available. Called
+    /// after the couple loads (currentCouple) or is created (redeem). No-op if
+    /// nothing's parked or we're still unpaired. setDisplayName clears the parked
+    /// value on a successful write, so this converges.
+    func flushPendingDisplayName() async {
+        guard couple?.id != nil else { return }
+        guard let pending = UserDefaults.standard.string(forKey: pendingDisplayNameKey),
+              !pending.isEmpty else { return }
+        log("flushing parked pending name '\(pending)'")
+        await setDisplayName(pending)
+    }
+
+    // MARK: - Debug logging
+
+    private func log(_ message: String) {
+        #if DEBUG
+        print("👥 CoupleService: \(message)")
+        #endif
     }
 
     // MARK: - Deep links

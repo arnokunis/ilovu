@@ -83,9 +83,12 @@ struct PairingView: View {
                 .foregroundStyle(Color.louvCoral)
                 .padding(.top, 48)
 
-            Text("You're connected 💕")
+            // Name the PARTNER (the member that isn't you) once they've set a
+            // name; fall back to the generic line until then.
+            Text(couples.partnerDisplayName.map { "Connected with \($0) 💕" } ?? "You're connected 💕")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Color.deepRose)
+                .multilineTextAlignment(.center)
 
             Text("You and your partner are paired. Your story is shared from here on.")
                 .font(.system(size: 15))
@@ -155,6 +158,11 @@ struct PairingView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 16, design: .monospaced))
+                // Explicit dark text — the background is always the light
+                // blushCream, so the default label color goes invisible (white)
+                // in dark mode. Matches the minted-code Text above.
+                .foregroundStyle(Color.deepRose)
+                .tint(Color.louvCoral)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 14)
                 .background(Color.blushCream)
