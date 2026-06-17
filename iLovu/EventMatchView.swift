@@ -157,7 +157,7 @@ struct EventMatchView: View {
         do {
             let granted = try await store.requestWriteOnlyAccessToEvents()
             guard granted else {
-                await setFeedback(.denied)
+                setFeedback(.denied)
                 return
             }
 
@@ -175,9 +175,9 @@ struct EventMatchView: View {
             ekEvent.calendar  = store.defaultCalendarForNewEvents
 
             try store.save(ekEvent, span: .thisEvent)
-            await setFeedback(.added)
+            setFeedback(.added)
         } catch {
-            await setFeedback(.error)
+            setFeedback(.error)
         }
     }
 

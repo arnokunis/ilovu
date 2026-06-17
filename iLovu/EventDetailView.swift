@@ -324,7 +324,7 @@ struct EventDetailView: View {
         do {
             let granted = try await store.requestWriteOnlyAccessToEvents()
             guard granted else {
-                await setFeedback(.denied); return
+                setFeedback(.denied); return
             }
 
             let ekEvent = EKEvent(eventStore: store)
@@ -337,9 +337,9 @@ struct EventDetailView: View {
             ekEvent.calendar  = store.defaultCalendarForNewEvents
 
             try store.save(ekEvent, span: .thisEvent)
-            await setFeedback(.added)
+            setFeedback(.added)
         } catch {
-            await setFeedback(.error)
+            setFeedback(.error)
         }
     }
 

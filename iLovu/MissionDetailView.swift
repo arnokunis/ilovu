@@ -300,7 +300,7 @@ struct MissionDetailView: View {
             // in Info — without it, this call crashes.
             let granted = try await store.requestWriteOnlyAccessToEvents()
             guard granted else {
-                await setFeedback(.denied)
+                setFeedback(.denied)
                 return
             }
 
@@ -315,9 +315,9 @@ struct MissionDetailView: View {
             try store.save(event, span: .thisEvent)
             // Also record on the mission so the home row shows the date.
             if mission.scheduledDate == nil { mission.scheduledDate = start }
-            await setFeedback(.added)
+            setFeedback(.added)
         } catch {
-            await setFeedback(.error)
+            setFeedback(.error)
         }
     }
 
