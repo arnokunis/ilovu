@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseCore
+import RevenueCat
 
 @main
 struct iLovuApp: App {
@@ -38,6 +39,14 @@ struct iLovuApp: App {
     // requires FirebaseApp.configure() to have already run.
     init() {
         FirebaseApp.configure()
+
+        // RevenueCat, configured at launch alongside Firebase. The public SDK
+        // key lives in Secrets.swift (gitignored) — paste it there. .debug log
+        // level for now so configuration + entitlement fetches are visible in
+        // the console while integrating; dial this back before launch.
+        Purchases.logLevel = .debug
+        Purchases.configure(withAPIKey: Secrets.revenueCatAPIKey)
+
         _authState = State(initialValue: AuthState())
     }
 
