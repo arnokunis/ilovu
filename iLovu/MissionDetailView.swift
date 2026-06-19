@@ -23,6 +23,12 @@ struct MissionDetailView: View {
     @Environment(MissionStore.self) private var missionStore
     @Environment(MemoryStore.self)  private var memoryStore
 
+    // Couple link + paywall gate. Saving a memory can complete condition A of
+    // the gate (2nd match + 1st memory); we feed the new count here so the wall
+    // arms — it still won't present until the next calm mission-start in Home.
+    @Environment(CoupleService.self) private var coupleService
+    @Environment(PaywallGate.self)   private var paywallGate
+
     // SwiftUI's built-in dismiss action. Works because we're presented
     // as a sheet by the parent.
     @Environment(\.dismiss) private var dismiss
@@ -360,6 +366,12 @@ struct MissionDetailView: View {
     private func handleCompletion(memory: Memory?) {
         if let memory {
             memoryStore.add(memory)
+            // Memory saved → update the gate's memory count (arms condition A
+            // when the couple has also reached its 2nd match). Never presents
+            // here — the wall waits for the next calm mission-start.
+            if let coupleId = coupleService.coupleId {
+                paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: coupleId)
+            }
         }
 
         UINotificationFeedbackGenerator().notificationOccurred(.success)

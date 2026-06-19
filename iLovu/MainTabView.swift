@@ -18,6 +18,12 @@ struct MainTabView: View {
     // The shared mission list. Injected at the app root.
     @Environment(MissionStore.self) private var missionStore
 
+    // Memory list + paywall gate, both injected at the app root. MainTabView is
+    // where the couple's match count lives (the `celebrated` set), so it's the
+    // natural place to feed the gate its match/memory counts as they change.
+    @Environment(MemoryStore.self) private var memoryStore
+    @Environment(PaywallGate.self) private var paywallGate
+
     // Couple link + matching, both injected at the app root. MainTabView is the
     // right home for the matches listener: it outlives any single tab, so a match
     // celebration can overlay the whole app no matter where the user is — and the
@@ -173,6 +179,15 @@ struct MainTabView: View {
         detachCoupleListeners()
         listeningCoupleId = id
         celebrated = loadCelebrated(for: id)
+
+        // Feed the paywall gate the current couple state on attach (also covers
+        // the 14-day backstop on a cold launch with no new match/memory). The
+        // server createdAt is preferred when resolved; nil falls back to a
+        // first-seen stamp inside the gate.
+        paywallGate.noteCoupleActive(coupleId: id, createdAt: coupleService.couple?.createdAt?.dateValue())
+        paywallGate.recordMatchCount(celebrated.count, coupleId: id)
+        paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: id)
+
         matchListener = matchService.observeMatches(coupleId: id) { match in
             handleMatch(match)
         }
@@ -227,6 +242,13 @@ struct MainTabView: View {
         celebrated.insert(match.cardId)
         persistCelebrated()
 
+        // New match → update the gate's match count. This only ARMS the gate;
+        // it never presents here (mid-celebration). The wall waits for the next
+        // calm mission-start in HomeView.
+        if let id = coupleId {
+            paywallGate.recordMatchCount(celebrated.count, coupleId: id)
+        }
+
         switch Deck(rawValue: match.deck) {
         case .dates:
             if let card = SampleCards.byId(match.cardId) { matchedCard = card }
@@ -268,6 +290,8 @@ enum AppTab: Hashable {
 #Preview {
     MainTabView()
         .environment(MissionStore())
+        .environment(MemoryStore())
         .environment(CoupleService())
         .environment(MatchService())
+        .environment(PaywallGate())
 }

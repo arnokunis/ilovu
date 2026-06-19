@@ -40,6 +40,12 @@ struct iLovuApp: App {
     // safe-to-default-construct shape as the services above.
     @State private var missionService = MissionService()
 
+    // Decides WHEN the soft paywall appears (not the purchase). Couple-level,
+    // UserDefaults-backed, no Firebase — safe to default-construct here. Read by
+    // HomeView at the calm mission-start entry point; fed match/memory counts by
+    // MainTabView + MissionDetailView.
+    @State private var paywallGate = PaywallGate()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -70,6 +76,7 @@ struct iLovuApp: App {
                 .environment(coupleService)
                 .environment(matchService)
                 .environment(missionService)
+                .environment(paywallGate)
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
                 // when unpaired (coupleId nil) it's a no-op and missions stay

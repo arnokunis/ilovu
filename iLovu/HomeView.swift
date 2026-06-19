@@ -49,6 +49,11 @@ struct HomeView: View {
     // launch / next currentCouple() fetch.
     @Environment(CoupleService.self) private var coupleService
 
+    // Decides whether the soft paywall should appear at this calm mission-start
+    // entry point. Fed match/memory counts elsewhere (MainTabView /
+    // MissionDetailView); here we only read its decision.
+    @Environment(PaywallGate.self) private var paywallGate
+
     // 0...5. Drives how many of the five flame emojis are lit.
     // Conceptually: one completed Mission = a big spark boost; a quick
     // micro-moment = a small boost. The UI doesn't differentiate them
@@ -90,6 +95,12 @@ struct HomeView: View {
     // can edit / mark complete the tapped mission.
     @State private var missionToOpen: Mission?
 
+    // Soft-paywall presentation. When the gate is armed, tapping a mission shows
+    // the wall first; the tapped mission is held here and opened on dismiss, so
+    // the wall is dismissible and never actually blocks the date.
+    @State private var showPaywall: Bool = false
+    @State private var missionAfterPaywall: Mission?
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -129,6 +140,40 @@ struct HomeView: View {
         // the sheet dismisses.
         .sheet(item: $missionToOpen) { mission in
             MissionDetailView(mission: mission)
+        }
+        // Soft paywall. Presented in place of opening the mission when the gate
+        // is armed; on dismiss we continue to the mission the user tapped, so
+        // the wall is always escapable and never blocks the actual date.
+        // RevenueCat wiring (purchase / restore) is a separate step — the
+        // callbacks are intentionally left as no-ops for now.
+        .sheet(isPresented: $showPaywall, onDismiss: {
+            guard let pending = missionAfterPaywall else { return }
+            missionAfterPaywall = nil
+            // Small hop so the just-dismissed sheet fully clears before the
+            // mission sheet presents (SwiftUI dislikes back-to-back modals).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                missionToOpen = pending
+            }
+        }) {
+            PaywallView()
+        }
+    }
+
+    // MARK: - Mission open + soft paywall gate
+
+    // The calm "next mission start" entry point. If the paywall gate is armed
+    // (and the couple isn't subscribed), present the soft wall once instead of
+    // opening straight away; otherwise open the mission normally. Choosing this
+    // calm path — not the post-match "Plan This Date" flow — is what guarantees
+    // the wall never appears mid-celebration.
+    private func openMission(_ mission: Mission) {
+        if let coupleId = coupleService.coupleId,
+           paywallGate.shouldPresentAtMissionStart(coupleId: coupleId) {
+            paywallGate.markShown(coupleId: coupleId)   // show-once
+            missionAfterPaywall = mission
+            showPaywall = true
+        } else {
+            missionToOpen = mission
         }
     }
 
@@ -302,7 +347,7 @@ struct HomeView: View {
 
     private func missionRow(_ mission: Mission) -> some View {
         Button {
-            missionToOpen = mission
+            openMission(mission)
         } label: {
             HStack(spacing: 12) {
                 Text(mission.card.emoji)
