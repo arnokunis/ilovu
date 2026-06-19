@@ -148,10 +148,12 @@ struct PairingView: View {
                 .background(Color.blushCream)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
+                // Share PLAIN TEXT that leads with the code, link second — so an
+                // app that strips ilovu:// links (Messenger) still delivers a
+                // usable code. The raw token in the link is unchanged.
                 ShareLink(
-                    item: CoupleService.inviteURL(token: inviteToken),
-                    subject: Text("Join me on iLovu"),
-                    message: Text("Be my partner on iLovu 💕 Tap to connect.")
+                    item: CoupleService.inviteShareMessage(token: inviteToken),
+                    subject: Text("Join me on iLovu")
                 ) {
                     primaryLabel("Share invite", systemImage: "square.and.arrow.up")
                 }

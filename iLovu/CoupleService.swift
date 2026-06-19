@@ -418,6 +418,20 @@ final class CoupleService {
             .joined(separator: "-")
     }
 
+    /// The warm, on-brand text shared from the invite share sheet. Leads with
+    /// the human-readable (grouped/uppercased) code as PLAIN TEXT, so even apps
+    /// that strip custom-scheme links (e.g. Messenger) still deliver a usable
+    /// code the partner can type/paste. The raw-token link follows as a secondary
+    /// convenience for apps that keep it (iMessage, WhatsApp). The link's token
+    /// is unchanged, so every existing redeem path still works.
+    nonisolated static func inviteShareMessage(token: String) -> String {
+        """
+        Join me on iLovu 💕
+        Enter this code to connect: \(formatInviteCode(token))
+        \(inviteURL(token: token).absoluteString)
+        """
+    }
+
     /// Normalizes a hand-typed or pasted code back to a raw token: lowercases,
     /// strips formatting (spaces/hyphens), and maps Crockford look-alikes
     /// (o→0, i/l→1) so a slightly mistyped code still resolves. The token
