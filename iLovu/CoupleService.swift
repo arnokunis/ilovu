@@ -133,6 +133,8 @@ final class CoupleService {
         couple = Couple(id: coupleRef.documentID, members: [invite.creatorId, uid], createdAt: nil)
         // If a name was set while still unpaired, write it now that there's a couple.
         await flushPendingDisplayName()
+        // And seed the onboarding name (which never goes through setDisplayName).
+        await seedDisplayNameFromLocalIfNeeded()
         return coupleRef.documentID
     }
 
@@ -156,6 +158,9 @@ final class CoupleService {
             couple = resolved
             // A name set before the couple loaded now has somewhere to go.
             await flushPendingDisplayName()
+            // Seed the onboarding name on first couple load (e.g. inviter's
+            // cold launch / when the partner joins) if it's not already set.
+            await seedDisplayNameFromLocalIfNeeded()
         }
         return resolved
     }
@@ -224,6 +229,30 @@ final class CoupleService {
               !pending.isEmpty else { return }
         log("flushing parked pending name '\(pending)'")
         await setDisplayName(pending)
+    }
+
+    // The @AppStorage key the onboarding / profile screens store the user's name
+    // under. Read directly here because CoupleService isn't a View.
+    private let localNameKey = "userName"
+
+    /// Seeds the couple doc with the name the user typed during onboarding
+    /// (@AppStorage "userName"), which never flows through setDisplayName on its
+    /// own — so without this a newly-paired user's name never reaches the shared
+    /// doc until they manually re-save in the Us tab. Only writes when a name
+    /// exists locally AND this uid has no entry yet, so it never clobbers a name
+    /// already set (decoded from Firestore or edited this session). Reuses
+    /// setDisplayName for the race-proof / parked-retry write path. Called after
+    /// the couple is created (redeem) or first loads (currentCouple).
+    func seedDisplayNameFromLocalIfNeeded() async {
+        guard let uid = Auth.auth().currentUser?.uid, couple?.id != nil else { return }
+        // Don't clobber an entry that's already set.
+        let existing = couple?.displayNames?[uid]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard existing?.isEmpty != false else { return }
+        let local = (UserDefaults.standard.string(forKey: localNameKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !local.isEmpty else { return }
+        log("seeding display name from local userName '\(local)'")
+        await setDisplayName(local)
     }
 
     // MARK: - Debug logging

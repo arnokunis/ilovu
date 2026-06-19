@@ -48,3 +48,45 @@ struct InviteDeepLinkTests {
         #expect(CoupleService.inviteToken(from: url) == nil)
     }
 }
+
+// Partner display-name resolution — the pure logic behind "each user sees the
+// OTHER's name, never their own." This is the exact regression that was reported
+// (A seeing A's own name), so it's worth locking down without needing Firestore.
+struct CouplePartnerNameTests {
+
+    private func couple(_ displayNames: [String: String]) -> Couple {
+        Couple(id: "couple1", members: ["uidA", "uidB"], displayNames: displayNames, createdAt: nil)
+    }
+
+    @Test func partnerIsTheOtherMember() {
+        let c = couple([:])
+        #expect(c.partner(of: "uidA") == "uidB")
+        #expect(c.partner(of: "uidB") == "uidA")
+    }
+
+    @Test func eachSideSeesTheOthersName_notTheirOwn() {
+        let c = couple(["uidA": "Alex", "uidB": "Bea"])
+        // From A's point of view the partner is Bea — NOT Alex.
+        #expect(c.partnerName(currentUid: "uidA") == "Bea")
+        // From B's point of view the partner is Alex.
+        #expect(c.partnerName(currentUid: "uidB") == "Alex")
+    }
+
+    @Test func nilWhenOnlySelfHasSetAName() {
+        // Only A has set a name: A sees no partner name yet, B sees Alex.
+        let c = couple(["uidA": "Alex"])
+        #expect(c.partnerName(currentUid: "uidA") == nil)
+        #expect(c.partnerName(currentUid: "uidB") == "Alex")
+    }
+
+    @Test func nilWhenPartnerNameIsBlank() {
+        // A blank/whitespace entry is treated as unset, not shown.
+        let c = couple(["uidB": "   "])
+        #expect(c.partnerName(currentUid: "uidA") == nil)
+    }
+
+    @Test func nilWhenNoDisplayNamesAtAll() {
+        let c = Couple(id: "c", members: ["uidA", "uidB"], createdAt: nil)
+        #expect(c.partnerName(currentUid: "uidA") == nil)
+    }
+}
