@@ -72,7 +72,7 @@ struct UsView: View {
         // trigger). All inputs are observed, so these fire as they change.
         .task { refreshSetupCard() }
         .onChange(of: coupleService.coupleId) { _, _ in refreshSetupCard() }
-        .onChange(of: coupleService.anniversaryDate) { _, _ in refreshSetupCard() }
+        .onChange(of: coupleService.datingDate) { _, _ in refreshSetupCard() }
         .onChange(of: memoryStore.memories.count) { _, _ in refreshSetupCard() }
     }
 
@@ -82,7 +82,7 @@ struct UsView: View {
         guard let id = coupleService.coupleId else { showSetupCard = false; return }
         showSetupCard = setupPrompt.shouldShow(
             coupleId: id,
-            anniversarySet: coupleService.anniversaryDate != nil,
+            hasStartDate: coupleService.datingDate != nil,
             memoryCount: memoryStore.memories.count
         )
     }
@@ -102,7 +102,7 @@ struct UsView: View {
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(Color.deepRose)
 
-            Text("Want to set up your story? Add your anniversary and we'll count your days together.")
+            Text("Want to set up your story? Add your milestones and we'll count your days together.")
                 .font(.system(size: 14))
                 .foregroundStyle(.gray)
                 .fixedSize(horizontal: false, vertical: true)

@@ -1,12 +1,19 @@
 // CoupleStoryView.swift
-// The optional "couple story" editor: anniversary (couple-level), relationship
-// stage (couple-level), and your own birthday (per-partner). The partner's
-// birthday is shown read-only — they set their own. Everything is optional and
-// editable any time (no enter-once-or-lose), and all of it rides the existing
-// couple-doc writes + live listener so the partner sees changes automatically.
+// The optional "couple story" editor. Relationship status is chosen first; the
+// relevant MILESTONE date fields then reveal below it and update live as status
+// changes — a Dating couple never sees engagement/wedding fields. Plus each
+// partner's own birthday (the partner's is read-only).
 //
-// Presented as a sheet from the Us tab (permanent "Your story" row) and from the
-// post-connect "set up your story" card.
+// Rules honored here:
+//   • status-conditional reveal (dating / engaged / wedding)
+//   • the `dating` date ALWAYS drives Days Together; engagement + wedding are
+//     additional cherished dates, never the counter source
+//   • every field optional/skippable, all editable later
+//   • changing status HIDES now-irrelevant milestones but never deletes them —
+//     drafts stay loaded, and Save only writes the currently-visible ones
+//
+// Everything is couple-level and rides the existing couple-doc writes + live
+// listener, so the partner sees changes automatically.
 
 import SwiftUI
 
@@ -15,10 +22,10 @@ struct CoupleStoryView: View {
     @Environment(CoupleService.self) private var couples
     @Environment(\.dismiss) private var dismiss
 
-    // Working copies — committed only on Save. nil = "not set yet".
-    @State private var anniversary: Date?
-    @State private var birthday: Date?
+    // Working copies — committed only on Save. nil/absent = "not set yet".
     @State private var status: String?
+    @State private var milestoneDrafts: [CoupleMilestone: Date] = [:]
+    @State private var birthday: Date?
     @State private var isSaving = false
 
     private let statuses = ["Dating", "Engaged", "Married"]
@@ -29,8 +36,10 @@ struct CoupleStoryView: View {
                 Color.blushCream.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 20) {
-                        anniversarySection
+                        // Status first — it decides which milestone dates are
+                        // relevant — then the conditional milestones below it.
                         statusSection
+                        milestonesSection
                         birthdaySection
                         partnerBirthdaySection
                     }
@@ -53,37 +62,23 @@ struct CoupleStoryView: View {
             }
         }
         .onAppear {
-            anniversary = couples.anniversaryDate
-            birthday = couples.myBirthday
             status = couples.relationshipStatus
-        }
-    }
-
-    // MARK: - Sections
-
-    private var anniversarySection: some View {
-        storyCard {
-            sectionTitle("Together since 💕")
-            Text("We'll count your days together from this date.")
-                .font(.system(size: 13))
-                .foregroundStyle(.gray)
-
-            if anniversary == nil {
-                addButton("Add anniversary") { anniversary = Date() }
-            } else {
-                datePicker($anniversary)
-                if let days = previewDays {
-                    Text("\(days.formatted()) days together")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.louvCoral)
+            birthday = couples.myBirthday
+            // Load ALL milestone drafts regardless of status, so toggling status
+            // away and back restores previously-entered dates (hide, don't lose).
+            for milestone in CoupleMilestone.allCases {
+                if let date = couples.milestoneDate(milestone) {
+                    milestoneDrafts[milestone] = date
                 }
             }
         }
     }
 
+    // MARK: - Status
+
     private var statusSection: some View {
         storyCard {
-            sectionTitle("Relationship")
+            sectionTitle("Where are you two? 💞")
             HStack(spacing: 8) {
                 ForEach(statuses, id: \.self) { option in
                     statusPill(option)
@@ -92,9 +87,49 @@ struct CoupleStoryView: View {
         }
     }
 
+    // MARK: - Milestones (conditional on status)
+
+    @ViewBuilder
+    private var milestonesSection: some View {
+        let visible = Self.visibleMilestones(for: status)
+        if visible.isEmpty {
+            storyCard {
+                sectionTitle("Your dates")
+                Text("Choose where you're at above and we'll ask for the dates that matter. 💕")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            ForEach(visible, id: \.self) { milestone in
+                milestoneCard(milestone)
+            }
+        }
+    }
+
+    private func milestoneCard(_ milestone: CoupleMilestone) -> some View {
+        storyCard {
+            sectionTitle(label(for: milestone))
+
+            if milestoneDrafts[milestone] == nil {
+                addButton(addTitle(for: milestone)) { milestoneDrafts[milestone] = Date() }
+            } else {
+                datePicker(milestoneBinding(milestone))
+                // Only the dating date powers the counter — preview it inline.
+                if milestone == .dating, let days = previewDays(milestoneDrafts[milestone]) {
+                    Text("\(days.formatted()) days together")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.louvCoral)
+                }
+            }
+        }
+    }
+
+    // MARK: - Birthdays
+
     private var birthdaySection: some View {
         storyCard {
-            sectionTitle("Your birthday")
+            sectionTitle("Your birthday 🎂")
             if birthday == nil {
                 addButton("Add your birthday") { birthday = Date() }
             } else {
@@ -107,7 +142,7 @@ struct CoupleStoryView: View {
     private var partnerBirthdaySection: some View {
         storyCard {
             let partner = couples.partnerDisplayName ?? "Your partner"
-            sectionTitle("\(partner)'s birthday")
+            sectionTitle("\(partner)'s birthday 🎂")
             if let date = couples.partnerBirthday {
                 Text(date.formatted(date: .long, time: .omitted))
                     .font(.system(size: 16, weight: .semibold))
@@ -120,12 +155,47 @@ struct CoupleStoryView: View {
         }
     }
 
+    // MARK: - Milestone copy + reveal rules
+
+    // Which milestones are relevant for a given status. Dating couples never see
+    // engagement/wedding; status nil shows none (pick a status first).
+    private static func visibleMilestones(for status: String?) -> [CoupleMilestone] {
+        switch status {
+        case "Dating":  return [.dating]
+        case "Engaged": return [.dating, .engaged]
+        case "Married": return [.dating, .engaged, .wedding]
+        default:        return []
+        }
+    }
+
+    // The dating prompt reads differently for a Dating couple ("first met") than
+    // for one that's since engaged/married ("started dating").
+    private func label(for milestone: CoupleMilestone) -> String {
+        switch milestone {
+        case .dating:
+            return status == "Dating"
+                ? "When did you first meet / start dating? 💕"
+                : "When did you start dating? 💕"
+        case .engaged: return "When did you get engaged? 💍"
+        case .wedding: return "Your wedding day 💒"
+        }
+    }
+
+    private func addTitle(for milestone: CoupleMilestone) -> String {
+        switch milestone {
+        case .dating:  return "Add the date"
+        case .engaged: return "Add engagement date"
+        case .wedding: return "Add wedding date"
+        }
+    }
+
     // MARK: - Pieces
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 17, weight: .bold))
             .foregroundStyle(Color.deepRose)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func storyCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -138,7 +208,7 @@ struct CoupleStoryView: View {
     }
 
     // A DatePicker over an optional date — bound through a non-optional proxy.
-    // Dates can't be in the future (anniversary / birthday are both past dates).
+    // Milestones + birthdays are all past dates, so the future is disallowed.
     private func datePicker(_ source: Binding<Date?>) -> some View {
         DatePicker(
             "",
@@ -150,6 +220,11 @@ struct CoupleStoryView: View {
         .labelsHidden()
         .datePickerStyle(.compact)
         .tint(Color.louvCoral)
+    }
+
+    private func milestoneBinding(_ milestone: CoupleMilestone) -> Binding<Date?> {
+        Binding(get: { milestoneDrafts[milestone] },
+                set: { milestoneDrafts[milestone] = $0 })
     }
 
     private func addButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -181,31 +256,35 @@ struct CoupleStoryView: View {
         .buttonStyle(.plain)
     }
 
-    // Live preview of the counter while the picker is open.
-    private var previewDays: Int? {
-        guard let anniversary else { return nil }
+    // Live preview of the counter while the dating picker is open.
+    private func previewDays(_ date: Date?) -> Int? {
+        guard let date else { return nil }
         let cal = Calendar.current
         let elapsed = cal.dateComponents([.day],
-                                         from: cal.startOfDay(for: anniversary),
+                                         from: cal.startOfDay(for: date),
                                          to: cal.startOfDay(for: Date())).day ?? 0
         return max(1, elapsed + 1)
     }
 
     // MARK: - Save
 
-    // Writes only the fields the user actually set/changed. Each rides its own
-    // dot-path couple-doc update via CoupleService.
+    // Writes status, the currently-VISIBLE milestones that changed (hidden ones
+    // are left untouched in Firestore — hide, don't delete), and the birthday.
     private func save() async {
         isSaving = true
-        if let anniversary, anniversary != couples.anniversaryDate {
-            await couples.setAnniversaryDate(anniversary)
+
+        if let status, status != couples.relationshipStatus {
+            await couples.setRelationshipStatus(status)
+        }
+        for milestone in Self.visibleMilestones(for: status) {
+            if let date = milestoneDrafts[milestone], date != couples.milestoneDate(milestone) {
+                await couples.setMilestone(milestone, date: date)
+            }
         }
         if let birthday, birthday != couples.myBirthday {
             await couples.setBirthday(birthday)
         }
-        if let status, status != couples.relationshipStatus {
-            await couples.setRelationshipStatus(status)
-        }
+
         isSaving = false
         dismiss()
     }

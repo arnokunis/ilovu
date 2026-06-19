@@ -25,10 +25,10 @@ final class CoupleSetupPrompt {
     private func suppressedKey(_ c: String)     -> String { "coupleSetupSuppressed.\(c)" }
 
     /// Whether to show the card now. Gated on: paired (caller passes a coupleId),
-    /// no anniversary yet, not suppressed, and either never dismissed or eligible
-    /// for the single gentle re-surface.
-    func shouldShow(coupleId: String, anniversarySet: Bool, memoryCount: Int) -> Bool {
-        guard !anniversarySet else { return false }
+    /// no start ("dating") date yet, not suppressed, and either never dismissed or
+    /// eligible for the single gentle re-surface.
+    func shouldShow(coupleId: String, hasStartDate: Bool, memoryCount: Int) -> Bool {
+        guard !hasStartDate else { return false }
         guard !defaults.bool(forKey: suppressedKey(coupleId)) else { return false }
 
         let count = defaults.integer(forKey: dismissCountKey(coupleId))

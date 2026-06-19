@@ -36,7 +36,7 @@ final class CoupleService {
 
     // The signed-in user's couple, once resolved. Observable (this class is
     // @Observable) so the whole app reacts the MOMENT pairing completes — not
-    // just on next launch. This is the keystone the redeemer was missing: before,
+    // just on next launc1h. This is the keystone the redeemer was missing: before,
     // redeem() wrote to Firestore but updated nothing local, so MainTabView's
     // coupleId stayed nil for the rest of the session. Now redeem() / currentCouple()
     // publish here and every observer (MainTabView, the swipe decks) follows.
@@ -66,10 +66,13 @@ final class CoupleService {
         return String(Int(ts.dateValue().timeIntervalSince1970))
     }
 
-    /// The couple's shared anniversary ("together since"), or nil if unset.
-    var anniversaryDate: Date? { couple?.anniversaryDate?.dateValue() }
+    /// A relationship milestone's date (dating / engaged / wedding), or nil.
+    func milestoneDate(_ milestone: CoupleMilestone) -> Date? { couple?.milestoneDate(milestone) }
 
-    /// Days together (anniversary = day 1), or nil until an anniversary is set.
+    /// The "started dating" date — the source of the Days Together counter.
+    var datingDate: Date? { couple?.milestoneDate(.dating) }
+
+    /// Days together (start day = day 1), or nil until the dating date is set.
     var daysTogether: Int? { couple?.daysTogether() }
 
     /// The couple's relationship stage, or nil if unset.
@@ -366,10 +369,14 @@ final class CoupleService {
     // post-pairing (the Couple Story editor), so unlike setDisplayName there's no
     // pre-pairing parking — the couple is loaded by the time we get here.
 
-    /// Sets the couple's shared anniversary ("together since").
-    func setAnniversaryDate(_ date: Date) async {
-        await updateCoupleField(["anniversaryDate": Timestamp(date: date)]) {
-            $0.anniversaryDate = Timestamp(date: date)
+    /// Sets one of the couple's relationship milestones (dating / engaged /
+    /// wedding). Dot-path write so the others are untouched; hidden milestones are
+    /// never deleted by a status change.
+    func setMilestone(_ milestone: CoupleMilestone, date: Date) async {
+        await updateCoupleField(["milestones.\(milestone.rawValue)": Timestamp(date: date)]) {
+            var map = $0.milestones ?? [:]
+            map[milestone.rawValue] = Timestamp(date: date)
+            $0.milestones = map
         }
     }
 

@@ -8,6 +8,17 @@
 import Foundation
 import FirebaseFirestore
 
+// The couple's relationship milestones. Stored as a map on the couple doc
+// (milestones[rawValue] -> Timestamp), so adding a new milestone later (moved in
+// together, first trip…) needs no migration. Which ones are RELEVANT depends on
+// relationship status — see CoupleStoryView — but `dating` always exists as the
+// source of the Days Together counter.
+enum CoupleMilestone: String, CaseIterable {
+    case dating      // when they first met / started dating — drives "Days Together"
+    case engaged     // engagement day
+    case wedding     // wedding day
+}
+
 struct Couple: Codable, Identifiable {
 
     @DocumentID var id: String?
@@ -34,11 +45,15 @@ struct Couple: Codable, Identifiable {
     /// cached copy and re-downloads. nil until a photo is set.
     var couplePhotoUpdatedAt: Timestamp? = nil
 
-    /// COUPLE-LEVEL "together since" date — one shared truth, set by either
-    /// partner, powering the days-together counter. Distinct from `createdAt`
-    /// (the *pairing* date). nil until set; optional/defaulted so older docs
-    /// decode cleanly. (All special-dates fields are optional + editable later —
-    /// never enter-once-or-lose.)
+    /// Relationship milestones, keyed by CoupleMilestone.rawValue (dating /
+    /// engaged / wedding). COUPLE-LEVEL — either partner sets them; which are
+    /// shown depends on relationshipStatus. All optional + editable later. Hidden
+    /// (status-irrelevant) milestones are never deleted, only not shown.
+    var milestones: [String: Timestamp]? = nil
+
+    /// LEGACY: the original single "together since" field. No longer written —
+    /// kept only as a non-destructive read fallback for the `dating` milestone so
+    /// couples who set it before the milestones rework keep their counter.
     var anniversaryDate: Timestamp? = nil
 
     /// uid -> birthday. PER-PARTNER, same shape as `displayNames`: each member
@@ -73,11 +88,20 @@ struct Couple: Codable, Identifiable {
         return birthdays?[partner]?.dateValue()
     }
 
-    /// Days together, counting the anniversary itself as DAY 1 (so it never reads
-    /// "0 days" — warmer for a love app). nil until an anniversary is set; clamps
-    /// to at least 1 if the date is today or somehow in the future.
+    /// A milestone's date, or nil if unset. `dating` falls back to the legacy
+    /// `anniversaryDate` so pre-rework data still resolves.
+    func milestoneDate(_ milestone: CoupleMilestone) -> Date? {
+        if let ts = milestones?[milestone.rawValue] { return ts.dateValue() }
+        if milestone == .dating { return anniversaryDate?.dateValue() }   // legacy fallback
+        return nil
+    }
+
+    /// Days together, ALWAYS from the `dating` date (the true together-count,
+    /// regardless of later engagement/marriage), counting the start day itself as
+    /// DAY 1 (so it never reads "0 days"). nil until the dating date is set;
+    /// clamps to at least 1 if the date is today or somehow in the future.
     func daysTogether(asOf now: Date = Date()) -> Int? {
-        guard let start = anniversaryDate?.dateValue() else { return nil }
+        guard let start = milestoneDate(.dating) else { return nil }
         let cal = Calendar.current
         let elapsed = cal.dateComponents([.day],
                                          from: cal.startOfDay(for: start),
