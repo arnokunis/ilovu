@@ -22,6 +22,18 @@ struct Couple: Codable, Identifiable {
 
     @ServerTimestamp var createdAt: Timestamp?
 
+    /// Storage path (NOT a download URL) of the shared couple photo — one image
+    /// both partners see, set/changed by either via CoupleService.setCouplePhoto.
+    /// We persist the path ref and fetch bytes through the Storage SDK + rules,
+    /// so nothing sensitive (no token, no API key) is ever baked into the doc.
+    /// nil until a photo is set. Optional/defaulted so older docs decode cleanly.
+    var couplePhotoPath: String? = nil
+
+    /// When the couple photo last changed. Doubles as the cache-bust token: the
+    /// image cache keys on this, so a change on one phone invalidates the other's
+    /// cached copy and re-downloads. nil until a photo is set.
+    var couplePhotoUpdatedAt: Timestamp? = nil
+
     /// The *other* member's uid, from the current user's point of view.
     /// nil if this somehow isn't a two-person couple.
     func partner(of uid: String) -> String? {

@@ -22,6 +22,7 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseStorage
 
 @MainActor
 @Observable
@@ -54,11 +55,23 @@ final class CoupleService {
         return couple?.partnerName(currentUid: uid)
     }
 
+    /// Storage path of the shared couple photo, or nil if none set / unpaired.
+    /// Views pass this to CachedStorageImage.
+    var couplePhotoPath: String? { couple?.couplePhotoPath }
+
+    /// Cache-bust token for the couple photo — changes whenever the photo does,
+    /// so CachedStorageImage re-downloads. Empty string when no photo is set.
+    var couplePhotoVersion: String {
+        guard let ts = couple?.couplePhotoUpdatedAt else { return "" }
+        return String(Int(ts.dateValue().timeIntervalSince1970))
+    }
+
     enum InviteError: LocalizedError {
         case notSignedIn
         case inviteNotFound
         case alreadyConsumed
         case cannotRedeemOwnInvite
+        case notPaired
 
         var errorDescription: String? {
             switch self {
@@ -66,9 +79,15 @@ final class CoupleService {
             case .inviteNotFound:        "This invite link isn't valid."
             case .alreadyConsumed:       "This invite has already been used."
             case .cannotRedeemOwnInvite: "You can't redeem your own invite."
+            case .notPaired:             "Connect with your partner first."
             }
         }
     }
+
+    // Uploads couple-photo bytes to Cloud Storage. Stateless wrapper; cheap to
+    // hold here so setCouplePhoto can move bytes without the views touching the
+    // Storage SDK directly.
+    private let storage = StorageService()
 
     // MARK: - Create
 
@@ -253,6 +272,47 @@ final class CoupleService {
         guard !local.isEmpty else { return }
         log("seeding display name from local userName '\(local)'")
         await setDisplayName(local)
+    }
+
+    // MARK: - Couple photo
+    //
+    // PRE-LAUNCH HARDENING: this is a client-authed write to Cloud Storage,
+    // gated only by storage.rules' interim "signed-in" check — Storage rules
+    // can't read Firestore to verify couple membership, so a signed-in user who
+    // knows a coupleId could write here. Move to a Cloud Function + custom
+    // `coupleId` claim + App Check before launch, same as the deferred invite-
+    // redemption and venue-cache hardening. See storage.rules and redeem().
+
+    /// Uploads `jpegData` as the shared couple photo (one image both partners
+    /// see) and records its Storage PATH + an updated timestamp on the couple
+    /// doc. Overwrites any existing photo. We store the path, never a download
+    /// URL, so nothing sensitive is baked into Firestore.
+    ///
+    /// Throws if not signed in / not paired / the upload or doc write fails, so
+    /// the caller can offer a retry. Unlike setDisplayName we don't park the
+    /// (large) bytes on failure — the user simply re-picks.
+    func setCouplePhoto(jpegData: Data) async throws {
+        guard Auth.auth().currentUser != nil else { throw InviteError.notSignedIn }
+
+        // Resolve the couple if in-memory state hasn't caught up (same race
+        // guard as setDisplayName) — then we genuinely need a couple to write to.
+        if couple?.id == nil {
+            _ = try? await currentCouple()
+        }
+        guard let coupleId = couple?.id else { throw InviteError.notPaired }
+
+        let path = "couples/\(coupleId)/profile.jpg"
+        try await storage.uploadJPEG(jpegData, to: path)
+        try await db.collection("couples").document(coupleId).updateData([
+            "couplePhotoPath": path,
+            "couplePhotoUpdatedAt": FieldValue.serverTimestamp()
+        ])
+
+        // Mirror locally so this device updates instantly; the server timestamp
+        // reconciles on the next read. A local Date() is a fine cache-bust token.
+        couple?.couplePhotoPath = path
+        couple?.couplePhotoUpdatedAt = Timestamp(date: Date())
+        log("setCouplePhoto — wrote \(path) for couple \(coupleId)")
     }
 
     // MARK: - Debug logging

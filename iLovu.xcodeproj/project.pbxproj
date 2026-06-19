@@ -11,6 +11,7 @@
 		3719A47A2FD9A08700F510C0 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 3719A4792FD9A08700F510C0 /* FirebaseFirestore */; };
 		3719A47C2FD9A08700F510C0 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3719A47B2FD9A08700F510C0 /* FirebaseCore */; };
 		D001CA70000000000000C0DE /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = D001CA70000000000000B0DE /* RevenueCat */; };
+		F00D57A6E0000000000001DE /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = F00D57A6E0000000000000DE /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +64,7 @@
 				3719A47A2FD9A08700F510C0 /* FirebaseFirestore in Frameworks */,
 				3719A47C2FD9A08700F510C0 /* FirebaseCore in Frameworks */,
 				D001CA70000000000000C0DE /* RevenueCat in Frameworks */,
+				F00D57A6E0000000000001DE /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +129,7 @@
 				3719A4792FD9A08700F510C0 /* FirebaseFirestore */,
 				3719A47B2FD9A08700F510C0 /* FirebaseCore */,
 				D001CA70000000000000B0DE /* RevenueCat */,
+				F00D57A6E0000000000000DE /* FirebaseStorage */,
 			);
 			productName = iLovu;
 			productReference = 371B07812FBDB9B700DD381C /* iLovu.app */;
@@ -664,6 +667,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D001CA70000000000000A0DE /* XCRemoteSwiftPackageReference "purchases-ios" */;
 			productName = RevenueCat;
+		};
+		F00D57A6E0000000000000DE /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3719A4762FD9A08700F510C0 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

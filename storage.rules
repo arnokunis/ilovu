@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// iLovu Cloud Storage — couple-scoped photos.
+//   couples/{coupleId}/profile.jpg              the shared couple photo (one per couple)
+//   couples/{coupleId}/memories/{memoryId}.jpg  proof photos (Memory Vault — slice 2)
+//
+// =====================================================================
+// PRE-LAUNCH HARDENING (do BEFORE real users — tracked alongside the
+// other deferred client-authed items: move invite redemption + venue-cache
+// writes to Cloud Functions, and enable App Check):
+//
+//   Storage Security Rules CANNOT read Firestore, so they cannot verify
+//   that the requester is actually one of the two `members` of {coupleId}.
+//   This INTERIM rule therefore only enforces: signed-in + image + size +
+//   scoped under couples/. A signed-in user who knows or guesses a coupleId
+//   could read/write that couple's photos. This matches the current
+//   client-authed posture of invite redemption and venue-cache writes.
+//
+//   Before launch, bind couple membership to the auth token via a custom
+//   `coupleId` claim set by a Cloud Function at pairing, then tighten the
+//   match below to:
+//       allow read, write: if request.auth.token.coupleId == coupleId && ...
+//   and enable Firebase App Check on Storage.
+// =====================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Incoming upload must be an image under 5 MB. (request.resource is the
+    // pending upload; it's null on read/delete, so guard those separately.)
+    function isValidImageUpload() {
+      return request.resource.size < 5 * 1024 * 1024
+             && request.resource.contentType.matches('image/.*');
+    }
+
+    // All couple photos live under couples/{coupleId}/**.
+    match /couples/{coupleId}/{allPaths=**} {
+      allow read:   if isSignedIn();
+      allow write:  if isSignedIn() && isValidImageUpload();
+      allow delete: if isSignedIn();
+    }
+
+    // Everything else is locked down.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

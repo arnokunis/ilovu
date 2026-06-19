@@ -5,6 +5,7 @@
 // reason to keep the app installed long after the novelty fades.
 
 import SwiftUI
+import PhotosUI
 
 struct UsView: View {
 
@@ -15,6 +16,14 @@ struct UsView: View {
 
     // The user's local profile photo, shown in the profile row.
     @Environment(ProfileStore.self) private var profileStore
+
+    // The shared couple link — source of the couple photo path + version, and
+    // the write path (setCouplePhoto) when either partner sets/changes it.
+    @Environment(CoupleService.self) private var coupleService
+
+    // The couple-photo picker + its in-flight upload state.
+    @State private var couplePhotoItem: PhotosPickerItem?
+    @State private var isUploadingCouplePhoto = false
 
     // The user's display name (same key as onboarding + the Home greeting).
     @AppStorage("userName") private var userName: String = ""
@@ -54,6 +63,13 @@ struct UsView: View {
 
     private var header: some View {
         VStack(spacing: 6) {
+            // Shared couple photo — only meaningful once paired (it lives on the
+            // couple doc). Either partner can set/change it.
+            if coupleService.coupleId != nil {
+                couplePhotoView
+                    .padding(.bottom, 10)
+            }
+
             Text("Your Story Together 💕")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(.white)
@@ -87,6 +103,83 @@ struct UsView: View {
     private var memoryCountText: String {
         let count = memoryStore.memories.count
         return count == 1 ? "1 memory" : "\(count) memories"
+    }
+
+    // MARK: - Couple photo
+    // Circular, tappable (PhotosPicker). Shows the shared photo when set, a warm
+    // "add a photo of you two" prompt when not. Either partner can change it; a
+    // change overwrites the single profile.jpg and bumps couplePhotoUpdatedAt.
+
+    private var couplePhotoView: some View {
+        PhotosPicker(selection: $couplePhotoItem, matching: .images) {
+            ZStack {
+                if let path = coupleService.couplePhotoPath, !path.isEmpty {
+                    CachedStorageImage(path: path,
+                                       version: coupleService.couplePhotoVersion) {
+                        couplePhotoPlaceholder
+                    }
+                    .frame(width: 96, height: 96)
+                    .clipShape(Circle())
+                } else {
+                    couplePhotoPlaceholder
+                        .frame(width: 96, height: 96)
+                        .clipShape(Circle())
+                }
+
+                if isUploadingCouplePhoto {
+                    Circle()
+                        .fill(.black.opacity(0.35))
+                        .frame(width: 96, height: 96)
+                    ProgressView().tint(.white)
+                }
+            }
+            .overlay(Circle().stroke(.white, lineWidth: 3))
+            // Small camera badge so the photo reads as editable.
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.deepRose)
+                    .padding(7)
+                    .background(Circle().fill(.white))
+                    .offset(x: 2, y: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isUploadingCouplePhoto)
+        .onChange(of: couplePhotoItem) { _, item in
+            guard let item else { return }
+            Task { await uploadCouplePhoto(item) }
+        }
+    }
+
+    private var couplePhotoPlaceholder: some View {
+        ZStack {
+            Color.white.opacity(0.22)
+            VStack(spacing: 4) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white)
+                Text("Add a photo\nof you two 💕")
+                    .font(.system(size: 11, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+
+    // Downscale to the shared photo budget (1024px / 0.7) and upload via the
+    // couple service. Errors are swallowed for now — the picker stays put so the
+    // user can simply try again.
+    private func uploadCouplePhoto(_ item: PhotosPickerItem) async {
+        isUploadingCouplePhoto = true
+        defer { isUploadingCouplePhoto = false }
+
+        guard let raw = try? await item.loadTransferable(type: Data.self),
+              let jpeg = ImageDownscaler.downscaledJPEG(from: raw, maxEdge: 1024, quality: 0.7)
+        else { return }
+
+        try? await coupleService.setCouplePhoto(jpegData: jpeg)
+        couplePhotoItem = nil
     }
 
     // MARK: - Content below header

@@ -180,22 +180,39 @@ struct HomeView: View {
     // MARK: - Greeting
 
     private var greetingSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("iLovu")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(Color.louvCoral)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("iLovu")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.louvCoral)
 
-            Text(greetingText)
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(Color.deepRose)
+                Text(greetingText)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(Color.deepRose)
 
-            // The PARTNER's name (the member that isn't you), read off the
-            // couple's displayNames via CoupleService. Only shown once they've
-            // set one — otherwise we'd just print a placeholder.
-            if let partner = coupleService.partnerDisplayName {
-                Text("With \(partner) 💞")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.gray)
+                // The PARTNER's name (the member that isn't you), read off the
+                // couple's displayNames via CoupleService. Only shown once they've
+                // set one — otherwise we'd just print a placeholder.
+                if let partner = coupleService.partnerDisplayName {
+                    Text("With \(partner) 💞")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.gray)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            // Shared couple photo as a small avatar — display only here (setting
+            // it lives in the Us tab). Shown only once a photo exists, so the
+            // calm Home header isn't cluttered with a prompt.
+            if let path = coupleService.couplePhotoPath, !path.isEmpty {
+                CachedStorageImage(path: path,
+                                   version: coupleService.couplePhotoVersion) {
+                    Circle().fill(Color.blushCream)
+                }
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.louvCoral.opacity(0.3), lineWidth: 1))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
