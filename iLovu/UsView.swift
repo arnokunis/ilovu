@@ -356,15 +356,16 @@ struct UsView: View {
     // wildly different. The detail view shows the uncropped version.
     @ViewBuilder
     private func photoThumbnail(for memory: Memory) -> some View {
-        if let image = UIImage(data: memory.photoData) {
-            Image(uiImage: image)
+        MemoryImage(memory: memory) { image in
+            image
                 .resizable()
                 .aspectRatio(4/3, contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .frame(height: 220)
                 .clipped()
-        } else {
-            // Defensive fallback if the saved Data somehow can't decode.
+        } placeholder: {
+            // Shown while a partner-synced photo downloads, or if bytes are
+            // somehow unavailable.
             Rectangle()
                 .fill(Color.blushCream)
                 .frame(height: 220)

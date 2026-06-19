@@ -40,6 +40,12 @@ struct iLovuApp: App {
     // safe-to-default-construct shape as the services above.
     @State private var missionService = MissionService()
 
+    // Firestore + Storage sync for the Memory Vault. Uploads proof-photo bytes
+    // to couples/{id}/memories/{memId}.jpg and mirrors metadata to Firestore, so
+    // both partners share one durable vault. Same lazy-Firebase, safe-to-default
+    // shape as the services above.
+    @State private var memoryService = MemoryService()
+
     // Decides WHEN the soft paywall appears (not the purchase). Couple-level,
     // UserDefaults-backed, no Firebase — safe to default-construct here. Read by
     // HomeView at the calm mission-start entry point; fed match/memory counts by
@@ -76,6 +82,7 @@ struct iLovuApp: App {
                 .environment(coupleService)
                 .environment(matchService)
                 .environment(missionService)
+                .environment(memoryService)
                 .environment(paywallGate)
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
@@ -86,6 +93,18 @@ struct iLovuApp: App {
                     missionStore.remoteUpsert = { [coupleService, missionService] mission in
                         guard let coupleId = coupleService.coupleId else { return }
                         Task { await missionService.saveMission(coupleId: coupleId, mission: mission) }
+                    }
+                    // Memory sync sink: upload bytes + metadata, then mark the
+                    // local memory synced (records storagePath, drops inline
+                    // bytes). No-op when unpaired — memories stay local until
+                    // pairing, then resyncUnsynced() migrates them.
+                    memoryStore.remoteUpsert = { [coupleService, memoryService, memoryStore] memory in
+                        guard let coupleId = coupleService.coupleId else { return }
+                        Task { @MainActor in
+                            if let path = await memoryService.saveMemory(coupleId: coupleId, memory: memory) {
+                                memoryStore.markSynced(id: memory.id, storagePath: path)
+                            }
+                        }
                     }
                 }
         }

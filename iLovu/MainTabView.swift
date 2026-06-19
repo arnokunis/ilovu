@@ -35,6 +35,10 @@ struct MainTabView: View {
     // below. Injected at the app root, same as the services above.
     @Environment(MissionService.self) private var missionService
 
+    // Memory Vault sync — feeds the memories listener below and is the upload
+    // path behind MemoryStore.remoteUpsert. Injected at the app root.
+    @Environment(MemoryService.self) private var memoryService
+
     // Cards is the headline feature so it's the default landing tab.
     @State private var selectedTab: AppTab = .cards
 
@@ -54,6 +58,12 @@ struct MainTabView: View {
     // above. Delivers remote mission creates/edits (e.g. the partner setting a
     // date/time) into the shared MissionStore.
     @State private var missionListener: ListenerRegistration?
+
+    // The live memories listener (Memory Vault sync) and the couple-doc listener.
+    // The latter republishes the couple on every change, so a partner's new name
+    // or a changed couple photo lands live without a relaunch.
+    @State private var memoryListener: ListenerRegistration?
+    @State private var coupleListener: ListenerRegistration?
 
     // cardIds we've already celebrated on THIS device, persisted so old matches
     // don't replay their celebration on every launch. Keyed per couple. The
@@ -196,6 +206,16 @@ struct MainTabView: View {
             onUpsert: { remote in applyRemoteMission(remote) },
             onRemove: { cardId in missionStore.removeFromRemote(cardId: cardId) }
         )
+        memoryListener = memoryService.observeMemories(
+            coupleId: id,
+            onUpsert: { remote in applyRemoteMemory(remote) },
+            onRemove: { memoryId in memoryStore.removeFromRemote(id: memoryId) }
+        )
+        // Live couple-doc updates (partner name + couple photo freshness).
+        coupleListener = coupleService.observeCouple()
+        // Migrate any local-only memories (pre-Storage, or saved while unpaired)
+        // up to Storage now that we have a couple. Idempotent.
+        memoryStore.resyncUnsynced()
     }
 
     private func detachCoupleListeners() {
@@ -203,6 +223,10 @@ struct MainTabView: View {
         matchListener = nil
         missionListener?.remove()
         missionListener = nil
+        memoryListener?.remove()
+        memoryListener = nil
+        coupleListener?.remove()
+        coupleListener = nil
         listeningCoupleId = nil
     }
 
@@ -231,6 +255,25 @@ struct MainTabView: View {
             checklist: checklist.isEmpty ? Mission(from: card).checklist : checklist
         )
         missionStore.mergeFromRemote(mission)
+    }
+
+    /// Rebuilds a Memory from a synced RemoteMemory and merges it into the store.
+    /// Photo bytes aren't carried in the doc — photoData stays nil and the vault
+    /// downloads from `storagePath` via the cache. Skips a doc with a malformed id.
+    private func applyRemoteMemory(_ remote: RemoteMemory) {
+        guard let idString = remote.id, let uuid = UUID(uuidString: idString) else { return }
+        let memory = Memory(
+            id: uuid,
+            dateCompleted: remote.dateCompleted.dateValue(),
+            cardTitle: remote.cardTitle,
+            cardEmoji: remote.cardEmoji,
+            photoData: nil,
+            rating: remote.rating,
+            note: remote.note,
+            storagePath: remote.storagePath,
+            createdBy: remote.createdBy
+        )
+        memoryStore.mergeFromRemote(memory)
     }
 
     /// Called for every match the listener delivers (existing + live). Presents
@@ -293,5 +336,7 @@ enum AppTab: Hashable {
         .environment(MemoryStore())
         .environment(CoupleService())
         .environment(MatchService())
+        .environment(MissionService())
+        .environment(MemoryService())
         .environment(PaywallGate())
 }

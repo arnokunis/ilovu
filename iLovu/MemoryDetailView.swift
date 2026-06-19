@@ -17,13 +17,18 @@ struct MemoryDetailView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
-                    if let image = UIImage(data: memory.photoData) {
-                        // .fit so the entire photo is visible — no cropping
-                        // in the detail view (unlike the vault thumbnail).
-                        Image(uiImage: image)
+                    // .fit so the entire photo is visible — no cropping in the
+                    // detail view (unlike the vault thumbnail). Bytes come from
+                    // local capture or, for a partner-synced memory, Storage.
+                    MemoryImage(memory: memory) { image in
+                        image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity)
+                    } placeholder: {
+                        Color.black
+                            .frame(height: 320)
+                            .overlay(ProgressView().tint(.white))
                     }
 
                     metadata

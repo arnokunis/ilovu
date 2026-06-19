@@ -20,14 +20,24 @@ struct Memory: Identifiable, Codable, Equatable {
     let cardTitle: String
     let cardEmoji: String
 
-    // Photo stored inline as JPEG Data. CompleteMissionSheet compresses
-    // before saving (max 1024px, quality 0.6), so a typical entry is
-    // ~100-300 KB — fine in UserDefaults for the foreseeable future.
-    // If we ever ship to thousands of memories per couple, we'd move
-    // these out to FileManager and keep only filenames here.
-    let photoData: Data
+    // Photo bytes, present when the memory was just captured on THIS device or
+    // hasn't synced yet. Once uploaded to Storage we clear it (markSynced) and
+    // serve from `storagePath` via the download-once ImageCache — so memories
+    // synced from the partner arrive with photoData == nil and storagePath set.
+    // Optional (was non-optional) so remote-origin memories decode; old local
+    // entries still carry their bytes until migrated.
+    let photoData: Data?
 
     // Optional metadata — neither blocks saving a memory.
     let rating: Int?
     let note: String?
+
+    // Cloud Storage PATH of the proof photo (couples/{id}/memories/{memId}.jpg),
+    // NOT a download URL — the bytes are fetched through the SDK + rules. nil
+    // until the memory has been uploaded. Set on sync; the keystone of sharing
+    // a memory with the partner.
+    var storagePath: String? = nil
+
+    // uid that saved the memory. Informational; nil for legacy local entries.
+    var createdBy: String? = nil
 }

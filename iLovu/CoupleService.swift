@@ -184,6 +184,28 @@ final class CoupleService {
         return resolved
     }
 
+    // MARK: - Live couple doc
+
+    /// Attaches a snapshot listener on the couple doc and republishes it into
+    /// `couple` on every change. This is what makes cross-phone updates land
+    /// live: the partner's new display name AND a changed couple photo both ride
+    /// on this doc, so both refresh without a relaunch. Returns nil if unpaired;
+    /// the caller (MainTabView) owns the registration and must `.remove()`.
+    func observeCouple() -> ListenerRegistration? {
+        guard let coupleId = couple?.id else { return nil }
+        return db.collection("couples").document(coupleId)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                if let error {
+                    self.log("couple listener error: \(error.localizedDescription)")
+                    return
+                }
+                guard let snapshot, snapshot.exists,
+                      let updated = try? snapshot.data(as: Couple.self) else { return }
+                self.couple = updated
+            }
+    }
+
     // MARK: - Display name
 
     // Where a name set before the couple is loaded (or while a write fails) is

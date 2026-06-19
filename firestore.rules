@@ -157,6 +157,22 @@ service cloud.firestore {
       allow delete:         if false;
     }
 
+    // ---------- couples/{coupleId}/memories/{memoryId} ----------
+    // The shared Memory Vault metadata: the proof-photo's Storage path plus
+    // title/emoji/date/rating/note. Doc id == the memory's UUID. The photo BYTES
+    // live in Cloud Storage (see storage.rules), never here. Either member may
+    // create/update (the couple shares one vault). Scoped to the two members.
+    //
+    // PRE-LAUNCH HARDENING: same trust posture as missions/matches — a member
+    // could write arbitrary fields. Field-shape validation (and a server-
+    // authored write path, if ever needed) is deferred, consistent with the
+    // notes above and with storage.rules' couple-membership note.
+    match /couples/{coupleId}/memories/{memoryId} {
+      allow read:           if isCoupleMember(coupleId);
+      allow create, update: if isCoupleMember(coupleId);
+      allow delete:         if false;
+    }
+
     // ---------- venues/{placeId} ----------
     // Cached Google Places data, keyed by the resolved place.id. Venues aren't
     // private, so reads are open to everyone (even unauthenticated). Writes are
