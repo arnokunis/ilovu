@@ -42,6 +42,8 @@ users/{uid}                             // PLANNED — no users doc is written y
 couples/{coupleId}                       // Couple.swift — created at invite redemption (no "pending" state today)
   members: [uidA, uidB]                  // exactly two uids; frozen on update by firestore.rules
   createdAt
+  displayNames: { uid: name }            // each member writes their own (Couple.swift / setDisplayName)
+  couplePhotoPath, couplePhotoUpdatedAt  // DONE — shared couple photo: Storage PATH (not a URL) + cache-bust ts
   // PLANNED: status, subscriptionOwner (entitlement follows on breakup), entitlement
 
 couples/{coupleId}/swipes/{cardId}       // a right-swipe; this is where likes live (CardSwipe model)
@@ -50,7 +52,9 @@ couples/{coupleId}/matches/{cardId}      // deterministic doc ID = idempotent, n
   cardId, deck, createdAt
 
 couples/{coupleId}/missions/{missionId}  // PLANNED — missions persist to UserDefaults today (MissionStore)
-couples/{coupleId}/memories/{memoryId}   // PLANNED — memories persist to UserDefaults today (MemoryStore)
+couples/{coupleId}/memories/{memoryId}   // DONE — synced via MemoryService; MemoryStore mirrors up + listens
+  dateCompleted, cardTitle, cardEmoji, storagePath, rating, note, createdBy, schemaVersion, createdAt
+  // photo BYTES live in Cloud Storage (couples/{coupleId}/memories/{memoryId}.jpg), NEVER in the doc
 
 invites/{token}                          // Invite.swift — doc ID IS the token (unguessable, single-use)
   creatorId, status ("pending"|"consumed"), consumedBy (null until redeemed), createdAt
@@ -59,6 +63,13 @@ invites/{token}                          // Invite.swift — doc ID IS the token
 venues/{placeId}                         // world-readable cache
 venueQueries/{queryKey}                  // read-through cache, stale-while-revalidate (>7 days)
 ```
+
+**Cloud Storage (EU bucket) — couple photos.** Image BYTES live here, not in Firestore; docs store the Storage PATH only (never a download URL / embedded secret — the Places-key lesson). `StorageService` uploads/downloads by path; `ImageCache` (FileManager) caches download-once so egress scales with content, not usage. Compression is centralized in `ImageDownscaler` (1024px / JPEG 0.7).
+```
+couples/{coupleId}/profile.jpg               // shared couple photo (overwritten on change)
+couples/{coupleId}/memories/{memoryId}.jpg   // proof photos (Memory Vault)
+```
+`storage.rules` is couple-scoped but INTERIM: Storage rules can't read Firestore, so they enforce signed-in + image + size only, NOT membership. See the `// PRE-LAUNCH HARDENING` note below.
 
 ### Real matching — client-side intersection, no Cloud Functions
 Lives in `MatchService`: `recordLike(coupleId:cardId:deck:)` + `observeMatches(coupleId:onMatch:)`. On a right-swipe each partner `arrayUnion`s their own uid into `couples/{coupleId}/swipes/{cardId}.likedBy`; a strongly-consistent read-after-write detects when both UIDs are present and creates the match doc. The match doc uses the card ID as its doc ID, so a both-liked-at-once race collapses to one idempotent doc. The partner who didn't complete the match is notified via an app-level `matches` snapshot listener (dedupe against a *persisted* set of celebrated cardIds, or every past match replays on launch). **Unpaired → falls back to `Bool.random()` solo celebration** (`SwipeView.swift:214`). Both phones must complete pairing before real matching works.
@@ -85,7 +96,7 @@ Naive per-user live Places fetching is catastrophic (~$16k/mo at 300 users). **C
 - **Claude Code** (this tool): multi-file coordinated edits, builds, repo-wide changes.
 - **Claude chat** (the project): architecture, strategy, planning.
 - Real-device testing requires cable install (deep link won't bootstrap an install). Two-phone tests need two **different Apple IDs**.
-- Security is day-one, not retrofitted: Firestore rules, single-use invite tokens, photo/Vault access control all built in (token *expiry* is a planned addition, not yet implemented). Pre-launch: move cache writes + invite redemption to Cloud Functions (currently client-authed); move `Memory.photoData` from UserDefaults to FileManager.
+- Security is day-one, not retrofitted: Firestore rules, single-use invite tokens, photo/Vault access control all built in (token *expiry* is a planned addition, not yet implemented). Proof photos now live in Cloud Storage (not UserDefaults). Pre-launch hardening (all client-authed today, tracked together in `// PRE-LAUNCH HARDENING` comments): move cache writes + invite redemption to Cloud Functions; bind couple membership to the auth token via a custom `coupleId` claim set by a Cloud Function at pairing, so `storage.rules` (and the Firestore subcollection writes) can enforce real membership instead of just signed-in; enable App Check.
 
 ---
 
@@ -97,7 +108,7 @@ $6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split 
 
 ## Current phase
 
-**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓ (per last verification). Remaining: RevenueCat paywall (soft wall — let users finish celebrating, wall at next mission), Cloud Functions for atomic redeem + cache writes, FileManager photo storage, NearYou→venue cache wiring.
+**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall trigger ✓** (`PaywallGate` — the soft-wall *WHEN* logic: arms at 2nd match + 1st memory, or a 14-day backstop; presents at the next calm mission-start, never mid-celebration). Remaining: RevenueCat purchase/entitlement wiring behind the paywall screen, Cloud Functions for atomic redeem + cache writes + Storage/Firestore couple-membership hardening (+ App Check), NearYou→venue cache wiring.
 
 **Phase 3:** Events (Ticketmaster, then Eventbrite — one at a time. No Facebook Events, no SerpApi).
 **Phase 4:** Polish + launch. Post-launch priority: iOS shared widgets (next-Mission, Memory-photo, days-together) — keep WARM, not guilt-tripping.
