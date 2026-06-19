@@ -377,33 +377,56 @@ final class CoupleService {
 
     // MARK: - Token
 
-    /// 16 cryptographically-random bytes → Crockford base32 (~26 chars, 128 bits
-    /// of entropy). Unguessable by design — that's the entire security premise of
-    /// the invite rules, since any signed-in user may read an invite by its id.
+    // Crockford base32: digits + letters minus i, l, o, u (avoids look-alike
+    // ambiguity). 32 divides 256, so `byte % 32` is perfectly unbiased.
+    nonisolated static let tokenAlphabet = Array("0123456789abcdefghjkmnpqrstvwxyz")
+
+    /// Invite-code length in characters. 10 chars over a 32-symbol alphabet =
+    /// 50 bits of entropy. That's deliberately far shorter than the old 26-char
+    /// (128-bit) token — friendlier to read/type at the pairing moment — while
+    /// staying comfortably unguessable: the only valid targets are *currently
+    /// pending* invites, and 32^10 ≈ 1.1e15 means even a pool-wide online guess
+    /// against thousands of live invites needs astronomically many authed reads.
+    /// Easy to bump if we ever want more margin.
+    private static let tokenLength = 10
+
+    /// `tokenLength` cryptographically-random Crockford-base32 chars. Unguessable
+    /// by design — that's the entire security premise of the invite rules, since
+    /// any signed-in user may read an invite by its id.
     private static func makeToken() -> String {
-        var bytes = [UInt8](repeating: 0, count: 16)
+        var bytes = [UInt8](repeating: 0, count: tokenLength)
         let result = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
         guard result == errSecSuccess else {
-            // SecRandomCopyBytes essentially never fails; UUID is a safe fallback.
-            return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+            // SecRandomCopyBytes essentially never fails; a fallback keeps us safe.
+            return String((0..<tokenLength).map { _ in tokenAlphabet.randomElement()! })
         }
+        // 256 % 32 == 0, so the modulo is bias-free over the 32-char alphabet.
+        return String(bytes.map { tokenAlphabet[Int($0) % tokenAlphabet.count] })
+    }
 
-        // Crockford base32: digits + letters minus i, l, o, u (avoids ambiguity).
-        let alphabet = Array("0123456789abcdefghjkmnpqrstvwxyz")
-        var out = ""
-        var buffer = 0
-        var bits = 0
-        for byte in bytes {
-            buffer = (buffer << 8) | Int(byte)
-            bits += 8
-            while bits >= 5 {
-                bits -= 5
-                out.append(alphabet[(buffer >> bits) & 0x1f])
-            }
-        }
-        if bits > 0 {
-            out.append(alphabet[(buffer << (5 - bits)) & 0x1f])
-        }
-        return out
+    // MARK: - Invite-code display / input
+
+    /// Formats a token for legible DISPLAY: uppercased and grouped in 5s with a
+    /// hyphen (e.g. "K2MN8-P4QRS"). Display only — the stored token / clipboard
+    /// copy stays the raw lowercase form, and input is normalized back via
+    /// normalizeInviteCode, so the hyphen/case never reach Firestore.
+    nonisolated static func formatInviteCode(_ token: String) -> String {
+        let clean = token.uppercased()
+        let chars = Array(clean)
+        return stride(from: 0, to: chars.count, by: 5)
+            .map { String(chars[$0..<min($0 + 5, chars.count)]) }
+            .joined(separator: "-")
+    }
+
+    /// Normalizes a hand-typed or pasted code back to a raw token: lowercases,
+    /// strips formatting (spaces/hyphens), and maps Crockford look-alikes
+    /// (o→0, i/l→1) so a slightly mistyped code still resolves. The token
+    /// alphabet excludes i/l/o/u, so these maps only ever fix typos.
+    nonisolated static func normalizeInviteCode(_ raw: String) -> String {
+        let mapped = raw.lowercased()
+            .replacingOccurrences(of: "o", with: "0")
+            .replacingOccurrences(of: "i", with: "1")
+            .replacingOccurrences(of: "l", with: "1")
+        return String(mapped.filter { $0.isLetter || $0.isNumber })
     }
 }

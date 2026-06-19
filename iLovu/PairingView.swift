@@ -6,6 +6,7 @@
 // CoupleService; this view only drives state + presentation.
 
 import SwiftUI
+import UIKit
 import FirebaseCore
 
 struct PairingView: View {
@@ -32,6 +33,7 @@ struct PairingView: View {
     @State private var redeemCode: String = ""
     @State private var isWorking = false         // disables buttons mid-request
     @State private var errorMessage: String?
+    @State private var didCopy = false           // brief "Copied ✓" feedback on the copy button
 
     var body: some View {
         NavigationStack {
@@ -112,15 +114,39 @@ struct PairingView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if let inviteToken {
-                // Show the minted code + a share sheet for it.
-                Text(inviteToken)
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color.deepRose)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.blushCream)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                // Minted code: shown grouped + uppercased for legibility, with a
+                // one-tap copy. The code itself stays the raw lowercase token —
+                // copy puts THAT on the clipboard so paste/redeem is clean.
+                HStack(spacing: 10) {
+                    Text(CoupleService.formatInviteCode(inviteToken))
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.deepRose)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        copyCode(inviteToken)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                            Text(didCopy ? "Copied" : "Copy")
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.louvCoral)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(Color.white)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .background(Color.blushCream)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 ShareLink(
                     item: CoupleService.inviteURL(token: inviteToken),
@@ -154,19 +180,40 @@ struct PairingView: View {
                 .foregroundStyle(.gray)
                 .fixedSize(horizontal: false, vertical: true)
 
-            TextField("Invite code", text: $redeemCode)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(size: 16, design: .monospaced))
-                // Explicit dark text — the background is always the light
-                // blushCream, so the default label color goes invisible (white)
-                // in dark mode. Matches the minted-code Text above.
-                .foregroundStyle(Color.deepRose)
-                .tint(Color.louvCoral)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 14)
-                .background(Color.blushCream)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            HStack(spacing: 8) {
+                TextField("Invite code", text: $redeemCode)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 16, design: .monospaced))
+                    // Explicit dark text — the background is always the light
+                    // blushCream, so the default label color goes invisible
+                    // (white) in dark mode. Matches the minted-code Text above.
+                    .foregroundStyle(Color.deepRose)
+                    .tint(Color.louvCoral)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blushCream)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                // One-tap paste — handles a raw code OR a full ilovu://invite/<token>
+                // link (extracts the token), so whatever the partner sent works.
+                Button {
+                    pasteCode()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "doc.on.clipboard")
+                        Text("Paste")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.louvCoral)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
 
             Button {
                 Task { await redeem() }
@@ -243,8 +290,31 @@ struct PairingView: View {
         isWorking = false
     }
 
+    // Copies the RAW token (not the formatted display) so a paste elsewhere is
+    // clean, with a brief "Copied ✓" confirmation on the button.
+    private func copyCode(_ token: String) {
+        UIPasteboard.general.string = token
+        withAnimation { didCopy = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { didCopy = false }
+        }
+    }
+
+    // Pulls a code from the clipboard. Accepts either a bare code or a full
+    // ilovu://invite/<token> link (the share-sheet form), extracting the token.
+    private func pasteCode() {
+        guard let clip = UIPasteboard.general.string?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !clip.isEmpty else { return }
+        if let url = URL(string: clip), let token = CoupleService.inviteToken(from: url) {
+            redeemCode = token
+        } else {
+            redeemCode = clip
+        }
+    }
+
     private func redeem() async {
-        let code = redeemCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Normalize formatting/case/look-alikes so a typed or pasted code resolves.
+        let code = CoupleService.normalizeInviteCode(redeemCode)
         guard !code.isEmpty else { return }
         isWorking = true
         errorMessage = nil
