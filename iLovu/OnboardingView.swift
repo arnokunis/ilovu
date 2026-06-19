@@ -101,12 +101,12 @@ private struct WelcomeScreen: View {
             Spacer()
 
             VStack(spacing: 12) {
-                Text("Reignite Your Spark")
+                Text("For couples who actually go")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Color.deepRose)
                     .multilineTextAlignment(.center)
 
-                Text("Daily date missions, designed for two. Swipe together, do things together.")
+                Text("Swipe date ideas together. When you both pick one, it becomes a plan — and a memory you actually made.")
                     .font(.system(size: 16))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
