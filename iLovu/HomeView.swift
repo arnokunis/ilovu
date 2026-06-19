@@ -198,6 +198,13 @@ struct HomeView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.gray)
                 }
+
+                // The payoff for setting an anniversary — only shown once it's set.
+                if let days = coupleService.daysTogether {
+                    Text("\(days.formatted()) days together 💕")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.louvCoral)
+                }
             }
 
             Spacer(minLength: 0)
@@ -484,21 +491,31 @@ struct HomeView: View {
     private var quickStatsRow: some View {
         HStack(spacing: 12) {
             statCard(number: missionsCompletedCount, label: "Missions")
-            statCard(number: dayStreak,              label: "Day Streak")
+            // Real "Days Together" once an anniversary is set; falls back to the
+            // placeholder Day Streak until then.
+            if let days = coupleService.daysTogether {
+                statCard(number: days, label: "Days Together")
+            } else {
+                statCard(number: dayStreak, label: "Day Streak")
+            }
             statCard(number: memoriesSavedCount,     label: "Memories")
         }
     }
 
     private func statCard(number: Int, label: String) -> some View {
         VStack(spacing: 4) {
-            Text("\(number)")
+            Text(number.formatted())
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Color.deepRose)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.gray)
                 .textCase(.uppercase)
                 .tracking(0.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)

@@ -34,6 +34,21 @@ struct Couple: Codable, Identifiable {
     /// cached copy and re-downloads. nil until a photo is set.
     var couplePhotoUpdatedAt: Timestamp? = nil
 
+    /// COUPLE-LEVEL "together since" date — one shared truth, set by either
+    /// partner, powering the days-together counter. Distinct from `createdAt`
+    /// (the *pairing* date). nil until set; optional/defaulted so older docs
+    /// decode cleanly. (All special-dates fields are optional + editable later —
+    /// never enter-once-or-lose.)
+    var anniversaryDate: Timestamp? = nil
+
+    /// uid -> birthday. PER-PARTNER, same shape as `displayNames`: each member
+    /// writes their OWN entry; the partner reads it off the shared doc.
+    var birthdays: [String: Timestamp]? = nil
+
+    /// COUPLE-LEVEL relationship stage ("Dating" | "Engaged" | "Married"), set by
+    /// either partner. nil until set.
+    var relationshipStatus: String? = nil
+
     /// The *other* member's uid, from the current user's point of view.
     /// nil if this somehow isn't a two-person couple.
     func partner(of uid: String) -> String? {
@@ -45,5 +60,28 @@ struct Couple: Codable, Identifiable {
         guard let partner = partner(of: uid) else { return nil }
         let name = displayNames?[partner]?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (name?.isEmpty == false) ? name : nil
+    }
+
+    /// The signed-in member's own birthday, if set.
+    func birthday(of uid: String) -> Date? {
+        birthdays?[uid]?.dateValue()
+    }
+
+    /// The partner's birthday, if they've set one.
+    func partnerBirthday(currentUid uid: String) -> Date? {
+        guard let partner = partner(of: uid) else { return nil }
+        return birthdays?[partner]?.dateValue()
+    }
+
+    /// Days together, counting the anniversary itself as DAY 1 (so it never reads
+    /// "0 days" — warmer for a love app). nil until an anniversary is set; clamps
+    /// to at least 1 if the date is today or somehow in the future.
+    func daysTogether(asOf now: Date = Date()) -> Int? {
+        guard let start = anniversaryDate?.dateValue() else { return nil }
+        let cal = Calendar.current
+        let elapsed = cal.dateComponents([.day],
+                                         from: cal.startOfDay(for: start),
+                                         to: cal.startOfDay(for: now)).day ?? 0
+        return max(1, elapsed + 1)
     }
 }

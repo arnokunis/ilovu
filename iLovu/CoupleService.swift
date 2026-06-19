@@ -66,6 +66,27 @@ final class CoupleService {
         return String(Int(ts.dateValue().timeIntervalSince1970))
     }
 
+    /// The couple's shared anniversary ("together since"), or nil if unset.
+    var anniversaryDate: Date? { couple?.anniversaryDate?.dateValue() }
+
+    /// Days together (anniversary = day 1), or nil until an anniversary is set.
+    var daysTogether: Int? { couple?.daysTogether() }
+
+    /// The couple's relationship stage, or nil if unset.
+    var relationshipStatus: String? { couple?.relationshipStatus }
+
+    /// The signed-in user's birthday, or nil if unset / unpaired.
+    var myBirthday: Date? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return couple?.birthday(of: uid)
+    }
+
+    /// The partner's birthday, or nil if unset / unpaired.
+    var partnerBirthday: Date? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return couple?.partnerBirthday(currentUid: uid)
+    }
+
     enum InviteError: LocalizedError {
         case notSignedIn
         case inviteNotFound
@@ -335,6 +356,58 @@ final class CoupleService {
         couple?.couplePhotoPath = path
         couple?.couplePhotoUpdatedAt = Timestamp(date: Date())
         log("setCouplePhoto — wrote \(path) for couple \(coupleId)")
+    }
+
+    // MARK: - Couple story (anniversary / birthdays / relationship status)
+    //
+    // Same write shape as setDisplayName / setCouplePhoto: a dot-path update so
+    // only the touched field changes, mirrored locally so the UI refreshes
+    // instantly and observeCouple syncs the partner. These are only ever set
+    // post-pairing (the Couple Story editor), so unlike setDisplayName there's no
+    // pre-pairing parking — the couple is loaded by the time we get here.
+
+    /// Sets the couple's shared anniversary ("together since").
+    func setAnniversaryDate(_ date: Date) async {
+        await updateCoupleField(["anniversaryDate": Timestamp(date: date)]) {
+            $0.anniversaryDate = Timestamp(date: date)
+        }
+    }
+
+    /// Sets the signed-in user's own birthday (their entry in the per-uid map).
+    func setBirthday(_ date: Date) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        await updateCoupleField(["birthdays.\(uid)": Timestamp(date: date)]) {
+            var map = $0.birthdays ?? [:]
+            map[uid] = Timestamp(date: date)
+            $0.birthdays = map
+        }
+    }
+
+    /// Sets the couple's shared relationship stage.
+    func setRelationshipStatus(_ status: String) async {
+        await updateCoupleField(["relationshipStatus": status]) {
+            $0.relationshipStatus = status
+        }
+    }
+
+    /// Shared write path for couple-story fields: resolve the couple if the
+    /// in-memory state hasn't caught up, apply a dot-path update, then mirror
+    /// locally. Silent on failure — the value stays editable in the Us tab, so
+    /// there's no enter-once-or-lose (the name-entry bug lesson).
+    private func updateCoupleField(_ data: [String: Any],
+                                   mirror: (inout Couple) -> Void) async {
+        if couple?.id == nil { _ = try? await currentCouple() }
+        guard let coupleId = couple?.id else {
+            log("updateCoupleField — no couple yet, skipping \(data.keys)")
+            return
+        }
+        do {
+            try await db.collection("couples").document(coupleId).updateData(data)
+            if var c = couple { mirror(&c); couple = c }
+            log("updateCoupleField — wrote \(data.keys) for couple \(coupleId)")
+        } catch {
+            log("updateCoupleField — FAILED \(data.keys): \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Debug logging

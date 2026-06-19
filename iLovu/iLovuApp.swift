@@ -52,6 +52,11 @@ struct iLovuApp: App {
     // MainTabView + MissionDetailView.
     @State private var paywallGate = PaywallGate()
 
+    // Decides when to show the optional, dismissible "set up your story" card
+    // after pairing. Per-couple, UserDefaults-backed, no Firebase — safe to
+    // default-construct. Read by the Us tab.
+    @State private var coupleSetupPrompt = CoupleSetupPrompt()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -84,6 +89,7 @@ struct iLovuApp: App {
                 .environment(missionService)
                 .environment(memoryService)
                 .environment(paywallGate)
+                .environment(coupleSetupPrompt)
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
                 // when unpaired (coupleId nil) it's a no-op and missions stay

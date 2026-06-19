@@ -21,9 +21,16 @@ struct UsView: View {
     // the write path (setCouplePhoto) when either partner sets/changes it.
     @Environment(CoupleService.self) private var coupleService
 
+    // Decides whether the optional "set up your story" card is shown.
+    @Environment(CoupleSetupPrompt.self) private var setupPrompt
+
     // The couple-photo picker + its in-flight upload state.
     @State private var couplePhotoItem: PhotosPickerItem?
     @State private var isUploadingCouplePhoto = false
+
+    // Couple-story editor sheet + whether the post-connect setup card is showing.
+    @State private var showCoupleStory = false
+    @State private var showSetupCard = false
 
     // The user's display name (same key as onboarding + the Home greeting).
     @AppStorage("userName") private var userName: String = ""
@@ -57,6 +64,119 @@ struct UsView: View {
         .sheet(isPresented: $showEditProfile) {
             EditProfileView()
         }
+        .sheet(isPresented: $showCoupleStory) {
+            CoupleStoryView()
+        }
+        // Keep the optional setup card's visibility in sync with paired state,
+        // whether an anniversary is set, and the memory count (the re-surface
+        // trigger). All inputs are observed, so these fire as they change.
+        .task { refreshSetupCard() }
+        .onChange(of: coupleService.coupleId) { _, _ in refreshSetupCard() }
+        .onChange(of: coupleService.anniversaryDate) { _, _ in refreshSetupCard() }
+        .onChange(of: memoryStore.memories.count) { _, _ in refreshSetupCard() }
+    }
+
+    // MARK: - Couple setup card / story
+
+    private func refreshSetupCard() {
+        guard let id = coupleService.coupleId else { showSetupCard = false; return }
+        showSetupCard = setupPrompt.shouldShow(
+            coupleId: id,
+            anniversarySet: coupleService.anniversaryDate != nil,
+            memoryCount: memoryStore.memories.count
+        )
+    }
+
+    private func dismissSetupCard() {
+        if let id = coupleService.coupleId {
+            setupPrompt.dismiss(coupleId: id, memoryCount: memoryStore.memories.count)
+        }
+        withAnimation { showSetupCard = false }
+    }
+
+    // The warm, dismissible post-connect invitation. Never a gate — "Maybe later"
+    // simply hides it (with one gentle re-surface later, handled by setupPrompt).
+    private var setupCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("You're connected! 💕")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.deepRose)
+
+            Text("Want to set up your story? Add your anniversary and we'll count your days together.")
+                .font(.system(size: 14))
+                .foregroundStyle(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                Button {
+                    showCoupleStory = true
+                } label: {
+                    Text("Set it up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 22)
+                        .background(LouvGradient.coral)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    dismissSetupCard()
+                } label: {
+                    Text("Maybe later")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.gray)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .louvShadow()
+    }
+
+    // Permanent entry point to edit the couple's story (anniversary, birthdays,
+    // relationship stage). Shown once paired and not already prompting via the card.
+    private var coupleStoryRow: some View {
+        Button {
+            showCoupleStory = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "calendar.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(Color.louvCoral)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your story 💕")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color.deepRose)
+                    Text(coupleStorySubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.gray)
+            }
+            .padding(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var coupleStorySubtitle: String {
+        if let days = coupleService.daysTogether {
+            return "\(days.formatted()) days together"
+        }
+        return "Add your anniversary & birthdays"
     }
 
     // MARK: - Header
@@ -191,6 +311,14 @@ struct UsView: View {
             profileRow
 
             connectButton
+
+            // Optional, dismissible invitation right after connecting; once it's
+            // gone (set or dismissed), the permanent "Your story" row takes over.
+            if showSetupCard {
+                setupCard
+            } else if coupleService.coupleId != nil {
+                coupleStoryRow
+            }
 
             DailyQuestionCard()
 
