@@ -93,6 +93,14 @@ service cloud.firestore {
       // UPDATE: only an existing member may write, and the membership list is
       // frozen — you can update couple state, but you can't add/remove/swap
       // who's in the relationship.
+      //
+      // PRE-LAUNCH HARDENING: this permits a member to write ANY non-members
+      // field, including the subscription flag (isPremium / subscriptionOwner) —
+      // so a member could grant the couple premium without actually paying. Same
+      // trusted-partner posture as matches/missions/memories, accepted for v1.
+      // The clean end-state is a RevenueCat webhook -> Cloud Function (Admin SDK)
+      // as the ONLY writer of the subscription fields, with these rules rejecting
+      // client writes to them. See SubscriptionService for the matching note.
       allow update: if isSignedIn()
                     && uid() in resource.data.members
                     && request.resource.data.members == resource.data.members;

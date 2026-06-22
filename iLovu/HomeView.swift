@@ -54,6 +54,12 @@ struct HomeView: View {
     // MissionDetailView); here we only read its decision.
     @Environment(PaywallGate.self) private var paywallGate
 
+    // RevenueCat: real prices for the wall + the purchase / restore flows.
+    @Environment(SubscriptionService.self) private var subscriptionService
+
+    // Opens the paywall's Terms / Privacy links in Safari (external browser).
+    @Environment(\.openURL) private var openURL
+
     // 0...5. Drives how many of the five flame emojis are lit.
     // Conceptually: one completed Mission = a big spark boost; a quick
     // micro-moment = a small boost. The UI doesn't differentiate them
@@ -155,7 +161,24 @@ struct HomeView: View {
                 missionToOpen = pending
             }
         }) {
-            PaywallView()
+            PaywallView(
+                annualPriceText:    subscriptionService.annualDisplay?.priceText,
+                annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
+                monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
+                onPurchase: { plan in
+                    switch plan {
+                    case .annual:  await subscriptionService.purchaseAnnual()
+                    case .monthly: await subscriptionService.purchaseMonthly()
+                    }
+                },
+                onRestore: { await subscriptionService.restore() },
+                // Live URLs (ilovu.io pages ship separately — fine if they 404 today).
+                onTerms:   { openURL(URL(string: "https://ilovu.io/terms")!) },
+                onPrivacy: { openURL(URL(string: "https://ilovu.io/privacy")!) }
+            )
+            // Load the real offering as the wall appears; PaywallView shows its
+            // static fallback copy until the prices land.
+            .task { await subscriptionService.loadOfferings() }
         }
     }
 
@@ -543,4 +566,6 @@ struct HomeView: View {
         .environment(MissionStore())
         .environment(MemoryStore())
         .environment(CoupleService())
+        .environment(PaywallGate())
+        .environment(SubscriptionService())
 }

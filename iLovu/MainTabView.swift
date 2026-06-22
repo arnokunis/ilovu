@@ -39,6 +39,11 @@ struct MainTabView: View {
     // path behind MemoryStore.remoteUpsert. Injected at the app root.
     @Environment(MemoryService.self) private var memoryService
 
+    // RevenueCat entitlement. MainTabView is where premium is reconciled onto the
+    // couple doc (subscribed-before-pairing) and where the effective premium
+    // (mine OR the shared flag) is pushed into the paywall gate.
+    @Environment(SubscriptionService.self) private var subscriptionService
+
     // Cards is the headline feature so it's the default landing tab.
     @State private var selectedTab: AppTab = .cards
 
@@ -171,6 +176,11 @@ struct MainTabView: View {
         // React the moment coupleId changes — most importantly nil -> paired right
         // after the redeemer redeems an invite, without waiting for a relaunch.
         .onChange(of: coupleId) { _, _ in syncCoupleListeners() }
+        // Keep the gate's "subscribed" decision live: it flips when MY entitlement
+        // changes (purchase/restore/expiry) OR when the partner's purchase lands on
+        // the shared couple doc (couple listener republishes isPremium).
+        .onChange(of: subscriptionService.myEntitlementActive) { _, _ in updatePremiumGate() }
+        .onChange(of: coupleService.couple?.isPremium) { _, _ in updatePremiumGate() }
         // Detach the listeners if this view ever goes away (hygiene — they
         // normally live for the whole signed-in session).
         .onDisappear { detachCoupleListeners() }
@@ -198,6 +208,13 @@ struct MainTabView: View {
         paywallGate.recordMatchCount(celebrated.count, coupleId: id)
         paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: id)
 
+        // Premium reconcile: if this user is already subscribed (including
+        // subscribed-BEFORE-pairing, which the entitlement callback couldn't
+        // mirror because no couple existed yet), stamp the shared flag now that
+        // the couple is present. Then push effective premium into the gate.
+        Task { await coupleService.syncPremiumEntitlement(subscriptionService.myEntitlementActive) }
+        updatePremiumGate()
+
         matchListener = matchService.observeMatches(coupleId: id) { match in
             handleMatch(match)
         }
@@ -216,6 +233,13 @@ struct MainTabView: View {
         // Migrate any local-only memories (pre-Storage, or saved while unpaired)
         // up to Storage now that we have a couple. Idempotent.
         memoryStore.resyncUnsynced()
+    }
+
+    /// Pushes the effective couple-shared premium (my own entitlement OR the
+    /// shared couple-doc flag) into the paywall gate, which stops presenting the
+    /// wall once true. Cheap; called on attach and whenever either input changes.
+    private func updatePremiumGate() {
+        paywallGate.isSubscribed = subscriptionService.premiumActive(couple: coupleService.couple)
     }
 
     private func detachCoupleListeners() {
@@ -339,4 +363,5 @@ enum AppTab: Hashable {
         .environment(MissionService())
         .environment(MemoryService())
         .environment(PaywallGate())
+        .environment(SubscriptionService())
 }

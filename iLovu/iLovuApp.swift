@@ -52,6 +52,11 @@ struct iLovuApp: App {
     // MainTabView + MissionDetailView.
     @State private var paywallGate = PaywallGate()
 
+    // RevenueCat: this user's entitlement + the purchase/restore + offering loads.
+    // Constructing it touches no RevenueCat (start()/loadOfferings run later in
+    // .task, after Purchases.configure), so a plain default is safe at the root.
+    @State private var subscriptionService = SubscriptionService()
+
     // Decides when to show the optional, dismissible "set up your story" card
     // after pairing. Per-couple, UserDefaults-backed, no Firebase — safe to
     // default-construct. Read by the Us tab.
@@ -89,6 +94,7 @@ struct iLovuApp: App {
                 .environment(missionService)
                 .environment(memoryService)
                 .environment(paywallGate)
+                .environment(subscriptionService)
                 .environment(coupleSetupPrompt)
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
@@ -96,6 +102,16 @@ struct iLovuApp: App {
                 // local. Reads coupleId live, so it starts syncing the moment
                 // pairing completes — no relaunch needed.
                 .task {
+                    // RevenueCat: keep this user's entitlement live and mirror it
+                    // onto the SHARED couple doc whenever it flips (the payer-only
+                    // write that unlocks BOTH partners). Wired once at the root, so
+                    // it works regardless of which screen is showing.
+                    subscriptionService.onEntitlementChange = { [coupleService] active in
+                        Task { await coupleService.syncPremiumEntitlement(active) }
+                    }
+                    subscriptionService.start()
+                    Task { await subscriptionService.loadOfferings() }
+
                     missionStore.remoteUpsert = { [coupleService, missionService] mission in
                         guard let coupleId = coupleService.coupleId else { return }
                         Task { await missionService.saveMission(coupleId: coupleId, mission: mission) }

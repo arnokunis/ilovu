@@ -397,6 +397,55 @@ final class CoupleService {
         }
     }
 
+    // MARK: - Premium (couple-shared subscription)
+    //
+    // "One subscription unlocks BOTH partners." SubscriptionService owns the
+    // RevenueCat truth (this user's entitlement); this is the mirror onto the
+    // SHARED couple doc so the partner reads premium without buying their own.
+    // Only the PAYER writes here — see the client-mirror / revocation note in
+    // SubscriptionService for the v1 trade-off and the webhook end-state.
+
+    /// Reflects this user's RevenueCat entitlement onto the shared couple doc.
+    /// `active == true`  → the payer stamps isPremium + subscriptionOwner = self.
+    /// `active == false` → ONLY the recorded payer takes the flag back down (the
+    ///                     partner isn't the owner, so they never clear it).
+    /// Resolves the couple first; a no-op when unpaired (subscribed-before-pairing
+    /// is reconciled later, at the couple-load seam in MainTabView).
+    func syncPremiumEntitlement(_ active: Bool) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        if couple?.id == nil { _ = try? await currentCouple() }
+        guard couple?.id != nil else {
+            log("syncPremiumEntitlement — no couple yet, deferring (active=\(active))")
+            return
+        }
+
+        if active {
+            // Already reflecting me as the premium owner → nothing to write.
+            guard !(couple?.isPremium == true && couple?.subscriptionOwner == uid) else { return }
+            await updateCoupleField([
+                "isPremium": true,
+                "subscriptionOwner": uid,
+                "subscriptionUpdatedAt": FieldValue.serverTimestamp()
+            ]) {
+                $0.isPremium = true
+                $0.subscriptionOwner = uid
+                $0.subscriptionUpdatedAt = Timestamp(date: Date())
+            }
+        } else {
+            // Client-mirror v1: only the recorded payer revokes, and only when
+            // their own entitlement lapsed. A payer who never reopens leaves it
+            // set (generous-fail) — the known gap the webhook closes later.
+            guard couple?.isPremium == true, couple?.subscriptionOwner == uid else { return }
+            await updateCoupleField([
+                "isPremium": false,
+                "subscriptionUpdatedAt": FieldValue.serverTimestamp()
+            ]) {
+                $0.isPremium = false
+                $0.subscriptionUpdatedAt = Timestamp(date: Date())
+            }
+        }
+    }
+
     /// Shared write path for couple-story fields: resolve the couple if the
     /// in-memory state hasn't caught up, apply a dot-path update, then mirror
     /// locally. Silent on failure — the value stays editable in the Us tab, so

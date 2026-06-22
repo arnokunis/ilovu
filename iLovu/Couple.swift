@@ -64,6 +64,21 @@ struct Couple: Codable, Identifiable {
     /// either partner. nil until set.
     var relationshipStatus: String? = nil
 
+    /// COUPLE-LEVEL subscription flag — "one subscription unlocks BOTH partners".
+    /// Written ONLY by the payer (the partner whose RevenueCat entitlement is
+    /// active) via CoupleService.syncPremiumEntitlement; both partners then read
+    /// premium access off this. Optional/defaulted so older docs decode cleanly.
+    /// See SubscriptionService for the full sharing + revocation model.
+    var isPremium: Bool? = nil
+
+    /// The uid of the PAYER whose entitlement set `isPremium`. Locked design intent
+    /// (CLAUDE.md): on breakup the subscription follows this user. Also lets the
+    /// client-mirror revoke path ensure only the payer ever clears the flag.
+    var subscriptionOwner: String? = nil
+
+    /// When the subscription flag last changed. Audit/cache-bust only.
+    var subscriptionUpdatedAt: Timestamp? = nil
+
     /// The *other* member's uid, from the current user's point of view.
     /// nil if this somehow isn't a two-person couple.
     func partner(of uid: String) -> String? {

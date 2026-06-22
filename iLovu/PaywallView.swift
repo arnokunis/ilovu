@@ -4,9 +4,12 @@
 // warm and unhurried — never guilt-trippy, never urgent. It's dismissible, and
 // the annual plan is pre-selected because one plan covers both partners.
 //
-// This is the SCREEN ONLY. Plan prices are stubbed here (PlanInfo) — they'll be
-// fed from RevenueCat offerings later — and the CTA just fires onPurchaseTapped;
-// no purchase, restore, or trigger logic lives here yet.
+// This is the SCREEN ONLY. Real localized prices are FED IN from RevenueCat via
+// the optional price-text inputs (HomeView supplies them from SubscriptionService);
+// when absent the static copy is the graceful fallback so the wall never looks
+// broken. The CTA / Restore call async closures that return a PurchaseOutcome, and
+// this view owns just the in-flight + error UI around them — the RevenueCat calls
+// and the couple-doc mirror live in SubscriptionService / CoupleService.
 //
 // Everything visual is pulled from DesignSystem.swift (blushCream, deepRose,
 // louvCoral, LouvGradient.coral, LouvAnimation.spring, .louvShadow) plus the
@@ -24,13 +27,20 @@ struct PaywallView: View {
     /// Stubbed for now — real eligibility comes from the backend later.
     var isFoundingEligible: Bool = false
 
-    /// Fired when the user taps the primary CTA. No purchase happens here yet —
-    /// the trigger/RevenueCat wiring is a separate step.
-    var onPurchaseTapped: () -> Void = {}
+    // Real localized prices from RevenueCat packages, fed by the caller. nil →
+    // the static fallback copy in annualInfo/monthlyInfo is used, so the screen
+    // renders fully (and previews) without RevenueCat.
+    var annualPriceText:    String? = nil   // e.g. "$49.99/yr"
+    var annualPerMonthText: String? = nil   // e.g. "just $4.17/mo"
+    var monthlyPriceText:   String? = nil   // e.g. "$6.99/mo"
 
-    // The quiet footer actions. Default to no-ops so the screen previews and
-    // drops in anywhere without forcing callers to wire them up immediately.
-    var onRestore: () -> Void = {}
+    /// Purchases the plan the user has selected. Returns the outcome so this view
+    /// can dismiss on success, ignore a cancel, or surface a friendly error.
+    var onPurchase: (Plan) async -> PurchaseOutcome = { _ in .cancelled }
+
+    // The quiet footer actions. Restore is async (returns an outcome); terms /
+    // privacy stay simple no-op-able callbacks. Defaults keep previews drop-in.
+    var onRestore: () async -> PurchaseOutcome = { .cancelled }
     var onTerms:   () -> Void = {}
     var onPrivacy: () -> Void = {}
 
@@ -42,6 +52,13 @@ struct PaywallView: View {
     @State private var selectedPlan: Plan = .annual
     @State private var showOtherOptions = false   // monthly hides behind a disclosure
     @State private var appeared = false           // drives the one-shot entrance
+
+    // Purchase / restore in-flight + the last friendly error, if any. Owned here
+    // so the CTA can show a spinner and the wall can surface a gentle message
+    // without ever crashing on a failed/cancelled purchase.
+    @State private var isPurchasing = false
+    @State private var isRestoring = false
+    @State private var purchaseError: String?
 
     // Dismiss works when presented as a sheet / fullScreenCover (the intended
     // use). The close button is the soft "wall" escape hatch.
@@ -89,13 +106,14 @@ struct PaywallView: View {
                 terms: "$39.99/year, auto-renews. Cancel anytime. One plan covers both partners."
             )
         } else {
+            // Real RevenueCat price when fed; static copy as the offline fallback.
             PlanInfo(
                 plan: .annual,
                 title: "Annual",
-                price: "$49.99/yr",
-                perMonth: "just $4.17/mo",
+                price: annualPriceText ?? "$49.99/yr",
+                perMonth: annualPerMonthText ?? "just $4.17/mo",
                 badge: "Best value — save 40%",
-                terms: "$49.99/year, auto-renews. Cancel anytime. One plan covers both partners."
+                terms: "Auto-renews yearly. Cancel anytime. One plan covers both partners."
             )
         }
     }
@@ -104,10 +122,10 @@ struct PaywallView: View {
         PlanInfo(
             plan: .monthly,
             title: "Monthly",
-            price: "$6.99/mo",
+            price: monthlyPriceText ?? "$6.99/mo",
             perMonth: nil,
             badge: nil,
-            terms: "$6.99/month, auto-renews. Cancel anytime. One plan covers both partners."
+            terms: "Auto-renews monthly. Cancel anytime. One plan covers both partners."
         )
     }
 
@@ -352,16 +370,25 @@ struct PaywallView: View {
 
     private var callToAction: some View {
         VStack(spacing: 12) {
-            Button(action: onPurchaseTapped) {
-                Text("Start together")
-                    .font(.system(size: ctaSize, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .background(LouvGradient.coral)
-                    .clipShape(Capsule())
+            Button {
+                Task { await runPurchase() }
+            } label: {
+                Group {
+                    if isPurchasing {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Start together")
+                            .font(.system(size: ctaSize, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background(LouvGradient.coral)
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .disabled(isPurchasing || isRestoring)
             .louvShadow()
             .accessibilityLabel("Start together")
 
@@ -372,14 +399,60 @@ struct PaywallView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // Gentle, non-crashing failure surface (cancellations show nothing).
+            if let purchaseError {
+                Text(purchaseError)
+                    .font(.system(size: fineSize, weight: .medium))
+                    .foregroundStyle(Color.deepRose)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+
             footer
                 .padding(.top, 4)
         }
     }
 
+    // MARK: - Purchase / restore actions
+
+    @MainActor
+    private func runPurchase() async {
+        guard !isPurchasing, !isRestoring else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { purchaseError = nil }
+        isPurchasing = true
+        let outcome = await onPurchase(selectedPlan)
+        isPurchasing = false
+        handle(outcome)
+    }
+
+    @MainActor
+    private func runRestore() async {
+        guard !isPurchasing, !isRestoring else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { purchaseError = nil }
+        isRestoring = true
+        let outcome = await onRestore()
+        isRestoring = false
+        handle(outcome)
+    }
+
+    @MainActor
+    private func handle(_ outcome: PurchaseOutcome) {
+        switch outcome {
+        case .success:
+            dismiss()                       // premium active — the gate stops presenting
+        case .cancelled:
+            break                           // user backed out — say nothing
+        case .failed(let message):
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                purchaseError = message
+            }
+        }
+    }
+
     private var footer: some View {
         HStack(spacing: 10) {
-            footerButton("Restore purchase", action: onRestore)
+            footerButton("Restore purchase") { Task { await runRestore() } }
             footerDot
             footerButton("Terms", action: onTerms)
             footerDot
@@ -404,9 +477,9 @@ struct PaywallView: View {
 // Stubbed plans, so the screen renders fully in the canvas with no RevenueCat.
 
 #Preview("Paywall — standard") {
-    PaywallView(onPurchaseTapped: { print("purchase tapped") })
+    PaywallView(onPurchase: { _ in .cancelled })
 }
 
 #Preview("Paywall — founding") {
-    PaywallView(isFoundingEligible: true, onPurchaseTapped: { print("purchase tapped") })
+    PaywallView(isFoundingEligible: true, onPurchase: { _ in .cancelled })
 }
