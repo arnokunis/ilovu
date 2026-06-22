@@ -38,13 +38,16 @@ struct CachedVenue: Codable, Identifiable {
     var userRatingCount: Int?
     var priceLevel: String?
 
-    /// Raw Google photo "resource names" (Place.Photo.name) — kept so we can
-    /// rebuild URLs later (e.g. at a different size) without another API call.
+    /// Raw Google photo "resource names" (Place.Photo.name), e.g.
+    /// "places/{id}/photos/{id}" — the ONLY photo data persisted. Fetchable URLs
+    /// are rebuilt on demand via `photoURLStrings(using:)`, so the API key is
+    /// NEVER baked into a stored doc (it lives only in Secrets, injected at
+    /// display time — survives key rotation with no cache invalidation).
+    ///
+    /// (Older cached docs may still carry a now-ignored `photoURLs` field with an
+    /// embedded key; it's never read and is dropped the next time the doc is
+    /// rewritten on revalidation. Decode ignores it, so no schema bump is needed.)
     var photoNames: [String]
-    /// Pre-built fetchable photo URLs (via PlacesService.photoURL). Decision:
-    /// cache the URL *strings* only for v1 — image bytes are NOT mirrored to
-    /// Storage. AsyncImage still fetches the bytes from Google per render.
-    var photoURLs: [String]
 
     /// Human-readable weekday hours lines (Place.OpeningHours.weekdayDescriptions).
     /// NOTE: Place.OpeningHours.openNow is intentionally NOT cached — it's
@@ -82,13 +85,12 @@ struct CachedVenue: Codable, Identifiable {
 
 extension CachedVenue {
 
-    /// Builds a cache doc from a freshly-fetched Place. `service` is needed only
-    /// to turn photo resource names into URL strings (photoURL embeds the API
-    /// key). `id` is left nil and `fetchedAt` is left nil on purpose — the doc
-    /// ref supplies identity and the server stamps the time on write.
-    static func from(_ place: Place, using service: PlacesService) -> CachedVenue {
+    /// Builds a cache doc from a freshly-fetched Place. `id` is left nil and
+    /// `fetchedAt` is left nil on purpose — the doc ref supplies identity and the
+    /// server stamps the time on write. Only key-free photo resource names are
+    /// stored; fetchable URLs are rebuilt at display time (see photoURLStrings).
+    static func from(_ place: Place) -> CachedVenue {
         let names = place.photos?.map(\.name) ?? []
-        let urls  = names.compactMap { service.photoURL(name: $0)?.absoluteString }
 
         let reviews = (place.reviews ?? []).map { review in
             CachedReview(
@@ -107,7 +109,6 @@ extension CachedVenue {
             userRatingCount: place.userRatingCount,
             priceLevel: place.priceLevel,
             photoNames: names,
-            photoURLs: urls,
             openingHoursWeekday: place.regularOpeningHours?.weekdayDescriptions,
             reviews: reviews,
             websiteUri: place.websiteUri,
@@ -115,6 +116,14 @@ extension CachedVenue {
             fetchedAt: nil,
             schemaVersion: CachedVenue.currentSchemaVersion
         )
+    }
+
+    /// Rebuilds fetchable photo URL strings from the stored key-free `photoNames`,
+    /// injecting the CURRENT API key via the service. Built fresh per display so a
+    /// rotated key takes effect immediately with no cache invalidation. Returns at
+    /// most `limit` URLs; empty when there are no photos or no API key.
+    func photoURLStrings(using service: PlacesService, limit: Int = 4) -> [String] {
+        photoNames.prefix(limit).compactMap { service.photoURL(name: $0)?.absoluteString }
     }
 }
 

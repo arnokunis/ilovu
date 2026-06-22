@@ -105,7 +105,7 @@ struct VenueCache {
                 return nil
             }
 
-            var venue = CachedVenue.from(top, using: places)   // id nil, fetchedAt nil
+            var venue = CachedVenue.from(top)   // id nil, fetchedAt nil
             try writeVenue(venue, placeId: top.id)             // venues/{placeId}
             try writeQuery(key: key, placeId: top.id, rawQuery: query)  // venueQueries/{key}
             log("WROTE cache \(top.id) for \"\(query)\"")

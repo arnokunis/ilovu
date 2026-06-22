@@ -368,6 +368,7 @@ struct EventDetailView: View {
     // LocalEvent, or silently keeps the sample data on any miss/failure.
 
     private func loadPlaceData() async {
+        let places = PlacesService()
         let cache = VenueCache()
 
         let query = "\(event.title) \(event.venue)"
@@ -378,7 +379,9 @@ struct EventDetailView: View {
         // Same silent-fallback contract as before — sample data stays.
         guard let cached = await cache.venue(forQuery: query, locationBias: bias) else { return }
 
-        let enriched = LocalEvent.enriching(event, with: cached)
+        // Pass the service so enrichment can rebuild photo URLs from the cached
+        // key-free photoNames with the CURRENT API key (no key in stored docs).
+        let enriched = LocalEvent.enriching(event, with: cached, using: places)
         await MainActor.run {
             withAnimation(.easeInOut(duration: 0.3)) {
                 self.enrichedEvent = enriched
@@ -415,12 +418,13 @@ private enum CalendarFeedback {
 extension LocalEvent {
     static func enriching(
         _ original: LocalEvent,
-        with cached: CachedVenue
+        with cached: CachedVenue,
+        using service: PlacesService
     ) -> LocalEvent {
 
-        // Up to 4 photo URLs — already built (with the API key) and
-        // stored as strings when the venue was cached.
-        let photoURLs: [String] = Array(cached.photoURLs.prefix(4))
+        // Up to 4 photo URLs, rebuilt fresh from the cached key-free photoNames
+        // with the current API key — so a rotated key works without re-caching.
+        let photoURLs: [String] = cached.photoURLStrings(using: service)
 
         // Top 3 reviews mapped into our snippet shape. compactMap
         // drops any review missing the fields we need to render.
