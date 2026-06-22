@@ -42,11 +42,7 @@ struct PlanDisplay {
 @Observable
 final class SubscriptionService {
 
-    /// The RevenueCat entitlement identifier that unlocks premium.
-    static let entitlementID = "premium"
-    /// The offering we read packages from. `current` is preferred; this is the
-    /// explicit fallback id when no current offering is configured.
-    static let offeringID = "default"
+    // Dashboard identifiers (entitlement / offering) live in RevenueCatConfig.
 
     // MARK: - Entitlement (this user only)
 
@@ -90,7 +86,7 @@ final class SubscriptionService {
     }
 
     private func apply(_ info: CustomerInfo) {
-        let active = info.entitlements[Self.entitlementID]?.isActive == true
+        let active = info.entitlements[RevenueCatConfig.entitlementID]?.isActive == true
         guard active != myEntitlementActive else { return }
         myEntitlementActive = active
         onEntitlementChange?(active)
@@ -108,7 +104,7 @@ final class SubscriptionService {
         defer { isLoadingOfferings = false }
         do {
             let offerings = try await Purchases.shared.offerings()
-            let offering = offerings.current ?? offerings.all[Self.offeringID]
+            let offering = offerings.current ?? offerings.all[RevenueCatConfig.offeringID]
             guard let offering else { return }
             // Prefer the convenience accessors ($rc_annual / $rc_monthly); fall
             // back to scanning by package type in case the rc_ aliases aren't set.
