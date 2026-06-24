@@ -244,18 +244,16 @@ struct EventCache {
         "\(bucket)@\(isoWeek(now))"
     }
 
-    /// The ~1km location bucket for a coordinate — IDENTICAL format to
-    /// VenueCache's bucket so the two caches grid the world the same way.
+    /// The ~1km location bucket for a coordinate. Delegates to the shared
+    /// LocationBucket so events + places + the couple doc all grid identically.
     static func locationBucket(latitude: Double, longitude: Double) -> String {
-        String(format: "%.2f,%.2f", latitude, longitude)
+        LocationBucket.of(latitude: latitude, longitude: longitude)
     }
 
     /// Parse a "%.2f,%.2f" bucket back to its centre for the Ticketmaster search.
     /// The search radius (25km) comfortably absorbs the 2-decimal rounding.
     static func center(fromBucket bucket: String) -> (lat: Double, lng: Double)? {
-        let parts = bucket.split(separator: ",")
-        guard parts.count == 2, let lat = Double(parts[0]), let lng = Double(parts[1]) else { return nil }
-        return (lat, lng)
+        LocationBucket.center(of: bucket)
     }
 
     private static func isoWeek(_ date: Date) -> String {

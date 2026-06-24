@@ -24,6 +24,12 @@ import FirebaseFirestore
 enum Deck: String, Codable {
     case dates
     case events
+    // Near You can be fed by either source; the deck a swipe belongs to decides
+    // how the partner's app rebuilds the matched card (events -> EventCache by
+    // eventId; places -> VenueCache by placeId). A venue and an event resolve
+    // through different caches, so they need distinct deck values — reusing
+    // `events` for a placeId would make the partner's reconstruction miss.
+    case places
 }
 
 // MARK: - couples/{coupleId}/swipes/{cardId}

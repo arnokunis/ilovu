@@ -1,10 +1,11 @@
 // PlacesService.swift
 // Talks to the Google Places API (New). Used by EventDetailView to
-// fetch real photos, ratings, reviews, hours, and address for the
-// place that matches a sample event's title + venue. The whole
-// service is one struct with two public methods:
+// fetch real photos, ratings, reviews, hours, and address for a venue,
+// and by VenueCache.deck to pull date-appropriate venues NEAR the user
+// for the Near You deck. The whole service is one struct:
 //
 //   • searchText(query:)    — find places matching free text
+//   • searchNearby(...)     — find places of given types near a point
 //   • photoURL(name:)       — build a fetchable URL for a place photo
 //
 // Why does this read like a beginner's first networking class?
@@ -48,6 +49,19 @@ struct PlacesService {
         "places.googleMapsUri"
     ].joined(separator: ",")
 
+    // Nearby Search needs everything searchText returns PLUS the signals
+    // PlaceCuration ranks on: the type (to map a venue to a deck category and
+    // score date-appropriateness), the coordinate, and the open/closed status
+    // (so we never surface a permanently-closed spot). reviews + photos ride
+    // along so a deck-resolved venue lands in the cache already rich enough for
+    // the detail screen to read for free (no second billed call).
+    private static let nearbyFieldMask: String = (searchFieldMask + "," + [
+        "places.primaryType",
+        "places.types",
+        "places.location",
+        "places.businessStatus"
+    ].joined(separator: ","))
+
     // MARK: - Text search
     // The most flexible Places endpoint: any free-text query plus an
     // optional location bias. We use it because we have human-readable
@@ -69,6 +83,15 @@ struct PlacesService {
         request.setValue("application/json",        forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey,                    forHTTPHeaderField: "X-Goog-Api-Key")
         request.setValue(Self.searchFieldMask,      forHTTPHeaderField: "X-Goog-FieldMask")
+
+        // iOS-app API-key restrictions are enforced by THIS header on REST calls.
+        // The Google Places SDK sets it automatically; raw URLSession must send it
+        // itself. Without it, a key restricted to our bundle id is rejected with
+        // "requests from this ios client application <empty> are blocked" — exactly
+        // the 403 an iOS-restricted key produces here.
+        if let bundleId = Bundle.main.bundleIdentifier {
+            request.setValue(bundleId, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+        }
 
         // Body is JSON. Built with a dictionary because the shape is
         // tiny — a custom Encodable struct would be overkill here.
@@ -97,12 +120,76 @@ struct PlacesService {
             throw PlacesError.invalidResponse
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw PlacesError.httpError(http.statusCode)
+            // Surface Google's JSON error body VERBATIM — it names the exact
+            // cause (API_KEY_INVALID, "Places API (New) … is disabled", "requests
+            // from this ios client application … are blocked", billing). Without
+            // it a 403 is unactionable guesswork. Flows up through the thrown
+            // error's localizedDescription into VenueCache's DEBUG error log.
+            let body = String(data: data, encoding: .utf8) ?? "<no response body>"
+            throw PlacesError.httpError(http.statusCode, body: body)
         }
 
-        // Decode the JSON into our SearchTextResponse → [Place].
+        // Decode the JSON into our PlacesSearchResponse → [Place].
         do {
-            let decoded = try JSONDecoder().decode(SearchTextResponse.self, from: data)
+            let decoded = try JSONDecoder().decode(PlacesSearchResponse.self, from: data)
+            return decoded.places ?? []
+        } catch {
+            throw PlacesError.decodingError(error)
+        }
+    }
+
+    // MARK: - Nearby search
+    // Finds places of the given types within a radius of a point — the deck
+    // source for Near You's "places" mode. Unlike searchText this takes a
+    // locationRestriction (a hard circle, required by the endpoint) rather than a
+    // soft bias, and an includedTypes whitelist so we only pull date-appropriate
+    // categories (PlaceCuration owns that list + the finer ranking).
+
+    func searchNearby(
+        latitude: Double,
+        longitude: Double,
+        includedTypes: [String],
+        radiusMeters: Double = 4000,
+        maxResults: Int = 20
+    ) async throws -> [Place] {
+
+        guard hasAPIKey else { throw PlacesError.missingAPIKey }
+
+        let url = baseURL.appendingPathComponent("places:searchNearby")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json",   forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey,               forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue(Self.nearbyFieldMask, forHTTPHeaderField: "X-Goog-FieldMask")
+        // Same iOS-bundle-restriction header as searchText (see note there).
+        if let bundleId = Bundle.main.bundleIdentifier {
+            request.setValue(bundleId, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+        }
+
+        let body: [String: Any] = [
+            "includedTypes":   includedTypes,
+            "maxResultCount":  maxResults,
+            "rankPreference":  "POPULARITY",   // prominence-first — surfaces the spots people actually go to
+            "locationRestriction": [
+                "circle": [
+                    "center": ["latitude": latitude, "longitude": longitude],
+                    "radius": radiusMeters
+                ]
+            ]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else { throw PlacesError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<no response body>"
+            throw PlacesError.httpError(http.statusCode, body: body)
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(PlacesSearchResponse.self, from: data)
             return decoded.places ?? []
         } catch {
             throw PlacesError.decodingError(error)
@@ -134,14 +221,15 @@ struct PlacesService {
     enum PlacesError: Error, LocalizedError {
         case missingAPIKey
         case invalidResponse
-        case httpError(Int)
+        case httpError(Int, body: String)
         case decodingError(Error)
 
         var errorDescription: String? {
             switch self {
             case .missingAPIKey:        return "Google Places API key isn't configured."
             case .invalidResponse:      return "Couldn't read the Places response."
-            case .httpError(let code):  return "Places API returned HTTP \(code)."
+            case .httpError(let code, let body):
+                return "Places API returned HTTP \(code): \(body)"
             case .decodingError(let e): return "Failed to decode Places response: \(e.localizedDescription)"
             }
         }
@@ -153,7 +241,7 @@ struct PlacesService {
 // everywhere because Google omits fields when there's no data, and
 // we'd rather have `nil` than crashes.
 
-private struct SearchTextResponse: Codable {
+private struct PlacesSearchResponse: Codable {
     let places: [Place]?
 }
 
@@ -170,9 +258,21 @@ struct Place: Codable, Identifiable {
     let websiteUri: String?
     let googleMapsUri: String?
 
+    // Nearby-search extras (nil on a searchText result — that mask omits them).
+    // Drive PlaceCuration's category mapping, ranking, and open/closed gate.
+    let primaryType: String?
+    let types: [String]?
+    let location: LatLng?
+    let businessStatus: String?
+
     struct LocalizedText: Codable {
         let text: String
         let languageCode: String?
+    }
+
+    struct LatLng: Codable {
+        let latitude: Double?
+        let longitude: Double?
     }
 
     struct Photo: Codable {

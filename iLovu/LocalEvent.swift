@@ -59,6 +59,13 @@ struct LocalEvent: Identifiable, Equatable {
     let startDate: Date?
     let ticketURLBase: String?
 
+    // Which deck this card belongs to — set when projected from a real source
+    // (.events from Ticketmaster, .places from Google Places). nil for sample
+    // events, which record as .events (the historical default). Lets a swipe
+    // record the correct Deck without NearYouView hard-coding it, so a future
+    // mixed (.both) deck is correct per-card with no extra plumbing.
+    let sourceDeck: Deck?
+
     // MARK: - Init
 
     init(
@@ -80,7 +87,8 @@ struct LocalEvent: Identifiable, Equatable {
         reviewSnippets: [ReviewSnippet] = [],
         bookingURL: String? = nil,
         startDate: Date? = nil,
-        ticketURLBase: String? = nil
+        ticketURLBase: String? = nil,
+        sourceDeck: Deck? = nil
     ) {
         self.id              = id
         self.cardId          = cardId ?? Self.slug(title)
@@ -101,6 +109,7 @@ struct LocalEvent: Identifiable, Equatable {
         self.bookingURL      = bookingURL
         self.startDate       = startDate
         self.ticketURLBase   = ticketURLBase
+        self.sourceDeck      = sourceDeck
     }
 
     /// Deterministic lowercase, hyphenated slug of a title — identical on both

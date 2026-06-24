@@ -334,6 +334,15 @@ struct MainTabView: View {
                     }
                 }
             }
+        case .places:
+            // A real Google Places venue (cardId == placeId): rebuild from the
+            // SHARED venue cache so the partner who didn't swipe can celebrate it.
+            // Async — present once the cache read lands.
+            Task { @MainActor in
+                if let event = await VenueCache().venue(forId: match.cardId)?.asLocalEvent() {
+                    matchedEvent = event
+                }
+            }
         case .none:
             break
         }

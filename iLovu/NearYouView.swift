@@ -125,9 +125,18 @@ struct NearYouView: View {
             Text("Near You 📍")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(Color.deepRose)
-            Text("Events near you this week")
+            Text(headerSubtitle)
                 .font(.system(size: 13))
                 .foregroundStyle(.gray)
+        }
+    }
+
+    /// Subtitle reflects the active deck source (venues at launch, not events).
+    private var headerSubtitle: String {
+        switch NearYouConfig.source {
+        case .places: return "Cosy spots near you, picked for two"
+        case .events: return "Events near you this week"
+        case .both:   return "Date spots & events near you"
         }
     }
 
@@ -224,7 +233,11 @@ struct NearYouView: View {
             // placeholder coin-flip so the deck still celebrates in solo/preview.
             if direction == .right, let event = topEvent {
                 if let coupleId {
-                    Task { await matchService.recordLike(coupleId: coupleId, cardId: event.cardId, deck: .events) }
+                    // Record under the card's OWN deck (.places / .events), so the
+                    // partner rebuilds it from the right cache. Samples (nil) stay
+                    // .events, as before.
+                    let deck = event.sourceDeck ?? .events
+                    Task { await matchService.recordLike(coupleId: coupleId, cardId: event.cardId, deck: deck) }
                 } else if Bool.random() {
                     matchedEvent = event
                 }
@@ -315,7 +328,7 @@ struct NearYouView: View {
             ProgressView()
                 .tint(Color.louvCoral)
                 .scaleEffect(1.3)
-            Text("Finding events near you…")
+            Text(NearYouConfig.source == .events ? "Finding events near you…" : "Finding date spots near you…")
                 .font(.system(size: 14))
                 .foregroundStyle(.gray)
         }
@@ -352,12 +365,48 @@ struct NearYouView: View {
         Task { await loadDeck() }
     }
 
-    /// Real events for the resolved (shared, when paired) location bucket, or []
-    /// to signal "fall back to samples" (no API key, offline, or nothing near).
+    /// The real deck for the resolved (shared, when paired) location bucket, from
+    /// the configured source (NearYouConfig.source). [] signals "fall back to
+    /// samples" (no API key, offline, or nothing near). Each card it returns
+    /// already carries its sourceDeck, so a swipe records the right Deck.
     private func fetchEvents() async -> [LocalEvent] {
-        guard TicketmasterService().hasAPIKey else { return [] }
         let bucket = await resolveBucket()
+        switch NearYouConfig.source {
+        case .places:
+            return await placesDeck(bucket: bucket)
+        case .events:
+            return await eventsDeck(bucket: bucket)
+        case .both:
+            // Both pipelines run concurrently; cards carry their own deck, so the
+            // interleaved result swipes/matches correctly per card.
+            async let places = placesDeck(bucket: bucket)
+            async let events = eventsDeck(bucket: bucket)
+            return interleave(await places, await events)
+        }
+    }
+
+    /// Google Places venues near the bucket, or [] if no key. The Vilnius-launch
+    /// source.
+    private func placesDeck(bucket: String) async -> [LocalEvent] {
+        guard PlacesService().hasAPIKey else { return [] }
+        return await VenueCache().deck(bucket: bucket)
+    }
+
+    /// Ticketmaster events near the bucket, or [] if no key. Dormant at launch,
+    /// re-enabled via NearYouConfig.source — the whole events pipeline is intact.
+    private func eventsDeck(bucket: String) async -> [LocalEvent] {
+        guard TicketmasterService().hasAPIKey else { return [] }
         return await EventCache().deck(bucket: bucket)
+    }
+
+    /// Alternate two decks A,B,A,B… keeping each source visible near the top.
+    private func interleave(_ a: [LocalEvent], _ b: [LocalEvent]) -> [LocalEvent] {
+        var result: [LocalEvent] = []
+        for i in 0..<max(a.count, b.count) {
+            if i < a.count { result.append(a[i]) }
+            if i < b.count { result.append(b[i]) }
+        }
+        return result
     }
 
     /// The location bucket to fetch the deck for. When paired this is the SHARED
@@ -368,7 +417,7 @@ struct NearYouView: View {
     /// co-located partners don't ping-pong the shared deck.
     private func resolveBucket() async -> String {
         let coord = locationManager.coordinate
-        let deviceBucket = EventCache.locationBucket(latitude: coord.latitude, longitude: coord.longitude)
+        let deviceBucket = LocationBucket.of(latitude: coord.latitude, longitude: coord.longitude)
 
         guard coupleId != nil else { return deviceBucket }   // solo — no doc to share through
 
@@ -399,7 +448,7 @@ struct NearYouView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(Color.deepRose)
                 .multilineTextAlignment(.center)
-            Text("Try a different filter, or check back next week.")
+            Text("Try a different filter, or check back soon.")
                 .font(.system(size: 14))
                 .foregroundStyle(.gray)
                 .multilineTextAlignment(.center)
@@ -429,7 +478,9 @@ private struct EventCardContent: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
 
-                Text("\(event.venue) · \(event.date)")
+                // Join non-empty parts: events show "Venue · Fri 8pm"; venues have
+                // no date, so they show just the type label (e.g. "Wine Bar").
+                Text([event.venue, event.date].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -464,7 +515,11 @@ private struct EventCardContent: View {
 
             HStack(spacing: 8) {
                 pill(text: event.category.rawValue, background: .louvCoral)
-                pill(text: event.price,             background: .louvOrange)
+                // Venues without a published price level omit the price pill
+                // rather than show a blank one.
+                if !event.price.isEmpty {
+                    pill(text: event.price, background: .louvOrange)
+                }
             }
             .padding(.bottom, 20)
         }

@@ -234,6 +234,16 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // ---------- placeDeckQueries/{queryKey} ----------
+    // Pointer cache for the Near You PLACES deck: a location bucket -> an ordered
+    // list of curated placeIds (the deck). The resolved venues themselves live in
+    // venues/{placeId} (ruled above). Same posture as venueQueries/eventQueries:
+    // world-readable, signed-in writes for v1, Cloud-Function-only later.
+    match /placeDeckQueries/{queryKey} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Anything not matched above is denied by default.
   }
 }

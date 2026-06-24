@@ -367,13 +367,22 @@ struct EventDetailView: View {
         let places = PlacesService()
         let cache = VenueCache()
 
-        let query = "\(event.title) \(event.venue)"
-        let bias  = (latitude:  locationManager.coordinate.latitude,
-                     longitude: locationManager.coordinate.longitude)
+        // A places-deck card (cardId == placeId) already has its venue in the
+        // cache from the deck resolve — read it directly, a FREE cache read with
+        // no billed call. Events / sample cards resolve by their title+venue text.
+        let cached: CachedVenue?
+        if event.sourceDeck == .places {
+            cached = await cache.venue(forId: event.cardId)
+        } else {
+            let query = "\(event.title) \(event.venue)"
+            let bias  = (latitude:  locationManager.coordinate.latitude,
+                         longitude: locationManager.coordinate.longitude)
+            cached = await cache.venue(forQuery: query, locationBias: bias)
+        }
 
         // nil = cache miss AND no live match (or no API key, or offline).
         // Same silent-fallback contract as before — sample data stays.
-        guard let cached = await cache.venue(forQuery: query, locationBias: bias) else { return }
+        guard let cached else { return }
 
         // Pass the service so enrichment can rebuild photo URLs from the cached
         // key-free photoNames with the CURRENT API key (no key in stored docs).
@@ -466,7 +475,8 @@ extension LocalEvent {
             // Maps URI as a non-Ticketmaster bookingURL fallback; the affiliate-
             // eligible ticketURLBase stays intact so EventLinkBuilder prefers it.
             startDate:      original.startDate,
-            ticketURLBase:  original.ticketURLBase
+            ticketURLBase:  original.ticketURLBase,
+            sourceDeck:     original.sourceDeck
         )
     }
 }
@@ -500,24 +510,13 @@ private struct PlaceholderPhoto: View {
 
     var body: some View {
         Group {
-            if
-                let urlString = photoString,
-                urlString.hasPrefix("http"),
-                let url = URL(string: urlString)
-            {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholder.overlay(ProgressView().tint(.white))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
+            if let urlString = photoString, urlString.hasPrefix("http") {
+                // URLSession + X-Ios-Bundle-Identifier header (via BundledRemoteImage)
+                // instead of AsyncImage — Google Places photo URLs are blocked by
+                // our iOS-bundle-restricted key unless the bundle header is sent,
+                // which AsyncImage can't do. Keeps the key restriction locked down.
+                BundledRemoteImage(urlString: urlString) {
+                    placeholder
                 }
             } else {
                 placeholder

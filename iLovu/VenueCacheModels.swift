@@ -60,6 +60,13 @@ struct CachedVenue: Codable, Identifiable {
     var websiteUri: String?
     var googleMapsUri: String?
 
+    /// Deck category (LocalEvent.Category rawValue) + the raw Google primary type,
+    /// set ONLY when this venue was resolved for the Near You places deck (via
+    /// PlaceCuration). nil for venues resolved by detail-screen text search, which
+    /// don't need them. Optional/defaulted so older docs decode cleanly.
+    var category: String? = nil
+    var primaryType: String? = nil
+
     /// Server time this doc was last written. Drives the ~7-day staleness check
     /// in VenueCache (stale-while-revalidate). @ServerTimestamp is filled by the
     /// server on write and read back as a Timestamp.
@@ -78,7 +85,10 @@ struct CachedVenue: Codable, Identifiable {
         var authorName: String?
     }
 
-    static let currentSchemaVersion = 1
+    // v2 added category + primaryType (places deck). Older docs decode fine (both
+    // optional), but bumping makes the deck always re-resolve a v1 doc so a deck
+    // venue is guaranteed to carry its category.
+    static let currentSchemaVersion = 2
 }
 
 // MARK: - Place -> CachedVenue
@@ -89,7 +99,7 @@ extension CachedVenue {
     /// `fetchedAt` is left nil on purpose — the doc ref supplies identity and the
     /// server stamps the time on write. Only key-free photo resource names are
     /// stored; fetchable URLs are rebuilt at display time (see photoURLStrings).
-    static func from(_ place: Place) -> CachedVenue {
+    static func from(_ place: Place, category: LocalEvent.Category? = nil) -> CachedVenue {
         let names = place.photos?.map(\.name) ?? []
 
         let reviews = (place.reviews ?? []).map { review in
@@ -113,6 +123,8 @@ extension CachedVenue {
             reviews: reviews,
             websiteUri: place.websiteUri,
             googleMapsUri: place.googleMapsUri,
+            category: category?.rawValue,
+            primaryType: place.primaryType,
             fetchedAt: nil,
             schemaVersion: CachedVenue.currentSchemaVersion
         )
@@ -143,5 +155,85 @@ struct VenueQuery: Codable, Identifiable {
     var rawQuery: String
 
     /// Server time this query last resolved.
+    @ServerTimestamp var resolvedAt: Timestamp?
+}
+
+// MARK: - CachedVenue -> LocalEvent (places deck)
+
+extension CachedVenue {
+
+    /// Projects a deck venue onto the existing LocalEvent shape the Near You deck
+    /// and detail screen already render — the only seam the rest of the UI sees,
+    /// exactly like CachedEvent.asLocalEvent(). `cardId == placeId` (the stable
+    /// cross-device match key). The description is a brand-SAFE positive review
+    /// snippet, or a curated category tagline when none qualifies (PlaceCuration).
+    func asLocalEvent() -> LocalEvent {
+        let cat = LocalEvent.Category(rawValue: category ?? "") ?? .foodDrink
+        let blurb = PlaceCuration.brandSafeSnippet(from: reviews) ?? PlaceCuration.tagline(for: cat)
+        return LocalEvent(
+            cardId:        placeId,
+            title:         displayName,
+            venue:         Self.typeLabel(primaryType: primaryType, category: cat),
+            date:          "",                       // venues have no date; the card joins non-empty parts
+            price:         Self.priceLabel(priceLevel),
+            category:      cat,
+            emoji:         Self.emoji(for: cat),
+            description:   blurb,
+            rating:        rating,
+            reviewCount:   userRatingCount,
+            address:       formattedAddress,
+            openingHours:  openingHoursWeekday?.first,
+            bookingURL:    googleMapsUri ?? websiteUri,   // "Book Now" -> Maps/site (never Ticketmaster-wrapped)
+            sourceDeck:    .places
+        )
+    }
+
+    /// A human secondary-line label from the raw Google primary type ("coffee_shop"
+    /// -> "Coffee Shop"), falling back to the deck category name.
+    private static func typeLabel(primaryType: String?, category: LocalEvent.Category) -> String {
+        guard let raw = primaryType, !raw.isEmpty else { return category.rawValue }
+        return raw
+            .split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+
+    /// Map the Places (New) priceLevel enum to a compact symbol. "" when absent —
+    /// the card hides an empty price pill rather than showing a blank one.
+    private static func priceLabel(_ level: String?) -> String {
+        switch level {
+        case "PRICE_LEVEL_FREE":           return "Free"
+        case "PRICE_LEVEL_INEXPENSIVE":    return "€"
+        case "PRICE_LEVEL_MODERATE":       return "€€"
+        case "PRICE_LEVEL_EXPENSIVE":      return "€€€"
+        case "PRICE_LEVEL_VERY_EXPENSIVE": return "€€€€"
+        default:                           return ""
+        }
+    }
+
+    private static func emoji(for category: LocalEvent.Category) -> String {
+        switch category {
+        case .foodDrink: return "🍽️"
+        case .nightlife: return "🍸"
+        case .arts:      return "🎨"
+        case .outdoors:  return "🌳"
+        case .music:     return "🎶"
+        }
+    }
+}
+
+// MARK: - placeDeckQueries/{queryKey}
+
+struct PlaceDeckQuery: Codable, Identifiable {
+
+    /// The query key (= the location bucket). nil on write, populated on read.
+    @DocumentID var id: String?
+
+    /// The resolved deck — an ORDERED, curated list of placeIds (look each up in
+    /// venues/{placeId}). Ordered so both partners swipe the same sequence, which
+    /// keeps their cardIds aligned for matching — same role as EventQuery.eventIds.
+    var placeIds: [String]
+
+    /// Server time this deck last resolved — drives the SWR refresh window.
     @ServerTimestamp var resolvedAt: Timestamp?
 }

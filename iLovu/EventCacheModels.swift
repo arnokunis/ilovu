@@ -166,7 +166,8 @@ extension CachedEvent {
             address:       address,
             photos:        imageURLs,
             startDate:     startDate.dateValue(),
-            ticketURLBase: ticketURLBase
+            ticketURLBase: ticketURLBase,
+            sourceDeck:    .events
         )
     }
 

@@ -37,6 +37,11 @@ struct VenueCache {
     /// background (stale-while-revalidate). ~7 days.
     private static let maxAge: TimeInterval = 7 * 24 * 60 * 60
 
+    /// The places DECK pointer is served stale-while-revalidate after this long.
+    /// Unlike events there's no date-TTL — venues don't expire by date; a deck
+    /// just goes mildly stale as places open/close, so ~7 days is plenty.
+    private static let placeDeckMaxAge: TimeInterval = 7 * 24 * 60 * 60
+
     // MARK: - Public: lookup by query
 
     /// The cached venue best matching `query`, biased to `locationBias`. Returns
@@ -180,6 +185,122 @@ struct VenueCache {
     private func isStale(_ venue: CachedVenue) -> Bool {
         guard let stamped = venue.fetchedAt?.dateValue() else { return true }
         return Date().timeIntervalSince(stamped) > Self.maxAge
+    }
+
+    // MARK: - Places deck (Near You "places" mode)
+    // The venue twin of EventCache.deck: a read-through cache that turns a
+    // location bucket into a curated, ranked list of date-appropriate venues.
+    // REUSES the venues/{placeId} truth layer wholesale (loadVenue/writeVenue) —
+    // a venue resolved for the deck is then free for detail enrichment, and vice
+    // versa. The only new collection is the pointer: placeDeckQueries/{bucket} ->
+    // ordered [placeId]. No date-TTL (venues don't expire by date); just SWR.
+
+    /// The curated venue deck near `bucket` (the SHARED couple bucket when paired,
+    /// so both partners get the same deck and their cardIds line up for matching).
+    /// [] when nothing's near / cache + search both miss / no API key (caller
+    /// falls back to SampleEvents).
+    func deck(bucket: String) async -> [LocalEvent] {
+        guard let center = LocationBucket.center(of: bucket) else { return [] }
+
+        if let pointer = await loadPlaceDeck(bucket) {
+            let venues = await loadVenuesInOrder(pointer.placeIds)
+            let stale = isDeckStale(pointer)
+            if !venues.isEmpty {
+                if stale {
+                    log("DECK HIT (stale) \(bucket) — revalidating in background")
+                    revalidateDeck(bucket: bucket, center: center)
+                } else {
+                    log("DECK HIT (fresh) \(bucket) — 0 Places calls")
+                }
+                return venues.map { $0.asLocalEvent() }
+            }
+            // A FRESH but empty pointer is a recorded "nothing curated near here" —
+            // respect it instead of re-searching every open. Only a STALE empty
+            // pointer earns a fresh search.
+            guard stale else { log("DECK EMPTY (fresh) \(bucket) — falling back"); return [] }
+            log("DECK EMPTY (stale) \(bucket) — re-resolving")
+        } else {
+            log("DECK MISS \(bucket) — no pointer")
+        }
+
+        let resolved = await resolveDeckAndCache(bucket: bucket, center: center)
+        return resolved.map { $0.asLocalEvent() }
+    }
+
+    /// Fan out grouped Nearby searches (for category variety), curate + rank,
+    /// write each venues/{placeId} + the ordered placeDeckQueries/{bucket} pointer,
+    /// and return the cached deck. [] on no curated results / error.
+    @discardableResult
+    private func resolveDeckAndCache(bucket: String, center: (lat: Double, lng: Double)) async -> [CachedVenue] {
+        var raw: [Place] = []
+        for group in PlaceCuration.searchGroups {
+            do {
+                log("BILLED Nearby search \(bucket) \(group)")
+                let found = try await places.searchNearby(latitude: center.lat, longitude: center.lng, includedTypes: group)
+                raw.append(contentsOf: found)
+            } catch {
+                // One group failing (e.g. an unknown type) shouldn't sink the deck.
+                log("DECK group error \(group): \(error.localizedDescription)")
+            }
+        }
+
+        let ranked = PlaceCuration.rank(raw)
+        guard !ranked.isEmpty else {
+            log("DECK no curated venues for \(bucket)")
+            try? writePlaceDeck(key: bucket, placeIds: [])   // record empty so we don't re-search every open
+            return []
+        }
+
+        var ordered: [CachedVenue] = []
+        for item in ranked {
+            let venue = CachedVenue.from(item.place, category: item.verdict.category)
+            do {
+                try writeVenue(venue, placeId: item.place.id)   // reuse the venues/{placeId} truth layer
+                ordered.append(venue)
+            } catch {
+                log("DECK write venue \(item.place.id): \(error.localizedDescription)")
+            }
+        }
+        do { try writePlaceDeck(key: bucket, placeIds: ordered.map(\.placeId)) }
+        catch { log("DECK write pointer \(bucket): \(error.localizedDescription)") }
+        log("DECK WROTE \(bucket) — \(ordered.count) venues")
+        return ordered
+    }
+
+    private func revalidateDeck(bucket: String, center: (lat: Double, lng: Double)) {
+        Task { _ = await resolveDeckAndCache(bucket: bucket, center: center) }
+    }
+
+    /// Load the pointer's venues IN ORDER, dropping any missing or old-schema doc
+    /// (loadVenue already treats an out-of-date schema as a miss — those re-resolve
+    /// on the next deck refresh).
+    private func loadVenuesInOrder(_ placeIds: [String]) async -> [CachedVenue] {
+        var result: [CachedVenue] = []
+        for id in placeIds {
+            if let venue = await loadVenue(id) { result.append(venue) }
+        }
+        return result
+    }
+
+    private func loadPlaceDeck(_ key: String) async -> PlaceDeckQuery? {
+        do {
+            let snap = try await db.collection("placeDeckQueries").document(key).getDocument()
+            guard snap.exists else { return nil }
+            return try snap.data(as: PlaceDeckQuery.self)
+        } catch {
+            log("ERROR reading deck pointer \(key): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func writePlaceDeck(key: String, placeIds: [String]) throws {
+        let pointer = PlaceDeckQuery(id: nil, placeIds: placeIds, resolvedAt: nil)
+        try db.collection("placeDeckQueries").document(key).setData(from: pointer)
+    }
+
+    private func isDeckStale(_ pointer: PlaceDeckQuery) -> Bool {
+        guard let stamped = pointer.resolvedAt?.dateValue() else { return true }
+        return Date().timeIntervalSince(stamped) > Self.placeDeckMaxAge
     }
 
     // MARK: - Query key
