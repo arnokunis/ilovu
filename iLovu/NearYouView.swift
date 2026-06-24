@@ -77,7 +77,7 @@ struct NearYouView: View {
 
             VStack(spacing: 16) {
                 header
-                    .padding(.top, 8)
+                    .padding(.top, 16)
 
                 filterPills
 
@@ -119,9 +119,9 @@ struct NearYouView: View {
 
     private var header: some View {
         VStack(spacing: 4) {
-            Text("iLovu")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(Color.louvCoral)
+            // The screen title IS the header — no redundant "iLovu" wordmark
+            // (it's already the app name in the tab bar). See HomeView for the
+            // matching cleanup.
             Text("Near You 📍")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(Color.deepRose)

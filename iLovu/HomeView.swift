@@ -205,10 +205,8 @@ struct HomeView: View {
     private var greetingSection: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("iLovu")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(Color.louvCoral)
-
+                // The greeting IS the header — no redundant "iLovu" wordmark (it's
+                // already the app name in the tab bar). Matches NearYouView.
                 Text(greetingText)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(Color.deepRose)
