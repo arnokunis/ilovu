@@ -152,7 +152,10 @@ struct EventCache {
         do {
             let snap = try await db.collection("eventQueries").document(key).getDocument()
             guard snap.exists else { return nil }
-            return try snap.data(as: EventQuery.self)
+            // .estimate so a just-written pointer's @ServerTimestamp resolvedAt
+            // reads as ~now instead of nil in the pending-write window (else the
+            // staleness check re-bills a Discovery search on the next immediate open).
+            return try snap.data(as: EventQuery.self, with: .estimate)
         } catch {
             log("ERROR reading pointer \(key): \(error.localizedDescription)")
             return nil

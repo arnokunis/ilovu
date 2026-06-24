@@ -142,7 +142,10 @@ struct VenueCache {
         do {
             let snap = try await db.collection("venueQueries").document(key).getDocument()
             guard snap.exists else { return nil }
-            return try snap.data(as: VenueQuery.self)
+            // .estimate so a just-written pointer's @ServerTimestamp resolvedAt
+            // reads as ~now instead of nil in the pending-write window (else the
+            // staleness check re-bills a Text Search on the next immediate open).
+            return try snap.data(as: VenueQuery.self, with: .estimate)
         } catch {
             log("ERROR reading pointer \(key): \(error.localizedDescription)")
             return nil
@@ -286,7 +289,11 @@ struct VenueCache {
         do {
             let snap = try await db.collection("placeDeckQueries").document(key).getDocument()
             guard snap.exists else { return nil }
-            return try snap.data(as: PlaceDeckQuery.self)
+            // .estimate so a just-written pointer's @ServerTimestamp resolvedAt
+            // reads as ~now (local estimate) instead of nil during the brief
+            // pending-write window — otherwise isDeckStale treats nil as stale and
+            // re-bills 4 Nearby searches on the very next open.
+            return try snap.data(as: PlaceDeckQuery.self, with: .estimate)
         } catch {
             log("ERROR reading deck pointer \(key): \(error.localizedDescription)")
             return nil
