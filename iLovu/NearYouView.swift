@@ -16,8 +16,23 @@ struct NearYouView: View {
 
     // MARK: - State
 
-    @State private var deck: [LocalEvent] = SampleEvents.all
+    // Starts EMPTY and loads on .task — real Ticketmaster events through
+    // EventCache when a key is configured, SampleEvents as the silent fallback
+    // (no key / no results / offline). Loading once before interaction avoids
+    // swapping the deck out from under a mid-swipe finger.
+    @State private var deck: [LocalEvent] = []
+    @State private var isLoading = true
+
+    // How many cards the user has swiped this session. A late reload (permission
+    // granted, or pairing completed) only re-fetches the deck if it's still
+    // untouched, so we never reset cards out from under an active session.
+    @State private var swipedCount = 0
+
     @State private var dragOffset: CGSize = .zero
+
+    // Owned here like EventDetailView owns its own — the deck biases its event
+    // search to roughly where the user is, falling back to London until a fix.
+    @State private var locationManager = LocationManager()
 
     // Set on a right-swipe match. Parent (MainTabView) watches and
     // presents EventMatchView via .fullScreenCover. Same pattern as
@@ -35,7 +50,16 @@ struct NearYouView: View {
 
     @Environment(MatchService.self) private var matchService
 
+    // Read for the SHARED event-location bucket (so both partners load one deck)
+    // and written when this device claims/re-anchors it. nil-couple => solo deck.
+    @Environment(CoupleService.self) private var coupleService
+
     @State private var selectedCategory: LocalEvent.Category? = nil
+
+    /// A travel move only overrides an OLDER stored bucket than this, so two
+    /// co-located partners straddling a ~1km bucket boundary don't ping-pong the
+    /// shared deck back and forth on every open.
+    private let reanchorDebounce: TimeInterval = 12 * 60 * 60
 
     // Same threshold as SwipeView — keeps the muscle memory identical.
     private let swipeThreshold: CGFloat = 120
@@ -60,7 +84,9 @@ struct NearYouView: View {
                 Spacer()
 
                 ZStack {
-                    if visibleDeck.isEmpty {
+                    if isLoading && deck.isEmpty {
+                        loadingState
+                    } else if visibleDeck.isEmpty {
                         emptyState
                     } else {
                         ForEach(Array(visibleDeck.prefix(2).enumerated()), id: \.element.id) { index, event in
@@ -79,6 +105,14 @@ struct NearYouView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // Load the deck once on appear (real events via EventCache, or the
+        // SampleEvents fallback). .task is cancelled automatically on disappear.
+        .task { await loadDeck() }
+        // If location permission is granted AFTER the first load, or the couple
+        // link completes mid-session, re-fetch — but only while the deck is still
+        // untouched, so an active swipe session is never reset.
+        .onChange(of: locationManager.hasPermission) { _, _ in reloadIfUntouched() }
+        .onChange(of: coupleId) { _, _ in reloadIfUntouched() }
     }
 
     // MARK: - Header
@@ -165,6 +199,10 @@ struct NearYouView: View {
 
     private func completeSwipe(direction: SwipeDirection) {
         let topEvent = visibleDeck.first
+
+        // Mark the session as touched so a late location/pairing reload won't
+        // yank the deck out from under the user.
+        swipedCount += 1
 
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
@@ -270,6 +308,89 @@ struct NearYouView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Loading State
+
+    private var loadingState: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color.louvCoral)
+                .scaleEffect(1.3)
+            Text("Finding events near you…")
+                .font(.system(size: 14))
+                .foregroundStyle(.gray)
+        }
+        .padding(.horizontal, 32)
+    }
+
+    // MARK: - Data loading
+    // The deck loads through EventCache (a read-through Firestore cache over the
+    // Ticketmaster Discovery API). The first lookup of a given bucket+week pays
+    // one rate-limited search and writes it to Firestore; repeats — same area,
+    // same week, EITHER partner — are free cache reads. Any miss / no-key /
+    // offline path silently falls back to SampleEvents, the same contract the
+    // venue cache and the rest of the app use.
+
+    private func loadDeck() async {
+        locationManager.requestPermissionIfNeeded()
+
+        let events = await fetchEvents()
+        await MainActor.run {
+            // Adopt the load only while the session is untouched. The .task load
+            // always is; a late reload is already guarded by reloadIfUntouched().
+            if swipedCount == 0 {
+                deck = events.isEmpty ? SampleEvents.all : events
+            }
+            isLoading = false
+        }
+    }
+
+    /// Re-runs the load after permission is granted or pairing completes — but
+    /// only if the user hasn't started swiping, so an active session is never reset.
+    private func reloadIfUntouched() {
+        guard swipedCount == 0 else { return }
+        isLoading = true
+        Task { await loadDeck() }
+    }
+
+    /// Real events for the resolved (shared, when paired) location bucket, or []
+    /// to signal "fall back to samples" (no API key, offline, or nothing near).
+    private func fetchEvents() async -> [LocalEvent] {
+        guard TicketmasterService().hasAPIKey else { return [] }
+        let bucket = await resolveBucket()
+        return await EventCache().deck(bucket: bucket)
+    }
+
+    /// The location bucket to fetch the deck for. When paired this is the SHARED
+    /// bucket on the couple doc, so both partners get ONE deck (and their swipe
+    /// cardIds line up for matching). This device claims it on bootstrap and
+    /// re-anchors it on travel — but only ever PERSISTS a real GPS fix (never the
+    /// London fallback), and only overrides an OLDER stored bucket (debounced), so
+    /// co-located partners don't ping-pong the shared deck.
+    private func resolveBucket() async -> String {
+        let coord = locationManager.coordinate
+        let deviceBucket = EventCache.locationBucket(latitude: coord.latitude, longitude: coord.longitude)
+
+        guard coupleId != nil else { return deviceBucket }   // solo — no doc to share through
+
+        let stored = coupleService.eventLocationBucket
+
+        if locationManager.hasPermission {
+            if stored == nil {
+                await coupleService.setEventLocation(bucket: deviceBucket)   // bootstrap claim
+                return deviceBucket
+            }
+            if deviceBucket != stored,
+               let updated = coupleService.eventLocationUpdatedAt,
+               Date().timeIntervalSince(updated) > reanchorDebounce {
+                await coupleService.setEventLocation(bucket: deviceBucket)   // travel re-anchor
+                return deviceBucket
+            }
+        }
+        // No real fix yet, or nothing to change: prefer the shared bucket, else
+        // the device (possibly London) bucket just for this load.
+        return stored ?? deviceBucket
+    }
+
     // MARK: - Empty State
 
     private var emptyState: some View {
@@ -363,4 +484,5 @@ private struct EventCardContent: View {
 #Preview {
     NearYouView(matchedEvent: .constant(nil), eventToShow: .constant(nil), coupleId: nil)
         .environment(MatchService())
+        .environment(CoupleService())
 }

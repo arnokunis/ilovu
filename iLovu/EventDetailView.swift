@@ -302,19 +302,13 @@ struct EventDetailView: View {
     private func openBooking() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
-        let url: URL? = {
-            if let raw = displayEvent.bookingURL, let real = URL(string: raw) {
-                return real
-            }
-            let query = "\(displayEvent.title) \(displayEvent.venue)"
-            guard
-                let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                let search = URL(string: "https://www.google.com/search?q=\(encoded)")
-            else { return nil }
-            return search
-        }()
-
-        if let url { UIApplication.shared.open(url) }
+        // One place builds the link: a real Ticketmaster ticket page (affiliate-
+        // wrapped once the Impact id is configured — today it isn't, so it opens
+        // plain), else any other bookingURL, else a Google search. See
+        // EventLinkBuilder.
+        if let url = EventLinkBuilder.ticketURL(for: displayEvent) {
+            UIApplication.shared.open(url)
+        }
     }
 
     // MARK: - Add to Calendar
@@ -331,7 +325,9 @@ struct EventDetailView: View {
             ekEvent.title    = "iLovu: \(displayEvent.title)"
             ekEvent.notes    = "\(displayEvent.venue) — \(displayEvent.date)\n\n\(displayEvent.description)"
             ekEvent.location = displayEvent.address ?? displayEvent.venue
-            let start = Self.defaultDate()
+            // Real events carry their actual start instant; sample events fall
+            // back to tomorrow-evening so the calendar entry still has a slot.
+            let start = displayEvent.startDate ?? Self.defaultDate()
             ekEvent.startDate = start
             ekEvent.endDate   = start.addingTimeInterval(2 * 60 * 60)
             ekEvent.calendar  = store.defaultCalendarForNewEvents
@@ -463,7 +459,14 @@ extension LocalEvent {
             photos:         photoURLs.isEmpty ? original.photos        : photoURLs,
             highlights:     original.highlights,
             reviewSnippets: snippets.isEmpty  ? original.reviewSnippets : snippets,
-            bookingURL:     cached.googleMapsUri    ?? original.bookingURL
+            bookingURL:     cached.googleMapsUri    ?? original.bookingURL,
+            // Carry the real-event fields THROUGH enrichment — without this, a
+            // venue-enriched Ticketmaster event would lose its ticket link
+            // (affiliate base) and start time. Venue enrichment only adds the
+            // Maps URI as a non-Ticketmaster bookingURL fallback; the affiliate-
+            // eligible ticketURLBase stays intact so EventLinkBuilder prefers it.
+            startDate:      original.startDate,
+            ticketURLBase:  original.ticketURLBase
         )
     }
 }

@@ -320,7 +320,20 @@ struct MainTabView: View {
         case .dates:
             if let card = SampleCards.byId(match.cardId) { matchedCard = card }
         case .events:
-            if let event = SampleEvents.byId(match.cardId) { matchedEvent = event }
+            // The match doc is id-only, so rebuild the full event from its cardId.
+            // Sample/offline events resolve synchronously from the local array;
+            // a REAL Ticketmaster event (cardId == the TM event id) is rebuilt from
+            // the SHARED event cache, since the partner who didn't swipe may never
+            // have held it in a local array. Async — present once it lands.
+            if let event = SampleEvents.byId(match.cardId) {
+                matchedEvent = event
+            } else {
+                Task { @MainActor in
+                    if let event = await EventCache().event(forId: match.cardId) {
+                        matchedEvent = event
+                    }
+                }
+            }
         case .none:
             break
         }

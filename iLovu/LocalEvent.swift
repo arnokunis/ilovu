@@ -46,6 +46,19 @@ struct LocalEvent: Identifiable, Equatable {
     let reviewSnippets: [ReviewSnippet]
     let bookingURL: String?
 
+    // Real-event fields — set only for live Ticketmaster events (sample events
+    // leave them nil). Defaulted in the init, so every existing call site is
+    // unaffected.
+    //
+    //   startDate     — the event's real start instant; powers the calendar add
+    //                   (real datetime instead of a "tomorrow 7pm" guess).
+    //   ticketURLBase — the KEY-FREE Ticketmaster ticket page. EventLinkBuilder
+    //                   wraps it with the Impact affiliate id at display time;
+    //                   distinguishes an affiliate-eligible link from bookingURL
+    //                   (which may be a non-Ticketmaster fallback, never wrapped).
+    let startDate: Date?
+    let ticketURLBase: String?
+
     // MARK: - Init
 
     init(
@@ -65,7 +78,9 @@ struct LocalEvent: Identifiable, Equatable {
         photos: [String] = [],
         highlights: [String] = [],
         reviewSnippets: [ReviewSnippet] = [],
-        bookingURL: String? = nil
+        bookingURL: String? = nil,
+        startDate: Date? = nil,
+        ticketURLBase: String? = nil
     ) {
         self.id              = id
         self.cardId          = cardId ?? Self.slug(title)
@@ -84,6 +99,8 @@ struct LocalEvent: Identifiable, Equatable {
         self.highlights      = highlights
         self.reviewSnippets  = reviewSnippets
         self.bookingURL      = bookingURL
+        self.startDate       = startDate
+        self.ticketURLBase   = ticketURLBase
     }
 
     /// Deterministic lowercase, hyphenated slug of a title — identical on both

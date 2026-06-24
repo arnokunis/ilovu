@@ -79,6 +79,21 @@ struct Couple: Codable, Identifiable {
     /// When the subscription flag last changed. Audit/cache-bust only.
     var subscriptionUpdatedAt: Timestamp? = nil
 
+    /// SHARED ~1km location bucket ("%.2f,%.2f") for the Near You event deck. Both
+    /// partners build their event-cache query key from THIS, so they fetch the
+    /// SAME curated deck and their swipe cardIds line up for matching — instead of
+    /// each phone's GPS producing two disjoint decks (which would silently kill
+    /// event matches when partners are even slightly apart). Claimed/refreshed by
+    /// whoever opens Near You with a fresh GPS fix; see CoupleService.setEventLocation
+    /// and NearYouView. nil until first claimed. Optional/defaulted so older docs
+    /// decode cleanly.
+    var eventLocationBucket: String? = nil
+
+    /// When `eventLocationBucket` was last set — debounces re-anchoring (a travel
+    /// move only overrides an OLDER stored bucket, so two co-located partners
+    /// straddling a bucket boundary don't ping-pong it). nil until first claimed.
+    var eventLocationUpdatedAt: Timestamp? = nil
+
     /// The *other* member's uid, from the current user's point of view.
     /// nil if this somehow isn't a two-person couple.
     func partner(of uid: String) -> String? {

@@ -205,6 +205,35 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // ---------- events/{eventId} ----------
+    // Cached Ticketmaster events, keyed by the Ticketmaster event id. The events
+    // twin of venues: not private, so reads are open to everyone; signed-in writes
+    // for v1. Both partners read the SAME event docs (keyed by the shared deck),
+    // which is what makes two-player event matching line up.
+    //
+    // DATE-TTL: each doc carries `expireAt` (= the event's start + grace). Enable
+    // a Firestore native TTL policy on `events.expireAt` (console → Firestore →
+    // TTL) so past events auto-delete with zero maintenance. EventCache also
+    // filters past events at read time, so correctness never depends on the sweep.
+    //
+    // PRE-LAUNCH HARDENING: "any signed-in user can write" means a client could
+    // poison the cache. Same end-state as venues — `allow write: if false` and do
+    // cache writes from a Cloud Function (Admin SDK bypasses rules). Accepted for v1.
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ---------- eventQueries/{queryKey} ----------
+    // Pointer cache: a location bucket + date window -> an ordered list of event
+    // ids (the curated deck), so repeat lookups skip the rate-limited Discovery
+    // search. Same posture as venueQueries: world-readable, signed-in writes for
+    // v1, Cloud-Function-only later.
+    match /eventQueries/{queryKey} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Anything not matched above is denied by default.
   }
 }

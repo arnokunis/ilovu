@@ -78,6 +78,14 @@ final class CoupleService {
     /// The couple's relationship stage, or nil if unset.
     var relationshipStatus: String? { couple?.relationshipStatus }
 
+    /// The couple's SHARED Near You location bucket ("%.2f,%.2f"), or nil until a
+    /// partner has claimed one. NearYouView reads this to fetch the shared deck.
+    var eventLocationBucket: String? { couple?.eventLocationBucket }
+
+    /// When the shared event-location bucket was last set, or nil if never. Used
+    /// by NearYouView's re-anchor debounce (only override an older stored bucket).
+    var eventLocationUpdatedAt: Date? { couple?.eventLocationUpdatedAt?.dateValue() }
+
     /// The signed-in user's birthday, or nil if unset / unpaired.
     var myBirthday: Date? {
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
@@ -394,6 +402,22 @@ final class CoupleService {
     func setRelationshipStatus(_ status: String) async {
         await updateCoupleField(["relationshipStatus": status]) {
             $0.relationshipStatus = status
+        }
+    }
+
+    /// Claims / updates the couple's SHARED Near You location bucket so both
+    /// partners fetch ONE event deck (and their swipe cardIds line up for
+    /// matching). NearYouView decides WHEN to call this — bootstrap when unset,
+    /// re-anchor on travel — this just writes it. Same dot-path-update + local
+    /// mirror shape as the setters above; rides observeCouple to the partner live,
+    /// and the existing couples update rule already permits it (members frozen).
+    func setEventLocation(bucket: String) async {
+        await updateCoupleField([
+            "eventLocationBucket": bucket,
+            "eventLocationUpdatedAt": FieldValue.serverTimestamp()
+        ]) {
+            $0.eventLocationBucket = bucket
+            $0.eventLocationUpdatedAt = Timestamp(date: Date())
         }
     }
 
