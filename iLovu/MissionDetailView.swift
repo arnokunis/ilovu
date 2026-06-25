@@ -299,12 +299,18 @@ struct MissionDetailView: View {
 
     private func addToCalendar() async {
         let store = EKEventStore()
+        #if DEBUG
+        print("📅 Calendar: tapped — '\(mission.card.title)'; authStatus=\(EKEventStore.authorizationStatus(for: .event).rawValue) (0=notDetermined 2=denied 3=fullAccess 4=writeOnly)")
+        #endif
         do {
             // iOS 17+ split calendar permission into read-only and
             // write-only. We only need to add events, so we ask for
             // the narrower scope. Requires NSCalendarsWriteOnlyAccessUsageDescription
             // in Info — without it, this call crashes.
             let granted = try await store.requestWriteOnlyAccessToEvents()
+            #if DEBUG
+            print("📅 Calendar: write-only access granted=\(granted)")
+            #endif
             guard granted else {
                 setFeedback(.denied)
                 return
@@ -316,13 +322,30 @@ struct MissionDetailView: View {
             let start = mission.scheduledDate ?? Self.defaultScheduledDate()
             event.startDate = start
             event.endDate = start.addingTimeInterval(2 * 60 * 60)  // 2-hour default block
-            event.calendar = store.defaultCalendarForNewEvents
+            let target = store.defaultCalendarForNewEvents
+            event.calendar = target
+            #if DEBUG
+            // The smoking gun: WHICH calendar/account the event is written to.
+            // sourceType 0=Local 1=Exchange 2=CalDAV(Google/iCloud) 3=MobileMe 4=Subscribed 5=Birthdays.
+            // A Google account shows source title = the Google email; iCloud shows "iCloud".
+            if let cal = target {
+                print("📅 Calendar: target='\(cal.title)' account='\(cal.source.title)' sourceType=\(cal.source.sourceType.rawValue) modifiable=\(cal.allowsContentModifications)")
+            } else {
+                print("📅 Calendar: defaultCalendarForNewEvents is NIL — write-only may not expose a default; save will throw")
+            }
+            #endif
 
             try store.save(event, span: .thisEvent)
+            #if DEBUG
+            print("📅 Calendar: save SUCCEEDED — id=\(event.eventIdentifier ?? "nil") on '\(event.calendar?.title ?? "?")' account='\(event.calendar?.source.title ?? "?")' start=\(start)")
+            #endif
             // Also record on the mission so the home row shows the date.
             if mission.scheduledDate == nil { mission.scheduledDate = start }
             setFeedback(.added)
         } catch {
+            #if DEBUG
+            print("📅 Calendar: save FAILED — \(error)")
+            #endif
             setFeedback(.error)
         }
     }
