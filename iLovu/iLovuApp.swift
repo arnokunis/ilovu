@@ -12,6 +12,13 @@ import RevenueCat
 @main
 struct iLovuApp: App {
 
+    // UIKit application delegate, bridged in purely for push-notification
+    // plumbing (APNs registration + FCM token) that SwiftUI's App protocol
+    // can't express. See AppDelegate.swift. Its didFinishLaunching runs AFTER
+    // this struct's init() below, so FirebaseApp.configure() has already run by
+    // the time the delegate touches Messaging.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     // One MissionStore + one MemoryStore owned at the app root.
     // @State preserves them across SwiftUI re-renders of the App body.
     // Both injected into the environment so every view in the app
