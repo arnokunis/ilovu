@@ -1,0 +1,11 @@
+# Cloud Functions dependencies + local artifacts (never committed)
+node_modules/
+
+# Local env / secrets for functions
+.env
+*.local
+
+# Firebase emulator + debug logs
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
