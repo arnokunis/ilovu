@@ -320,7 +320,7 @@ struct UsView: View {
                 coupleStoryRow
             }
 
-            DailyQuestionCard()
+            DailyQuestionCard(coupleId: coupleService.coupleId)
 
             if memoryStore.memories.isEmpty {
                 emptyState
@@ -535,4 +535,5 @@ struct UsView: View {
         .environment(AuthState())
         .environment(CoupleService())
         .environment(ProfileStore())
+        .environment(DailyQuestionService())
 }

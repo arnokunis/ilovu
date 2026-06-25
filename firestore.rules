@@ -181,6 +181,37 @@ service cloud.firestore {
       allow delete:         if false;
     }
 
+    // ---------- couples/{coupleId}/dailyAnswers/{dateKey} ----------
+    // One doc per calendar day for the shared Daily Question. `answers` is a
+    // uid-keyed map (uid -> answer text); doc id is the local-date key. Scoped to
+    // the couple's two members, and a member may only write THEIR OWN answer key —
+    // never overwrite the partner's — the map twin of the swipes "add only your
+    // own uid" rule. This is what guarantees the "answer to unlock" reveal can't
+    // be gamed by writing/reading on the partner's behalf.
+    //
+    // PRE-LAUNCH HARDENING: as with swipes/matches, this is client-enforced and a
+    // member could still write a wrong `question`/`dateKey` (trusted-partner, low
+    // risk). Note too that both members can READ the doc, so the partner's answer
+    // reaches the device before the local "answer to unlock" gate lifts — strict
+    // server-side withholding would need a Cloud Function, deferred on the same
+    // trajectory as the other hardening notes.
+    match /couples/{coupleId}/dailyAnswers/{dateKey} {
+      allow read: if isCoupleMember(coupleId);
+
+      // CREATE: the first answerer writes a doc whose answers map has ONLY their
+      // own uid key.
+      allow create: if isCoupleMember(coupleId)
+                    && request.resource.data.answers.keys().hasOnly([uid()]);
+
+      // UPDATE: the second answerer may only ADD/CHANGE their own answers key —
+      // the diff of the answers map must affect no key but their own (so the
+      // partner's answer can't be edited or removed).
+      allow update: if isCoupleMember(coupleId)
+                    && request.resource.data.answers.diff(resource.data.answers).affectedKeys().hasOnly([uid()]);
+
+      allow delete: if false;
+    }
+
     // ---------- venues/{placeId} ----------
     // Cached Google Places data, keyed by the resolved place.id. Venues aren't
     // private, so reads are open to everyone (even unauthenticated). Writes are

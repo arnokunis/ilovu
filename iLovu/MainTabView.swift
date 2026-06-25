@@ -386,4 +386,5 @@ enum AppTab: Hashable {
         .environment(MemoryService())
         .environment(PaywallGate())
         .environment(SubscriptionService())
+        .environment(DailyQuestionService())
 }

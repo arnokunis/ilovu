@@ -3,37 +3,60 @@
 // Anti-pressure by design: no notifications, no streaks, no shame.
 // It just sits there warmly until you feel like answering.
 //
-// Two visual states:
+// Three visual states (the real "answer to unlock" mechanic):
 //   1. Answering — text field + Save button + "no rush" reassurance
-//   2. Answered  — user's saved answer + a soft "waiting for your
-//                  partner" lock (real partner sync arrives with
-//                  Firebase later; for now this is local-only)
+//   2. Answered, partner hasn't  — your answer + "waiting for your partner" lock
+//   3. Both answered             — your answer + your partner's, revealed
 //
-// Persistence is keyed by the calendar day. Saving on a new day
-// silently overwrites the previous day's answer in storage — and
-// reading on a new day reveals the fresh question with an empty
-// field, because the saved date key no longer matches today.
+// PAIRED: answers sync through DailyQuestionService to
+// couples/{id}/dailyAnswers/{dateKey}. You only ever see your partner's answer
+// AFTER you've answered (state 2 -> 3 when they answer too) — the gate is the
+// same "both present" check matching uses on likedBy. The partner's answer
+// arrives passively via the doc's snapshot listener (live on the Us tab, fresh
+// on open) — no push.
+//
+// UNPAIRED: falls back to the original local-only @AppStorage journaling (no
+// partner to sync with), so nothing regresses before pairing.
+//
+// The question itself needs no syncing — ConnectionQuestions.today is picked by
+// day-of-year, so both partners independently see the same prompt.
 
 import SwiftUI
+import FirebaseFirestore
 
 struct DailyQuestionCard: View {
 
-    // Persisted across launches. We store the answer text AND the
-    // date it was saved, so we can tell "did the user answer TODAY"
-    // (vs answered yesterday and is now looking at a stale state).
+    /// The current couple's id, or nil when unpaired (local-only fallback).
+    let coupleId: String?
+
+    @Environment(DailyQuestionService.self) private var dailyService
+
+    // Unpaired local-only fallback — the original behavior. We store the answer
+    // text AND the date it was saved, to tell "answered TODAY" from stale.
     @AppStorage("dailyAnswerText")    private var savedAnswer: String        = ""
     @AppStorage("dailyAnswerDateKey") private var savedAnswerDateKey: String = ""
 
-    // The in-progress text the user is typing. Kept separate from
-    // savedAnswer so we can validate (e.g. disable Save on empty)
-    // without writing to @AppStorage on every keystroke.
+    // The in-progress text the user is typing. Kept separate so we can validate
+    // (disable Save on empty) without writing on every keystroke.
     @State private var draftAnswer: String = ""
 
-    // True only when there is a saved answer AND it was saved today.
-    // Drives which of the two views is shown.
-    private var hasAnsweredToday: Bool {
-        !savedAnswer.isEmpty && savedAnswerDateKey == ConnectionQuestions.todayDateKey
+    // Paired state, delivered by the dailyAnswers listener: my answer and my
+    // partner's (nil until each is written). Partner is gated behind mine in the UI.
+    @State private var mineAnswer: String?
+    @State private var partnerAnswer: String?
+    @State private var listener: ListenerRegistration?
+
+    private var isPaired: Bool { coupleId != nil }
+
+    /// My answer for today, from the synced doc when paired or @AppStorage when
+    /// not. nil => I haven't answered today => show the answering view.
+    private var myAnswerText: String? {
+        if isPaired { return mineAnswer }
+        return (!savedAnswer.isEmpty && savedAnswerDateKey == ConnectionQuestions.todayDateKey)
+            ? savedAnswer : nil
     }
+
+    private var hasAnsweredToday: Bool { myAnswerText != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -57,14 +80,18 @@ struct DailyQuestionCard: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .louvShadow()
+        // Listen to today's shared doc while the card is on screen; re-key if the
+        // couple link changes mid-session (e.g. pairing completes on the Us tab).
+        .onAppear { attachListener() }
+        .onDisappear { detachListener() }
+        .onChange(of: coupleId) { _, _ in attachListener() }
     }
 
     // MARK: - Answering state
 
     private var answeringView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // axis: .vertical lets the field grow as the user types,
-            // up to 5 lines. lineLimit gives min + max bounds.
+            // axis: .vertical lets the field grow as the user types, up to 5 lines.
             TextField("Type your answer...", text: $draftAnswer, axis: .vertical)
                 .lineLimit(2...5)
                 .font(.system(size: 15))
@@ -98,53 +125,76 @@ struct DailyQuestionCard: View {
         draftAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // MARK: - Answered state
+    // MARK: - Answered state (my answer + reveal / waiting / connect)
 
     private var answeredView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // The user's own answer, replayed back to them.
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Your answer")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.gray)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+            answerBlock(label: "Your answer", text: myAnswerText ?? "", tint: Color.deepRose)
 
-                Text(savedAnswer)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.deepRose)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 14)
-                    .background(Color.blushCream)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-
-            // Soft locked panel for the partner's side. Stub for now —
-            // real partner sync will replace this with the partner's
-            // answer once both have answered.
-            HStack(spacing: 10) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.louvCoral)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Waiting for your partner...")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.deepRose)
-                    Text("They'll see your answer once they answer too 💕")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.gray)
+            if isPaired {
+                if let partnerAnswer {
+                    // Both answered — the reveal.
+                    answerBlock(label: "Their answer", text: partnerAnswer, tint: Color.louvCoral)
+                } else {
+                    // I've answered; they haven't yet.
+                    lockedPanel(
+                        icon: "lock.fill",
+                        title: "Waiting for your partner...",
+                        subtitle: "They'll see your answer once they answer too 💕"
+                    )
                 }
-
-                Spacer()
+            } else {
+                // No partner to sync with yet.
+                lockedPanel(
+                    icon: "heart.fill",
+                    title: "Just between you two, soon",
+                    subtitle: "Connect with your partner to swap answers 💕"
+                )
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 14)
-            .background(Color.blushCream.opacity(0.55))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .transition(.opacity)
+    }
+
+    private func answerBlock(label: String, text: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.gray)
+                .textCase(.uppercase)
+                .tracking(0.5)
+
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .background(Color.blushCream)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private func lockedPanel(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(Color.louvCoral)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.deepRose)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.gray)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(Color.blushCream.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Actions
@@ -155,11 +205,52 @@ struct DailyQuestionCard: View {
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
-        withAnimation(LouvAnimation.spring) {
-            savedAnswer        = trimmed
-            savedAnswerDateKey = ConnectionQuestions.todayDateKey
-            draftAnswer        = ""
+        if let coupleId {
+            // Optimistic: show my answer immediately; the listener confirms it and
+            // brings the partner's in when they answer.
+            withAnimation(LouvAnimation.spring) {
+                mineAnswer  = trimmed
+                draftAnswer = ""
+            }
+            Task {
+                await dailyService.saveAnswer(
+                    coupleId: coupleId,
+                    dateKey:  ConnectionQuestions.todayDateKey,
+                    question: ConnectionQuestions.today,
+                    answer:   trimmed
+                )
+            }
+        } else {
+            // Unpaired: local-only journaling (unchanged original behavior).
+            withAnimation(LouvAnimation.spring) {
+                savedAnswer        = trimmed
+                savedAnswerDateKey = ConnectionQuestions.todayDateKey
+                draftAnswer        = ""
+            }
         }
+    }
+
+    // MARK: - Listener lifecycle
+
+    private func attachListener() {
+        detachListener()
+        mineAnswer = nil
+        partnerAnswer = nil
+        guard let coupleId else { return }
+        listener = dailyService.observeToday(
+            coupleId: coupleId,
+            dateKey:  ConnectionQuestions.todayDateKey
+        ) { mine, partner in
+            withAnimation(LouvAnimation.spring) {
+                mineAnswer    = mine
+                partnerAnswer = partner
+            }
+        }
+    }
+
+    private func detachListener() {
+        listener?.remove()
+        listener = nil
     }
 
     // MARK: - Shared
@@ -174,7 +265,8 @@ struct DailyQuestionCard: View {
 }
 
 #Preview {
-    DailyQuestionCard()
+    DailyQuestionCard(coupleId: nil)
+        .environment(DailyQuestionService())
         .padding(20)
         .background(Color.blushCream)
 }

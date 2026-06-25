@@ -62,6 +62,12 @@ struct iLovuApp: App {
     // default-construct. Read by the Us tab.
     @State private var coupleSetupPrompt = CoupleSetupPrompt()
 
+    // Firestore-backed sync for the shared Daily Question. Writes each partner's
+    // answer to couples/{id}/dailyAnswers/{date} and feeds DailyQuestionCard's
+    // today-doc listener (the "answer to unlock" reveal). Same lazy-Firebase,
+    // safe-to-default shape as the services above.
+    @State private var dailyQuestionService = DailyQuestionService()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -96,6 +102,7 @@ struct iLovuApp: App {
                 .environment(paywallGate)
                 .environment(subscriptionService)
                 .environment(coupleSetupPrompt)
+                .environment(dailyQuestionService)
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
                 // when unpaired (coupleId nil) it's a no-op and missions stay
