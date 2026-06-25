@@ -21,3 +21,6 @@ DerivedData/
 # Secrets — API keys, never commit
 Secrets.swift
 GoogleService-Info.plist
+# APNs auth key (.p8) — Apple lets you download it ONCE; store it safely, never commit
+*.p8
+AuthKey_*.p8
