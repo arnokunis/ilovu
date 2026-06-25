@@ -20,9 +20,10 @@ A couples date-planning iOS app (SwiftUI). Core loop:
 
 - **SwiftUI**, iOS-only (iPhone, `TARGETED_DEVICE_FAMILY = 1`)
 - **Firebase**: Auth (Sign in with Apple) + Firestore (Standard, EU region)
-- **Google Places API (New)** — venue data, read-through cached to Firestore
+- **Google Places API (New)** — venue data, read-through cached to Firestore; now also powers **Near You** (curated restaurants/wine bars/cafés). Bundle-restricted keys need the `X-Ios-Bundle-Identifier` header — see the Near You decision below.
 - **RevenueCat** (planned, not yet integrated) — paywall/trial/A-B testing
-- **Ticketmaster + Eventbrite** (Phase 3, not yet built) — events
+- **Ticketmaster** — events code built but **DORMANT** (no date-appropriate Vilnius events; kept for event-rich markets like London/US). **Eventbrite: DEAD** — it removed its public Event Search API; do not pursue.
+- **Cloud Functions** (Node 22, `firebase-functions` v6, `europe-west1`) — Stage 1 foundation live (`helloWorld`); see Push notifications below.
 - Firebase project: `ilovu-b5d87` · Bundle ID: `com.ilovu.app.iLovu` · Team: KUNIS, MB (Apple Org ID 7AU9U5Q6LT)
 
 ---
@@ -55,6 +56,8 @@ couples/{coupleId}/missions/{missionId}  // PLANNED — missions persist to User
 couples/{coupleId}/memories/{memoryId}   // DONE — synced via MemoryService; MemoryStore mirrors up + listens
   dateCompleted, cardTitle, cardEmoji, storagePath, rating, note, createdBy, schemaVersion, createdAt
   // photo BYTES live in Cloud Storage (couples/{coupleId}/memories/{memoryId}.jpg), NEVER in the doc
+couples/{coupleId}/dailyAnswers/{dayKey} // DailyQuestionService — Daily Question sync (CODE NOT COMMITTED; rules deployed)
+  answers: { uid: text }, questionId, updatedAt  // each writes ONLY own uid key; answer-to-unlock reveal, passive listener
 
 invites/{token}                          // Invite.swift — doc ID IS the token (unguessable, single-use)
   creatorId, status ("pending"|"consumed"), consumedBy (null until redeemed), createdAt
@@ -62,6 +65,8 @@ invites/{token}                          // Invite.swift — doc ID IS the token
 
 venues/{placeId}                         // world-readable cache
 venueQueries/{queryKey}                  // read-through cache, stale-while-revalidate (>7 days)
+eventQueries/{queryKey}                  // Ticketmaster events cache (DORMANT — see Tech stack)
+placeDeckQueries/{queryKey}              // Near You curated-Places deck cache; firestore.rules deployed (per-open re-bill fixed)
 ```
 
 **Cloud Storage (EU bucket) — couple photos.** Image BYTES live here, not in Firestore; docs store the Storage PATH only (never a download URL / embedded secret — the Places-key lesson). `StorageService` uploads/downloads by path; `ImageCache` (FileManager) caches download-once so egress scales with content, not usage. Compression is centralized in `ImageDownscaler` (1024px / JPEG 0.7).
@@ -80,6 +85,25 @@ Lives in `MatchService`: `recordLike(coupleId:cardId:deck:)` + `observeMatches(c
 ### Cost architecture (critical — 95% margin target)
 Naive per-user live Places fetching is catastrophic (~$16k/mo at 300 users). **Cache everything**: fetch each venue once to Firestore, serve both card and detail from cache. Scales with venues, not users. Set a Billing budget alert the moment paid billing is attached.
 
+### Near You — curated Google Places, not events (pivoted, committed 778a857, works on device)
+Near You ships as live **curated Google Places** (restaurants, wine bars, cafés by name) via `PlaceCuration.swift` + `NearYouConfig.source = .places` — pivoted away from events because Ticketmaster had no date-appropriate Vilnius events and **Eventbrite removed its public Event Search API** (dead end). The Ticketmaster events path is kept **dormant-but-intact** for event-rich markets (London/US) later.
+- **Places 403 fix (locked):** iOS-bundle-restricted Google keys require the `X-Ios-Bundle-Identifier` header on raw `URLSession` Places calls (search), plus a custom `BundledRemoteImage` loader for photos (`AsyncImage` can't send headers). **Do NOT loosen the key restriction to fix a 403** — send the header.
+- **Cache cost fixes:** deployed `placeDeckQueries` `firestore.rules` (stops per-open re-billing); fixed `@ServerTimestamp` returning `nil` right after a write (false-stale → re-billing) by reading with `.estimate` `ServerTimestampBehavior` across placeDeck + EventCache + venueQuery. Confirmed on device: **deck HIT (fresh), 0 Places calls** on open.
+
+### Daily Questions — couple-synced (built, NOT committed, PENDING two-phone test)
+~130 `ConnectionQuestions` with day-rotation + reveal UI already existed as a stub, but answers saved only to local `@AppStorage` and "waiting for partner" was hardcoded fake. Now real-synced via `DailyQuestionService` + `DailyAnswerDoc`: subcollection-per-day, **answer-to-unlock** reveal (you see your partner's answer only after you answer too), passive Firestore listener (no push). `dailyAnswers` `firestore.rules` are couple-scoped, write-your-own-uid-key only. **Rules DEPLOYED; code NOT committed.** PENDING: two-phone test, then commit.
+
+### Add to Calendar — working as designed (not a bug)
+"Add to Calendar" creates the event on the **device** calendar (`sourceType = 2`, CalDAV); it just doesn't surface in the Google Calendar app, which is where it looked missing. DECISION: keep the manual button as-is for launch (on-brand); auto-add-on-schedule deferred.
+
+### Push notifications + Cloud Functions — Stage 1 of 5 done ✅
+Goal: partner-nudge feature ("Inesa is swiping — join her?"). Stages: **1 = Cloud Functions foundation [DONE]** → 2 = APNs + push capability (Apple) → 3 = FCM + device tokens (app) → 4 = test push arrives → 5 = nudge logic.
+- Node + npm + Firebase CLI installed; `firebase login` + `firebase init functions` done (JavaScript, ESLint No). `functions/` holds `index.js` (`maxInstances: 10` cost cap, `region: europe-west1`), `package.json` (Node 22), `firebase.json` functions block (firestore/storage rules intact); `npm install` done. **Committed + pushed** (scaffold `9a2a368`, lockfile `58e02ba`).
+- `helloWorld` HTTP function DEPLOYED + confirmed live. Project on **Blaze** (€257 free-trial credit, 55 days, €20/mo budget alert).
+- `firebase-functions` is on **v6** (6.6.0); v7 exists with breaking changes — deliberately NOT upgraded yet (nothing to migrate at this stage).
+- **NEXT = Stage 2** (Apple APNs: create APNs auth key in Apple Developer, add Push Notifications + Background Modes capabilities in Xcode, wire into FCM).
+- Cloud Functions also unlocks the deferred **PRE-LAUNCH HARDENING** (RevenueCat webhook, atomic invite redemption, App Check, real Storage couple-membership enforcement).
+
 ---
 
 ## Environment notes (this machine — MacBook Air M5, macOS Tahoe, Xcode 26.6)
@@ -96,6 +120,7 @@ Naive per-user live Places fetching is catastrophic (~$16k/mo at 300 users). **C
 - **Claude Code** (this tool): multi-file coordinated edits, builds, repo-wide changes.
 - **Claude chat** (the project): architecture, strategy, planning.
 - Real-device testing requires cable install (deep link won't bootstrap an install). Two-phone tests need two **different Apple IDs**.
+- **Two-phone re-test reset:** deleting `couples` + `invites` in Firestore (and `couples/` photos in Storage) is NOT enough — local `@AppStorage` keeps a zombie half-paired state. You MUST **delete + reinstall the app on BOTH phones**. Keep the shared caches (`venues`, `venueQueries`, `eventQueries`, `placeDeckQueries`); only couple data needs clearing.
 - Security is day-one, not retrofitted: Firestore rules, single-use invite tokens, photo/Vault access control all built in (token *expiry* is a planned addition, not yet implemented). Proof photos now live in Cloud Storage (not UserDefaults). Pre-launch hardening (all client-authed today, tracked together in `// PRE-LAUNCH HARDENING` comments): move cache writes + invite redemption to Cloud Functions; bind couple membership to the auth token via a custom `coupleId` claim set by a Cloud Function at pairing, so `storage.rules` (and the Firestore subcollection writes) can enforce real membership instead of just signed-in; enable App Check.
 
 ---
@@ -108,9 +133,9 @@ $6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split 
 
 ## Current phase
 
-**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall trigger ✓** (`PaywallGate` — the soft-wall *WHEN* logic: arms at 2nd match + 1st memory, or a 14-day backstop; presents at the next calm mission-start, never mid-celebration). Remaining: RevenueCat purchase/entitlement wiring behind the paywall screen, Cloud Functions for atomic redeem + cache writes + Storage/Firestore couple-membership hardening (+ App Check), NearYou→venue cache wiring.
+**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall trigger ✓** (`PaywallGate` — the soft-wall *WHEN* logic: arms at 2nd match + 1st memory, or a 14-day backstop; presents at the next calm mission-start, never mid-celebration), **Near You ✓** (curated Google Places, deck-cached — see decision above), **Cloud Functions Stage 1 ✓** (foundation live). **Daily Question sync** built (rules deployed) but PENDING two-phone test + commit. Remaining: RevenueCat purchase/entitlement wiring behind the paywall screen; push-notification Stages 2–5 (APNs → FCM → nudge logic); Cloud Functions hardening (atomic redeem + cache writes + Storage/Firestore couple-membership + App Check).
 
-**Phase 3:** Events (Ticketmaster, then Eventbrite — one at a time. No Facebook Events, no SerpApi).
+**Phase 3:** Events — **DEPRIORITIZED / pivoted.** Eventbrite is dead (public API removed); Ticketmaster code is built but dormant until we target event-rich markets (London/US). No Facebook Events, no SerpApi. Near You ships on curated Places instead.
 **Phase 4:** Polish + launch. Post-launch priority: iOS shared widgets (next-Mission, Memory-photo, days-together) — keep WARM, not guilt-tripping.
 
 **Onboarding (to build):** SHORT — name, vibe, relationship status only. Progressive collection of dates after first match/memory, fully skippable. No spark rating (off-brand).
