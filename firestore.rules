@@ -144,7 +144,12 @@ service cloud.firestore {
     // trajectory as the invite-redemption and venue-cache hardening notes.
     match /couples/{coupleId}/matches/{cardId} {
       allow read:   if isCoupleMember(coupleId);
-      allow create: if isCoupleMember(coupleId);
+      // CREATE: a member may create the match, and `createdBy` MUST be their own
+      // uid. The Stage 5 nudge targets the partner who ISN'T createdBy, so binding
+      // createdBy to the caller makes that targeting forge-proof — a member can't
+      // stamp the partner as the completer to misdirect (or self-trigger) a nudge.
+      allow create: if isCoupleMember(coupleId)
+                    && request.resource.data.createdBy == uid();
       allow update, delete: if false;
     }
 

@@ -23,7 +23,7 @@ A couples date-planning iOS app (SwiftUI). Core loop:
 - **Google Places API (New)** — venue data, read-through cached to Firestore; now also powers **Near You** (curated restaurants/wine bars/cafés). Bundle-restricted keys need the `X-Ios-Bundle-Identifier` header — see the Near You decision below.
 - **RevenueCat** (planned, not yet integrated) — paywall/trial/A-B testing
 - **Ticketmaster** — events code built but **DORMANT** (no date-appropriate Vilnius events; kept for event-rich markets like London/US). **Eventbrite: DEAD** — it removed its public Event Search API; do not pursue.
-- **Cloud Functions** (Node 22, `firebase-functions` v6, `europe-west1`) — Stage 1 foundation live (`helloWorld`); see Push notifications below.
+- **Cloud Functions** (Node 22, `firebase-functions` v6, `europe-west1`) — `helloWorld` + `onMatchCreated` (match nudge) live; see Push notifications below.
 - Firebase project: `ilovu-b5d87` · Bundle ID: `com.ilovu.app.iLovu` · Team: KUNIS, MB (Apple Org ID 7AU9U5Q6LT)
 
 ---
@@ -96,12 +96,15 @@ Near You ships as live **curated Google Places** (restaurants, wine bars, cafés
 ### Add to Calendar — working as designed (not a bug)
 "Add to Calendar" creates the event on the **device** calendar (`sourceType = 2`, CalDAV); it just doesn't surface in the Google Calendar app, which is where it looked missing. DECISION: keep the manual button as-is for launch (on-brand); auto-add-on-schedule deferred.
 
-### Push notifications + Cloud Functions — Stage 1 of 5 done ✅
-Goal: partner-nudge feature ("Inesa is swiping — join her?"). Stages: **1 = Cloud Functions foundation [DONE]** → 2 = APNs + push capability (Apple) → 3 = FCM + device tokens (app) → 4 = test push arrives → 5 = nudge logic.
-- Node + npm + Firebase CLI installed; `firebase login` + `firebase init functions` done (JavaScript, ESLint No). `functions/` holds `index.js` (`maxInstances: 10` cost cap, `region: europe-west1`), `package.json` (Node 22), `firebase.json` functions block (firestore/storage rules intact); `npm install` done. **Committed + pushed** (scaffold `9a2a368`, lockfile `58e02ba`).
+### Push notifications + Cloud Functions — ALL 5 STAGES DONE ✅ (match nudge live on two phones)
+Goal: partner-nudge feature ("Inesa is swiping — join her?"). Stages: **1 = Cloud Functions foundation [DONE]** → **2 = APNs + push capability [DONE]** → **3 = FCM + device tokens [DONE]** → **4 = test push arrives [DONE]** → **5 = nudge logic [DONE]**. The first real nudge — the MATCH nudge — is verified end-to-end on two physical phones.
+- Node + npm + Firebase CLI installed; `firebase login` + `firebase init functions` done (JavaScript, ESLint No). `functions/` holds `index.js` (`maxInstances: 10` cost cap, `region: europe-west1`), `package.json` (Node 22), `firebase.json` functions block (firestore/storage rules intact); `npm install` done.
 - `helloWorld` HTTP function DEPLOYED + confirmed live. Project on **Blaze** (€257 free-trial credit, 55 days, €20/mo budget alert).
 - `firebase-functions` is on **v6** (6.6.0); v7 exists with breaking changes — deliberately NOT upgraded yet (nothing to migrate at this stage).
-- **NEXT = Stage 2** (Apple APNs: create APNs auth key in Apple Developer, add Push Notifications + Background Modes capabilities in Xcode, wire into FCM).
+- **Stage 5 (match nudge) shape:** FCM tokens persist to `couples/{id}.fcmTokens[uid]` (per-uid map, written via `CoupleService.persistFCMToken`, parked-until-paired like display names; AppDelegate → `PushTokenBridge` → CoupleService). Permission prompt moved from cold launch to the **first mutual match** (warm, partner-framed; `PushAuthorization` + `MainTabView`). `onMatchCreated` (Firestore `onDocumentCreated` on `matches/{cardId}`) pushes the partner who ISN'T `createdBy`; match doc records `createdBy` and `firestore.rules` enforces `createdBy == uid()` so the nudge target is forge-proof. **Brand rule for all nudge copy: warm + partner-framed, NEVER time/guilt-based.**
+- **`sendTestPush` REMOVED** (the Stage-4 manual push rehearsal) once the real nudge worked; deleted from source + project.
+- **GOTCHA (learned the hard way):** the default compute service account (`<projnum>-compute@developer.gserviceaccount.com`) needs the **`roles/datastore.user`** IAM role for any function that READS/WRITES Firestore via the Admin SDK — without it `onMatchCreated`'s `coupleRef.get()` throws `7 PERMISSION_DENIED` (Admin SDK bypasses Firestore *rules* but NOT GCP *IAM*). FCM-only functions (sendTestPush) didn't expose this; the first Firestore-reading function did. Grant once via Cloud Console IAM or `gcloud projects add-iam-policy-binding`.
+- **NEXT nudge types are ON HOLD** pending real-use tone testing (user's call). Candidate: special-date reminders (anniversaries/birthdays) — can read the couple doc's existing `milestones` + `birthdays` maps, no separate date-collection step needed.
 - Cloud Functions also unlocks the deferred **PRE-LAUNCH HARDENING** (RevenueCat webhook, atomic invite redemption, App Check, real Storage couple-membership enforcement).
 
 ---
@@ -133,7 +136,7 @@ $6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split 
 
 ## Current phase
 
-**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall trigger ✓** (`PaywallGate` — the soft-wall *WHEN* logic: arms at 2nd match + 1st memory, or a 14-day backstop; presents at the next calm mission-start, never mid-celebration), **Near You ✓** (curated Google Places, deck-cached — see decision above), **Cloud Functions Stage 1 ✓** (foundation live). **Daily Question sync** built (rules deployed) but PENDING two-phone test + commit. Remaining: RevenueCat purchase/entitlement wiring behind the paywall screen; push-notification Stages 2–5 (APNs → FCM → nudge logic); Cloud Functions hardening (atomic redeem + cache writes + Storage/Firestore couple-membership + App Check).
+**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall trigger ✓** (`PaywallGate` — the soft-wall *WHEN* logic: arms at 2nd match + 1st memory, or a 14-day backstop; presents at the next calm mission-start, never mid-celebration), **Near You ✓** (curated Google Places, deck-cached — see decision above), **Push notifications ✓** (all 5 stages; match nudge live on two phones — see Push section). **Daily Question sync** built (rules deployed) but PENDING two-phone test + commit. Remaining: RevenueCat purchase/entitlement wiring behind the paywall screen; more nudge types (on hold for tone testing); Cloud Functions hardening (atomic redeem + cache writes + Storage/Firestore couple-membership + App Check).
 
 **Phase 3:** Events — **DEPRIORITIZED / pivoted.** Eventbrite is dead (public API removed); Ticketmaster code is built but dormant until we target event-rich markets (London/US). No Facebook Events, no SerpApi. Near You ships on curated Places instead.
 **Phase 4:** Polish + launch. Post-launch priority: iOS shared widgets (next-Mission, Memory-photo, days-together) — keep WARM, not guilt-tripping.

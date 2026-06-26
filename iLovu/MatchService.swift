@@ -83,6 +83,10 @@ final class MatchService {
                 .setData([
                     "cardId":    cardId,
                     "deck":      deck.rawValue,
+                    // The completer (this user, the second liker). The Stage 5
+                    // nudge function reads this to push the OTHER partner — the one
+                    // who liked it earlier and isn't here to see the celebration.
+                    "createdBy": uid,
                     "createdAt": FieldValue.serverTimestamp()
                 ], merge: true)
 

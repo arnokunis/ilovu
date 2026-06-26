@@ -126,6 +126,17 @@ struct iLovuApp: App {
                     subscriptionService.start()
                     Task { await subscriptionService.loadOfferings() }
 
+                    // Stage 5 push: AppDelegate publishes each FCM token onto
+                    // PushTokenBridge; forward it to CoupleService, which writes it
+                    // to the shared couple doc so the nudge function can reach the
+                    // partner. Replay any token that arrived before this wiring ran.
+                    PushTokenBridge.onToken = { [coupleService] token in
+                        Task { await coupleService.persistFCMToken(token) }
+                    }
+                    if let token = PushTokenBridge.latest {
+                        Task { await coupleService.persistFCMToken(token) }
+                    }
+
                     missionStore.remoteUpsert = { [coupleService, missionService] mission in
                         guard let coupleId = coupleService.coupleId else { return }
                         Task { await missionService.saveMission(coupleId: coupleId, mission: mission) }

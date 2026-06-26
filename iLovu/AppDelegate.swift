@@ -33,24 +33,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().delegate = self
         UNUserNotificationCenter.current().delegate = self
 
-        // Ask for permission, then register with APNs on success. Requesting at
-        // launch is the SIMPLE path to get a token + Stage 4 working. PRE-LAUNCH
-        // the prompt should move to a warm, contextual moment (anti-pressure
-        // brand) — e.g. right after a first match — NOT blasted at cold launch.
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .badge, .sound]
-        ) { granted, error in
-            if let error {
-                print("⚠️ Notification authorization error: \(error.localizedDescription)")
-                return
-            }
-            guard granted else {
-                print("ℹ️ Notification permission denied — no pushes will be delivered.")
-                return
-            }
-            // registerForRemoteNotifications must be called on the main thread.
-            DispatchQueue.main.async {
-                application.registerForRemoteNotifications()
+        // We NO LONGER ask for permission at cold launch. iOS only ever offers the
+        // permission prompt ONCE, so cold-asking a brand-new user (who has no idea
+        // what the app is for yet) risks a permanent "no" — losing the channel. The
+        // ask now fires at a warm, partner-framed moment: the user's first mutual
+        // match (see MainTabView). But if they ALREADY granted on a past launch,
+        // re-register with APNs so FCM keeps a fresh token across launches.
+        Task { @MainActor in
+            if await PushAuthorization.status() == .authorized {
+                UIApplication.shared.registerForRemoteNotifications()
             }
         }
 
@@ -81,11 +72,70 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 extension AppDelegate: MessagingDelegate {
 
     // Fired whenever FCM issues or rotates the registration token. THIS string
-    // is the push address. Logged prominently so Stage 4 can copy it; Stage 5
-    // will persist it to the couple doc instead of just printing.
+    // is the push address. Logged for debugging; Stage 5 also hands it to
+    // CoupleService (via PushTokenBridge below) so it lands on the couple doc and
+    // the nudge Cloud Function can reach the partner's device.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let fcmToken else { return }
         print("📲 FCM registration token:\n\(fcmToken)")
+        // Hop to the main actor (this delegate callback isn't isolated) and
+        // publish onto the bridge. iLovuApp forwards it to CoupleService.
+        Task { @MainActor in PushTokenBridge.publish(fcmToken) }
+    }
+}
+
+// MARK: - Push token bridge
+//
+// The UIKit AppDelegate can't read the SwiftUI environment where CoupleService
+// lives, so the FCM token (delivered above) is published here; iLovuApp wires
+// `onToken` at launch to forward each token to CoupleService, which writes it to
+// couples/{id}.fcmTokens[uid]. `latest` covers the ordering where a token
+// arrives BEFORE that forwarding closure is wired (we replay it on wire-up).
+@MainActor
+enum PushTokenBridge {
+    private(set) static var latest: String?
+    static var onToken: ((String) -> Void)?
+
+    static func publish(_ token: String) {
+        latest = token
+        onToken?(token)
+    }
+}
+
+// MARK: - Push authorization
+//
+// Centralizes the OS-level notification permission so the request lives in ONE
+// place — the warm first-match moment (MainTabView) calls request(); cold launch
+// only ever calls status(). Keeping it here (not in AppDelegate's instance) means
+// any view can ask without reaching the delegate.
+@MainActor
+enum PushAuthorization {
+
+    /// The current OS notification authorization status. `.notDetermined` means we
+    /// still hold the one-shot prompt; `.authorized`/`.denied`/`.provisional` mean
+    /// it's already been decided and re-asking shows no UI.
+    static func status() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+
+    /// Fires the ONE-SHOT iOS permission prompt and, on grant, registers with APNs
+    /// so FCM can mint a token (delivered to AppDelegate → PushTokenBridge). No-ops
+    /// into the current status if permission was already decided. Returns granted.
+    @discardableResult
+    static func request() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            if granted {
+                UIApplication.shared.registerForRemoteNotifications()
+            } else {
+                print("ℹ️ Notification permission denied — no pushes will be delivered.")
+            }
+            return granted
+        } catch {
+            print("⚠️ Notification authorization error: \(error.localizedDescription)")
+            return false
+        }
     }
 }
 

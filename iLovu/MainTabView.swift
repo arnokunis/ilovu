@@ -99,6 +99,14 @@ struct MainTabView: View {
     // eventToShow — the detail sheet sits above the tab bar.
     @State private var cardToShow: DateCard?
 
+    // Stage 5 push — the warm notification-permission ask. A mutual match is the
+    // moment we ask (iOS only offers the one-shot prompt once ever, so we never
+    // cold-ask). `pushAskPending` is armed in handleMatch when the OS status is
+    // still .notDetermined; `showPushAsk` drives the partner-framed alert, which we
+    // present only once the celebration cover is gone and nothing else is up.
+    @State private var pushAskPending = false
+    @State private var showPushAsk = false
+
     var body: some View {
         TabView(selection: $selectedTab) {
             HomeView(selectedTab: $selectedTab)
@@ -181,9 +189,44 @@ struct MainTabView: View {
         // the shared couple doc (couple listener republishes isPremium).
         .onChange(of: subscriptionService.myEntitlementActive) { _, _ in updatePremiumGate() }
         .onChange(of: coupleService.couple?.isPremium) { _, _ in updatePremiumGate() }
+        // When a match celebration cover dismisses, see if a warm push ask is
+        // queued. Watched on both decks because either celebration can be the
+        // first match. maybePresentPushAsk re-checks we're truly idle first.
+        .onChange(of: matchedCard) { _, newValue in if newValue == nil { maybePresentPushAsk() } }
+        .onChange(of: matchedEvent) { _, newValue in if newValue == nil { maybePresentPushAsk() } }
+        // The warm, partner-framed permission ask. Anti-pressure brand: no time/
+        // guilt framing, and "Not now" simply defers — we never lose the iOS
+        // one-shot prompt because the SYSTEM prompt only fires on "Sounds good".
+        .alert("Stay in the loop 💛", isPresented: $showPushAsk) {
+            Button("Sounds good") { Task { await PushAuthorization.request() } }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Want a heads-up when \(pushAskPartnerName) is ready to plan a date together?")
+        }
         // Detach the listeners if this view ever goes away (hygiene — they
         // normally live for the whole signed-in session).
         .onDisappear { detachCoupleListeners() }
+    }
+
+    /// The partner's first name for the push ask copy, or a warm fallback.
+    private var pushAskPartnerName: String {
+        coupleService.partnerDisplayName ?? "your partner"
+    }
+
+    /// Presents the warm push ask IF one is queued and we're genuinely idle — no
+    /// celebration cover, no mission/detail sheet. Called when a match cover
+    /// dismisses; the short delay lets the "Plan This Date" flow win the race (it
+    /// opens the mission sheet ~0.45s after the cover), in which case we hold the
+    /// ask for the next match rather than stacking a system prompt under a sheet.
+    private func maybePresentPushAsk() {
+        guard pushAskPending else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            guard pushAskPending,
+                  matchedCard == nil, matchedEvent == nil,
+                  missionToPlan == nil, eventToShow == nil, cardToShow == nil else { return }
+            pushAskPending = false
+            showPushAsk = true
+        }
     }
 
     // MARK: - Couple listeners (matches + missions)
@@ -314,6 +357,16 @@ struct MainTabView: View {
         // calm mission-start in HomeView.
         if let id = coupleId {
             paywallGate.recordMatchCount(celebrated.count, coupleId: id)
+        }
+
+        // Stage 5 push: a real match is the warm, partner-relevant moment to ask
+        // for notification permission. Only arm if iOS still holds the one-shot
+        // prompt (.notDetermined); maybePresentPushAsk shows it once the
+        // celebration is gone. Granted/denied users never see it again.
+        Task { @MainActor in
+            if await PushAuthorization.status() == .notDetermined {
+                pushAskPending = true
+            }
         }
 
         switch Deck(rawValue: match.deck) {

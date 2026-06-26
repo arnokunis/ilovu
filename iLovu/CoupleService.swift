@@ -184,6 +184,8 @@ final class CoupleService {
         couple = Couple(id: coupleRef.documentID, members: [invite.creatorId, uid], createdAt: nil)
         // If a name was set while still unpaired, write it now that there's a couple.
         await flushPendingDisplayName()
+        // Same for an FCM token that arrived before pairing.
+        await flushPendingFCMToken()
         // And seed the onboarding name (which never goes through setDisplayName).
         await seedDisplayNameFromLocalIfNeeded()
         return coupleRef.documentID
@@ -209,6 +211,8 @@ final class CoupleService {
             couple = resolved
             // A name set before the couple loaded now has somewhere to go.
             await flushPendingDisplayName()
+            // Likewise for a token that arrived before the couple resolved.
+            await flushPendingFCMToken()
             // Seed the onboarding name on first couple load (e.g. inviter's
             // cold launch / when the partner joins) if it's not already set.
             await seedDisplayNameFromLocalIfNeeded()
@@ -326,6 +330,54 @@ final class CoupleService {
         guard !local.isEmpty else { return }
         log("seeding display name from local userName '\(local)'")
         await setDisplayName(local)
+    }
+
+    // MARK: - Push token (FCM)
+    //
+    // Each member's FCM registration token is written to couples/{id}.fcmTokens[uid]
+    // so the Stage 5 match-nudge Cloud Function can address the PARTNER's device.
+    // The client never READS tokens (only the function does), so they're not on the
+    // Couple model — just written via a dot-path update, which the existing couples
+    // update rule already permits (it only freezes `members`).
+    //
+    // Same parking shape as setDisplayName: an FCM token can arrive before sign-in
+    // OR before pairing, so we stash it and flush once a couple is available.
+    private var pendingFCMToken: String?
+
+    /// Writes the signed-in user's FCM token to the shared couple doc. Stashes it
+    /// first so it survives the common races (token before sign-in / before
+    /// pairing); flushPendingFCMToken() retries it at the next couple load. A
+    /// rotated token simply overwrites this uid's entry. Silent on failure — the
+    /// token stays parked and a later call (rotation or couple-load) re-attempts.
+    func persistFCMToken(_ token: String) async {
+        pendingFCMToken = token
+        guard let uid = Auth.auth().currentUser?.uid else {
+            log("persistFCMToken — not signed in yet, parked")
+            return
+        }
+        // Resolve the couple if in-memory state hasn't caught up (same race guard
+        // as setDisplayName), then we genuinely need a couple to write to.
+        if couple?.id == nil { _ = try? await currentCouple() }
+        guard let coupleId = couple?.id else {
+            log("persistFCMToken — no couple yet, parked")
+            return
+        }
+        do {
+            try await db.collection("couples").document(coupleId)
+                .updateData(["fcmTokens.\(uid)": token])
+            pendingFCMToken = nil
+            log("persistFCMToken — wrote token for \(uid) to couple \(coupleId)")
+        } catch {
+            log("persistFCMToken — write FAILED (\(error.localizedDescription)); kept parked")
+        }
+    }
+
+    /// Writes any token parked before a couple existed. Called after the couple is
+    /// created (redeem) or first loads (currentCouple). No-op if nothing's parked.
+    func flushPendingFCMToken() async {
+        guard let token = pendingFCMToken else { return }
+        log("flushing parked FCM token")
+        await persistFCMToken(token)
     }
 
     // MARK: - Couple photo
