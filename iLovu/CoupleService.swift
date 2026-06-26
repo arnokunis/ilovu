@@ -22,6 +22,7 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import FirebaseStorage
 
 @MainActor
@@ -378,6 +379,79 @@ final class CoupleService {
         guard let token = pendingFCMToken else { return }
         log("flushing parked FCM token")
         await persistFCMToken(token)
+    }
+
+    // MARK: - Manual partner nudge ("come swipe with me")
+    //
+    // The Home dashboard's Nudge button calls nudgePartner(), which invokes the
+    // `nudgePartner` CALLABLE Cloud Function (authenticated; resolves the couple
+    // server-side and rate-limits per couple). The cooldown is mirrored here only
+    // to drive button state — the function is the authority that enforces it.
+
+    // Functions handle for the EU region the functions are deployed in. Computed
+    // (cheap, cached) so constructing CoupleService still touches no Firebase.
+    private var functions: Functions { Functions.functions(region: "europe-west1") }
+
+    /// Per-couple manual-nudge cooldown, mirroring the server's NUDGE_COOLDOWN_MS.
+    static let manualNudgeCooldown: TimeInterval = 2 * 60 * 60   // 2 hours
+
+    /// When the manual nudge becomes available again, or nil if it never fired /
+    /// unpaired. Rides observeCouple, so BOTH phones reflect the shared cooldown.
+    var manualNudgeAvailableAt: Date? {
+        guard let ts = couple?.lastManualNudgeAt else { return nil }
+        return ts.dateValue().addingTimeInterval(Self.manualNudgeCooldown)
+    }
+
+    /// Whether the manual nudge can be sent right now (no active cooldown). Used
+    /// for button state only; the server re-checks and is authoritative.
+    var canSendManualNudge: Bool {
+        guard let until = manualNudgeAvailableAt else { return true }
+        return Date() >= until
+    }
+
+    /// Outcome of a manual nudge, for the caller's UI feedback.
+    enum NudgeOutcome: Equatable {
+        case sent
+        case partnerUnreachable            // partner has no token / notifications off
+        case cooldown(retryAfterSec: Int)
+        case notPaired
+        case failed
+    }
+
+    /// Sends the manual "come swipe with me" nudge via the `nudgePartner` callable.
+    /// The function authenticates the caller, resolves the couple, rate-limits per
+    /// couple, and pushes the partner a warm invite. Returns a NudgeOutcome for UI
+    /// feedback; never throws.
+    func nudgePartner() async -> NudgeOutcome {
+        guard Auth.auth().currentUser != nil else { return .notPaired }
+        do {
+            let result = try await functions.httpsCallable("nudgePartner").call()
+            let data = result.data as? [String: Any]
+            // Absent `delivered` (shouldn't happen) is treated as sent.
+            let delivered = (data?["delivered"] as? Bool) ?? true
+            log("nudgePartner — delivered=\(delivered)")
+            return delivered ? .sent : .partnerUnreachable
+        } catch {
+            let ns = error as NSError
+            if ns.domain == FunctionsErrorDomain,
+               let code = FunctionsErrorCode(rawValue: ns.code) {
+                switch code {
+                case .resourceExhausted:
+                    let details = ns.userInfo[FunctionsErrorDetailsKey] as? [String: Any]
+                    let retry = (details?["retryAfterSec"] as? Int)
+                        ?? Int(Self.manualNudgeCooldown)
+                    log("nudgePartner — cooldown, retry in \(retry)s")
+                    return .cooldown(retryAfterSec: retry)
+                case .failedPrecondition, .unauthenticated:
+                    return .notPaired
+                default:
+                    log("nudgePartner — failed (\(code.rawValue)): \(ns.localizedDescription)")
+                    return .failed
+                }
+            }
+            log("nudgePartner — failed: \(ns.localizedDescription)")
+            return .failed
+        }
     }
 
     // MARK: - Couple photo

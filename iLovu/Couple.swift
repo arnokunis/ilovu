@@ -94,6 +94,12 @@ struct Couple: Codable, Identifiable {
     /// straddling a bucket boundary don't ping-pong it). nil until first claimed.
     var eventLocationUpdatedAt: Timestamp? = nil
 
+    /// When either partner last fired the manual "come swipe with me" nudge.
+    /// Written ONLY by the `nudgePartner` Cloud Function (server timestamp); the
+    /// client just reads it to reflect the shared per-couple cooldown on the Nudge
+    /// button. nil until the first nudge. Optional/defaulted so older docs decode.
+    var lastManualNudgeAt: Timestamp? = nil
+
     /// The *other* member's uid, from the current user's point of view.
     /// nil if this somehow isn't a two-person couple.
     func partner(of uid: String) -> String? {

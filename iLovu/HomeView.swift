@@ -81,11 +81,11 @@ struct HomeView: View {
         memoryStore.memories.count
     }
 
-    // Timestamp of the last partner nudge. Stored as a Double (seconds
-    // since 1970) because @AppStorage handles Double natively. We use
-    // Calendar.isDateInToday rather than a raw date string so timezones
-    // and DST never trip us up.
-    @AppStorage("lastNudgeTimestamp") private var lastNudgeTimestamp: Double = 0
+    // True while a nudge call is in flight, so the button disables and shows a
+    // sending state. The per-couple COOLDOWN itself is read live from the shared
+    // couple doc (coupleService.canSendManualNudge) — the Cloud Function is the
+    // authority and both phones see the same window, so there's no local store.
+    @State private var isSendingNudge: Bool = false
 
     // Picked once per HomeView instance (~once per app launch) so the
     // suggestion stays stable while the user looks at the dashboard.
@@ -94,8 +94,9 @@ struct HomeView: View {
     // non-crashing.
     @State private var tonightsCard: DateCard = SampleCards.all.randomElement() ?? homeFallbackCard
 
-    // Drives the brief "Nudge sent! 💕" toast at the top of the screen.
-    @State private var showNudgeConfirmation: Bool = false
+    // Message for the brief toast at the top of the screen (nil = hidden). Holds
+    // the outcome copy — sent / cooldown / partner-unreachable / error.
+    @State private var nudgeToast: String? = nil
 
     // When set, MissionDetailView is presented as a sheet so the user
     // can edit / mark complete the tapped mission.
@@ -131,9 +132,9 @@ struct HomeView: View {
             // Toast overlay — sits on top of the ScrollView, drops in
             // from the top edge, fades out on its own. allowsHitTesting
             // is off so it never blocks taps on the content underneath.
-            if showNudgeConfirmation {
+            if let nudgeToast {
                 VStack {
-                    nudgeConfirmationToast
+                    nudgeToastView(nudgeToast)
                         .padding(.top, 12)
                     Spacer()
                 }
@@ -425,39 +426,42 @@ struct HomeView: View {
     }
 
     // MARK: - Nudge Partner
-    // A soft secondary button. The whole spam-prevention story is in
-    // `hasNudgedToday` — once true, the button changes copy, fades,
-    // and becomes disabled until midnight (Calendar.isDateInToday
-    // does the day-boundary check).
+    // A soft secondary button that sends a real "come swipe with me" push to the
+    // partner via the `nudgePartner` callable Cloud Function. Spam-prevention is
+    // now SERVER-authoritative (one nudge per couple per cooldown); the button
+    // disables while a call is in flight or while the shared cooldown is active
+    // (coupleService.canSendManualNudge, read live off the couple doc).
 
-    // True when there's a recorded nudge whose timestamp is in the
-    // current calendar day. Cheap to compute on every redraw.
-    private var hasNudgedToday: Bool {
-        guard lastNudgeTimestamp > 0 else { return false }
-        return Calendar.current.isDateInToday(
-            Date(timeIntervalSince1970: lastNudgeTimestamp)
-        )
-    }
+    // True when the per-couple cooldown is active — button shows a calm resting
+    // state instead of the invite, and taps are blocked.
+    private var nudgeOnCooldown: Bool { !coupleService.canSendManualNudge }
+
+    // Button is inert while sending OR cooling down.
+    private var nudgeDisabled: Bool { isSendingNudge || nudgeOnCooldown }
 
     // Use the partner's name if we have one; otherwise warm fallback.
     private var nudgeTarget: String {
         coupleService.partnerDisplayName ?? "your partner"
     }
 
+    private var nudgeButtonLabel: String {
+        if isSendingNudge { return "Sending…" }
+        if nudgeOnCooldown { return "Nudge sent — check back soon 💕" }
+        return "💕 Nudge \(nudgeTarget) to swipe"
+    }
+
     private var nudgeButton: some View {
         Button(action: sendNudge) {
-            Text(hasNudgedToday
-                 ? "Nudge sent today 💕"
-                 : "💕 Nudge \(nudgeTarget) to swipe")
+            Text(nudgeButtonLabel)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(hasNudgedToday ? Color.gray : Color.louvCoral)
+                .foregroundStyle(nudgeDisabled ? Color.gray : Color.louvCoral)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.white)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule().stroke(
-                        hasNudgedToday
+                        nudgeDisabled
                             ? Color.gray.opacity(0.25)
                             : Color.louvCoral.opacity(0.45),
                         lineWidth: 1.5
@@ -466,16 +470,17 @@ struct HomeView: View {
                 .louvShadow()
         }
         .buttonStyle(.plain)
-        .disabled(hasNudgedToday)
+        .disabled(nudgeDisabled)
     }
 
-    // The toast that drops in from the top after a successful nudge.
-    private var nudgeConfirmationToast: some View {
+    // The toast that drops in from the top after a nudge attempt. Message varies
+    // by outcome (sent / cooldown / partner-unreachable / error).
+    private func nudgeToastView(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(Color.matchGreen)
-            Text("Nudge sent! 💕")
+            Text(message)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.deepRose)
         }
@@ -486,23 +491,39 @@ struct HomeView: View {
         .louvShadow()
     }
 
-    // Records the nudge, vibrates, shows the toast, and schedules its
-    // own dismissal. No network call yet — that'll come when partner
-    // sync is wired through Firebase.
+    // Fires the real nudge: haptic, call the callable, then show outcome copy.
+    // The server enforces the per-couple cooldown, so even a stale-enabled button
+    // can't actually spam — a cooldown reply just shows the resting message.
     private func sendNudge() {
+        guard !isSendingNudge else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        lastNudgeTimestamp = Date().timeIntervalSince1970
-
-        withAnimation(LouvAnimation.spring) {
-            showNudgeConfirmation = true
+        isSendingNudge = true
+        Task {
+            let outcome = await coupleService.nudgePartner()
+            isSendingNudge = false
+            switch outcome {
+            case .sent:
+                showNudgeToast("Nudge sent! 💕")
+            case .partnerUnreachable:
+                // Partner hasn't turned on notifications — be honest, stay warm.
+                showNudgeToast("\(nudgeTarget) hasn't turned on nudges yet")
+            case .cooldown:
+                showNudgeToast("Already nudged — check back soon 💕")
+            case .notPaired:
+                showNudgeToast("Connect with your partner first")
+            case .failed:
+                showNudgeToast("Couldn't send just now — try again")
+            }
         }
+    }
 
-        // Auto-dismiss after ~2s. Long enough to read, short enough to
-        // get out of the way before the user moves on.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeOut(duration: 0.3)) {
-                showNudgeConfirmation = false
+    // Shows a toast and auto-dismisses it after ~2.5s, but only clears it if the
+    // same message is still showing (so a newer toast isn't cut short).
+    private func showNudgeToast(_ message: String) {
+        withAnimation(LouvAnimation.spring) { nudgeToast = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            if nudgeToast == message {
+                withAnimation(.easeOut(duration: 0.3)) { nudgeToast = nil }
             }
         }
     }

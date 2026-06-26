@@ -16,7 +16,7 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 
@@ -125,3 +125,101 @@ exports.onMatchCreated = onDocumentCreated(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Manual "come swipe with me" nudge — one partner taps a button to invite the
+// other into the app right now.
+//
+// CALLABLE (onCall), NOT HTTP: the Firebase SDK attaches the caller's Firebase
+// auth, so request.auth.uid is a VERIFIED signed-in user. We resolve the couple
+// by membership (never trusting a client-supplied id), so only a real member can
+// trigger a nudge, and only ever to their own partner. Reuses the same send path,
+// fcmTokens, and roles/datastore.user permission as onMatchCreated.
+//
+// COST: inherits maxInstances:10 + region from setGlobalOptions.
+//
+// ANTI-SPAM: one nudge per COUPLE per NUDGE_COOLDOWN_MS, authoritative on the
+// server. The stamp lives on the couple doc (shared across both partners and
+// surviving reinstall — a client-only/per-device guard wouldn't). 2h is a
+// deliberate anti-pressure default: it kills rapid-fire spam but still allows a
+// genuine re-invite later in the day. Tune via the one constant below.
+//
+// BRAND (hard rule): warm INVITE tone, never nagging / "you haven't…".
+//
+// PRE-LAUNCH HARDENING: the cooldown stamp (lastManualNudgeAt) is writable by a
+// client under the current couples update rule (members can write non-`members`
+// fields). For our two-trusted-partner model that only lets someone loosen their
+// OWN couple's cooldown, so it's a UX guard, not a security boundary — consistent
+// with the matches/missions trust posture. Lock it (rules denying client writes
+// to this field, or a function-only doc) alongside the other hardening later.
+const NUDGE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours, per couple
+
+exports.nudgePartner = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in to nudge your partner.");
+  }
+
+  const db = admin.firestore();
+  // Resolve the caller's couple by membership — never trust a client-passed id.
+  const snap = await db.collection("couples")
+    .where("members", "array-contains", uid).limit(1).get();
+  if (snap.empty) {
+    throw new HttpsError("failed-precondition", "You're not paired yet.");
+  }
+  const coupleRef = snap.docs[0].ref;
+  const couple = snap.docs[0].data();
+
+  const partnerUid = (couple.members || []).find((m) => m !== uid);
+  if (!partnerUid) {
+    throw new HttpsError("failed-precondition", "No partner on this couple.");
+  }
+
+  // Rate limit (per couple). Reading the stamp at call time keeps it authoritative
+  // even though two phones share it.
+  const lastMs = (couple.lastManualNudgeAt && couple.lastManualNudgeAt.toMillis)
+    ? couple.lastManualNudgeAt.toMillis() : 0;
+  const elapsed = Date.now() - lastMs;
+  if (lastMs && elapsed < NUDGE_COOLDOWN_MS) {
+    const retryAfterSec = Math.ceil((NUDGE_COOLDOWN_MS - elapsed) / 1000);
+    throw new HttpsError(
+      "resource-exhausted",
+      "You nudged recently — give it a little while.",
+      { retryAfterSec },
+    );
+  }
+
+  const token = (couple.fcmTokens || {})[partnerUid];
+  if (!token) {
+    // Partner hasn't enabled notifications / no device registered. Not an error —
+    // report it so the client can show an honest, gentle message (and we don't
+    // burn the cooldown on a nudge that couldn't be delivered).
+    return { delivered: false, reason: "partner-no-token" };
+  }
+
+  const names = couple.displayNames || {};
+  const callerName = (names[uid] || "").trim() || "Your partner";
+  const title = `${callerName} wants to plan a date with you 💛`;
+  const body = "Open iLovu to swipe together →";
+
+  try {
+    await admin.messaging().send({ token, notification: { title, body } });
+  } catch (err) {
+    console.error("nudgePartner send failed:", err.code, err.message);
+    if (err.code === "messaging/registration-token-not-registered") {
+      await coupleRef.update({
+        [`fcmTokens.${partnerUid}`]: admin.firestore.FieldValue.delete(),
+      });
+      return { delivered: false, reason: "partner-no-token" };
+    }
+    throw new HttpsError("unavailable", "Couldn't reach your partner just now.");
+  }
+
+  // Stamp the cooldown ONLY after a successful send, so a failed/undelivered
+  // nudge never locks the user out.
+  await coupleRef.update({
+    lastManualNudgeAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  console.log(`nudgePartner: ${uid} nudged ${partnerUid}`);
+  return { delivered: true };
+});
