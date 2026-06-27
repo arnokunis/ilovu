@@ -28,6 +28,10 @@ struct UsView: View {
     @State private var couplePhotoItem: PhotosPickerItem?
     @State private var isUploadingCouplePhoto = false
 
+    // Direct picker for the personal profile photo (tap the row avatar). Saves
+    // locally to ProfileStore — the name/chevron area still opens the full sheet.
+    @State private var profilePhotoItem: PhotosPickerItem?
+
     // Couple-story editor sheet + whether the post-connect setup card is showing.
     @State private var showCoupleStory = false
     @State private var showSetupCard = false
@@ -341,35 +345,65 @@ struct UsView: View {
     // either later.
 
     private var profileRow: some View {
-        Button {
-            showEditProfile = true
-        } label: {
-            HStack(spacing: 14) {
+        HStack(spacing: 14) {
+            // Tap the avatar to change the photo directly (like the couple photo
+            // up top); the camera badge signals it. The rest of the row opens the
+            // full Edit Profile sheet (name + photo).
+            PhotosPicker(selection: $profilePhotoItem, matching: .images) {
                 avatar
                     .frame(width: 52, height: 52)
                     .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(userName.isEmpty ? "Add your name" : userName)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Color.deepRose)
-                    Text("Edit name & photo")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.gray)
-                }
-
-                Spacer()
-
-                Image(systemName: "pencil.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color.louvCoral)
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.deepRose)
+                            .padding(5)
+                            .background(Circle().fill(.white))
+                            .offset(x: 2, y: 2)
+                    }
             }
-            .padding(16)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .louvShadow()
+            .buttonStyle(.plain)
+
+            Button {
+                showEditProfile = true
+            } label: {
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(userName.isEmpty ? "Add your name" : userName)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Color.deepRose)
+                        Text("Edit name & photo")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.gray)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color.louvCoral)
+                }
+                // Make the whole name/chevron area (incl. the Spacer) tappable.
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .louvShadow()
+        // Picked a new avatar — downscale to the avatar budget (512/0.8) and save
+        // locally. No couple sync: the profile photo is device-local for now.
+        .onChange(of: profilePhotoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let raw = try? await item.loadTransferable(type: Data.self),
+                   let jpeg = ImageDownscaler.downscaledJPEG(from: raw, maxEdge: 512, quality: 0.8) {
+                    profileStore.setPhoto(jpeg)
+                }
+                profilePhotoItem = nil
+            }
+        }
     }
 
     @ViewBuilder

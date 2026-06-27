@@ -77,12 +77,27 @@ struct EditProfileView: View {
 
     private var photoSection: some View {
         VStack(spacing: 14) {
-            avatar
-                .frame(width: 120, height: 120)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white, lineWidth: 3))
-                .louvShadow()
+            // Tap the photo itself to pick a new one — mirrors the couple photo on
+            // the Us header. The camera badge signals it's editable.
+            PhotosPicker(selection: $pickerItem, matching: .images) {
+                avatar
+                    .frame(width: 120, height: 120)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white, lineWidth: 3))
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.deepRose)
+                            .padding(8)
+                            .background(Circle().fill(.white))
+                            .offset(x: 2, y: 2)
+                    }
+                    .louvShadow()
+            }
+            .buttonStyle(.plain)
 
+            // Text link kept for discoverability — an empty avatar shows the name
+            // initial, not an "add photo" hint, so the label still earns its place.
             PhotosPicker(selection: $pickerItem, matching: .images) {
                 Text(draftPhoto == nil ? "Add a photo" : "Change photo")
                     .font(.system(size: 15, weight: .semibold))
