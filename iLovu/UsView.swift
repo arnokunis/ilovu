@@ -480,14 +480,17 @@ struct UsView: View {
     }
 
     // Thumbnail uses .fill + clipped so the photo always fills the
-    // 4:3 frame without letterboxing, even if the source aspect is
-    // wildly different. The detail view shows the uncropped version.
+    // full-width × 220 frame without letterboxing, even if the source aspect is
+    // wildly different. scaledToFill PRESERVES the photo's own proportions (the
+    // frame + clipped do the cropping); never .aspectRatio(<ratio>, …), which
+    // would force the image to that ratio and stretch faces. The detail view
+    // shows the uncropped version.
     @ViewBuilder
     private func photoThumbnail(for memory: Memory) -> some View {
         MemoryImage(memory: memory) { image in
             image
                 .resizable()
-                .aspectRatio(4/3, contentMode: .fill)
+                .scaledToFill()
                 .frame(maxWidth: .infinity)
                 .frame(height: 220)
                 .clipped()
