@@ -5,6 +5,10 @@
  * onMatchCreated — Stage 5 partner nudge: pushes the partner who didn't complete
  *                  a match. (sendTestPush, the Stage 4 manual push rehearsal, was
  *                  removed once onMatchCreated was verified on two phones.)
+ * nudgePartner — manual "come swipe with me" nudge (callable, rate-limited).
+ * sendDateReminders — SCHEDULED daily special-date reminders (anniversary,
+ *                  engagement, wedding, birthdays). runDateRemindersNow is its
+ *                  TEST-ONLY manual trigger (remove before launch).
  *
  * GLOBAL GUARDRAILS — applied to EVERY function in this codebase:
  *   • maxInstances: a hard ceiling on concurrent instances, so a bug or a
@@ -18,6 +22,7 @@
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -222,4 +227,237 @@ exports.nudgePartner = onCall(async (request) => {
   });
   console.log(`nudgePartner: ${uid} nudged ${partnerUid}`);
   return { delivered: true };
+});
+
+// ---------------------------------------------------------------------------
+// SPECIAL-DATE REMINDERS — a SCHEDULED (cron) function, our first of this kind.
+//
+// Once a day it scans every couple and pushes a warm reminder when one of their
+// recurring annual dates is TODAY or LEAD-days away:
+//   • anniversary  (milestones.dating, legacy anniversaryDate fallback) — always
+//   • engagement   (milestones.engaged)  — only if status Engaged/Married
+//   • wedding      (milestones.wedding)  — only if status Married
+//   • birthdays    (birthdays[uid])      — always, BOTH partners' birthdays
+//
+// Each date therefore fires TWICE a year: a heads-up LEAD days before, and one
+// on the day. Matching is on MONTH+DAY only (year ignored — it recurs annually).
+//
+// RECIPIENTS:
+//   • Shared dates (anniversary/engagement/wedding) -> BOTH partners.
+//   • A birthday -> the OTHER partner only ("It's [Name]'s birthday…"), never
+//     the birthday person. >>> FLAGGED for confirmation: flip to both easily by
+//     changing the recipients line in buildReminders().
+//
+// TIMEZONE (flagged): per-couple local time is hard — eventLocationBucket is a
+// coarse lat/lng string with no tz attached, and we have no tz library. So we
+// run ONCE daily at REMINDER_HOUR in REMINDER_TZ (Europe/Vilnius, our launch
+// market) and treat every couple's dates in that same zone. Nobody is pinged at
+// 3am locally for a Vilnius-area user base; revisit (real per-couple tz) when we
+// expand markets.
+//
+// DOUBLE-SEND GUARD: each reminder we send stamps couples/{id}.remindersSent[key]
+// with today's date string. A second run the same day (retry / manual test) sees
+// the stamp and skips — so a date never double-fires in a day. (Server-only
+// field; not in the Swift model, harmlessly ignored on decode.)
+//
+// COST: inherits maxInstances:10 + region. One Firestore read of the couples
+// collection per day + a handful of pushes; trivial. Full-collection scan is
+// fine at our scale — revisit (sharding / date index) only at large N.
+const REMINDER_LEAD_DAYS = 3;          // heads-up: this many days before the date
+const REMINDER_TZ = "Europe/Vilnius";  // single-zone approximation (see note above)
+const REMINDER_HOUR = 9;               // 09:00 local — a sane, non-3am hour
+
+// MM-DD for a date, evaluated in REMINDER_TZ (so a date picked at local midnight
+// reads as the day the user meant, not UTC-shifted).
+function monthDayInTz(date, tz) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const m = parts.find((p) => p.type === "month").value;
+  const d = parts.find((p) => p.type === "day").value;
+  return `${m}-${d}`;
+}
+
+// YYYY-MM-DD for a date in REMINDER_TZ — the per-day dedup key for remindersSent.
+function dateKeyInTz(date, tz) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year").value;
+  const m = parts.find((p) => p.type === "month").value;
+  const d = parts.find((p) => p.type === "day").value;
+  return `${y}-${m}-${d}`;
+}
+
+// Decide which reminders this couple has TODAY. Returns a list of
+// { key, recipients:[uid…], title, body }. `key` is stable per occurrence so the
+// dedup stamp works (heads-up and day-of are distinct, and live on different
+// calendar days anyway).
+function buildReminders(couple, todayMD, headsMD) {
+  const out = [];
+  const members = couple.members || [];
+  const names = couple.displayNames || {};
+  const status = couple.relationshipStatus; // "Dating" | "Engaged" | "Married"
+  const lead = REMINDER_LEAD_DAYS;
+
+  // Match a stored Timestamp's month+day against today / heads-up day.
+  // Returns "day" | "heads" | null.
+  const occasion = (ts) => {
+    if (!ts || !ts.toDate) return null;
+    const md = monthDayInTz(ts.toDate(), REMINDER_TZ);
+    if (md === todayMD) return "day";
+    if (md === headsMD) return "heads";
+    return null;
+  };
+
+  const milestones = couple.milestones || {};
+
+  // --- Anniversary (dating). Always relevant; legacy anniversaryDate fallback. ---
+  const datingTs = milestones.dating || couple.anniversaryDate;
+  const datingWhen = occasion(datingTs);
+  if (datingWhen === "day") {
+    out.push({ key: "anniv:day", recipients: members,
+      title: "Happy anniversary 💛", body: "Make today count together" });
+  } else if (datingWhen === "heads") {
+    out.push({ key: "anniv:heads", recipients: members,
+      title: `Your anniversary is in ${lead} days 💛`, body: "Plan something together" });
+  }
+
+  // --- Engagement. Only once Engaged or Married. ---
+  if (status === "Engaged" || status === "Married") {
+    const w = occasion(milestones.engaged);
+    if (w === "day") {
+      out.push({ key: "engaged:day", recipients: members,
+        title: "Happy engagement anniversary 💛", body: "Celebrate it today" });
+    } else if (w === "heads") {
+      out.push({ key: "engaged:heads", recipients: members,
+        title: `Your engagement anniversary is in ${lead} days 💛`, body: "Plan something together" });
+    }
+  }
+
+  // --- Wedding. Only once Married. ---
+  if (status === "Married") {
+    const w = occasion(milestones.wedding);
+    if (w === "day") {
+      out.push({ key: "wedding:day", recipients: members,
+        title: "Happy wedding anniversary 💛", body: "Make today count together" });
+    } else if (w === "heads") {
+      out.push({ key: "wedding:heads", recipients: members,
+        title: `Your wedding anniversary is in ${lead} days 💛`, body: "Plan something together" });
+    }
+  }
+
+  // --- Birthdays. Each partner's birthday -> the OTHER partner only. ---
+  const birthdays = couple.birthdays || {};
+  for (const bdayUid of Object.keys(birthdays)) {
+    const w = occasion(birthdays[bdayUid]);
+    if (!w) continue;
+    const partnerUid = members.find((m) => m !== bdayUid);
+    if (!partnerUid) continue; // missing/half-paired couple — skip gracefully
+    const who = (names[bdayUid] || "").trim() || "Your partner";
+    // >>> To ping BOTH partners instead, change `[partnerUid]` to `members`.
+    if (w === "day") {
+      out.push({ key: `bday:${bdayUid}:day`, recipients: [partnerUid],
+        title: `It's ${who}'s birthday today 💛`, body: "Make it special" });
+    } else {
+      out.push({ key: `bday:${bdayUid}:heads`, recipients: [partnerUid],
+        title: `${who}'s birthday is in ${lead} days 💛`, body: "Plan a surprise" });
+    }
+  }
+
+  return out;
+}
+
+// Send one reminder to its recipients. Skips recipients with no token, cleans up
+// stale tokens (same policy as onMatchCreated). Returns true if ≥1 push landed.
+async function sendReminder(coupleRef, couple, reminder) {
+  const tokens = couple.fcmTokens || {};
+  let anySent = false;
+  for (const uid of reminder.recipients) {
+    const token = tokens[uid];
+    if (!token) continue; // no permission / no device — skip gracefully
+    try {
+      await admin.messaging().send({
+        token,
+        notification: { title: reminder.title, body: reminder.body },
+      });
+      anySent = true;
+    } catch (err) {
+      console.error(`sendReminder ${reminder.key} -> ${uid} failed:`, err.code, err.message);
+      if (err.code === "messaging/registration-token-not-registered") {
+        await coupleRef.update({
+          [`fcmTokens.${uid}`]: admin.firestore.FieldValue.delete(),
+        });
+      }
+    }
+  }
+  return anySent;
+}
+
+// Core run, shared by the scheduled job and the test trigger. `force` bypasses
+// (and does NOT write) the per-day dedup stamp, so a test can re-run repeatedly
+// and leaves no remindersSent residue to clean up afterwards.
+async function runDateReminders({ now = new Date(), force = false } = {}) {
+  const todayMD = monthDayInTz(now, REMINDER_TZ);
+  const heads = new Date(now.getTime() + REMINDER_LEAD_DAYS * 24 * 60 * 60 * 1000);
+  const headsMD = monthDayInTz(heads, REMINDER_TZ);
+  const todayKey = dateKeyInTz(now, REMINDER_TZ);
+
+  const db = admin.firestore();
+  const couplesSnap = await db.collection("couples").get();
+
+  const summary = { date: todayKey, force, couples: couplesSnap.size, sent: [], skipped: [] };
+
+  for (const doc of couplesSnap.docs) {
+    const couple = doc.data() || {};
+    const reminders = buildReminders(couple, todayMD, headsMD);
+    if (reminders.length === 0) continue;
+
+    const sentMap = couple.remindersSent || {};
+    for (const reminder of reminders) {
+      // Dedup: already handled today (unless we're force-testing).
+      if (!force && sentMap[reminder.key] === todayKey) {
+        summary.skipped.push({ couple: doc.id, key: reminder.key, why: "already-sent-today" });
+        continue;
+      }
+      const delivered = await sendReminder(doc.ref, couple, reminder);
+      if (delivered && !force) {
+        await doc.ref.update({ [`remindersSent.${reminder.key}`]: todayKey });
+      }
+      (delivered ? summary.sent : summary.skipped).push({
+        couple: doc.id, key: reminder.key, ...(delivered ? {} : { why: "no-recipient-token" }),
+      });
+    }
+  }
+
+  console.log(`runDateReminders ${todayKey}: ${summary.sent.length} sent, ${summary.skipped.length} skipped, ${summary.couples} couples`);
+  return summary;
+}
+
+// The scheduled entry point. Runs daily at REMINDER_HOUR REMINDER_TZ. onSchedule
+// provisions a Cloud Scheduler job + Pub/Sub topic on deploy (needs the Cloud
+// Scheduler + Pub/Sub APIs enabled — `firebase deploy` enables them on Blaze).
+exports.sendDateReminders = onSchedule(
+  { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
+  async () => { await runDateReminders(); },
+);
+
+// TEST-ONLY manual trigger — REMOVE BEFORE LAUNCH.
+// Lets you fire the reminder scan on demand (no waiting for 09:00 / a real date)
+// and see a JSON summary of exactly what it did. `?force=1` bypasses the per-day
+// dedup AND writes no stamp, so you can re-run freely and reset cleanly.
+// Guarded by a shared secret so the public URL can't be drive-by triggered.
+const TEST_TRIGGER_SECRET = "ilovu-reminders-test-7AU9U5Q6LT";
+exports.runDateRemindersNow = onRequest(async (req, res) => {
+  if (req.query.key !== TEST_TRIGGER_SECRET) {
+    res.status(403).send("forbidden");
+    return;
+  }
+  try {
+    const summary = await runDateReminders({ force: req.query.force === "1" });
+    res.json(summary);
+  } catch (err) {
+    console.error("runDateRemindersNow failed:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
