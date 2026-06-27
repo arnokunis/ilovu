@@ -95,6 +95,11 @@ struct DailyQuestionCard: View {
             TextField("Type your answer...", text: $draftAnswer, axis: .vertical)
                 .lineLimit(2...5)
                 .font(.system(size: 15))
+                // Explicit dark text + tint — the field sits on the fixed-light
+                // blushCream, so the default .primary color renders white (invisible)
+                // in dark mode while typing. deepRose reads in both appearances.
+                .foregroundStyle(Color.deepRose)
+                .tint(Color.louvCoral)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 14)
                 .background(Color.blushCream)

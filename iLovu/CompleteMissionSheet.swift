@@ -193,6 +193,10 @@ struct CompleteMissionSheet: View {
             TextField("What was special about today?", text: $note, axis: .vertical)
                 .lineLimit(2...5)
                 .font(.system(size: 15))
+                // Explicit dark text + tint so it stays readable on the fixed-light
+                // field in dark mode (default .primary would render white).
+                .foregroundStyle(Color.deepRose)
+                .tint(Color.louvCoral)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 14)
                 .background(Color.blushCream)

@@ -186,6 +186,10 @@ struct MissionDetailView: View {
             TextField("e.g. €30 or No spend", text: budgetBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
+                // Explicit dark text + tint so it stays readable on the fixed-light
+                // field in dark mode (default .primary would render white).
+                .foregroundStyle(Color.deepRose)
+                .tint(Color.louvCoral)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 14)
                 .background(Color.blushCream)
