@@ -32,6 +32,15 @@ struct UsView: View {
     // locally to ProfileStore — the name/chevron area still opens the full sheet.
     @State private var profilePhotoItem: PhotosPickerItem?
 
+    // A picked photo awaiting the crop-and-zoom step. isCouple routes the result
+    // to the couple photo (Storage) vs the personal profile photo (local).
+    @State private var cropRequest: CropRequest?
+    private struct CropRequest: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let isCouple: Bool
+    }
+
     // Couple-story editor sheet + whether the post-connect setup card is showing.
     @State private var showCoupleStory = false
     @State private var showSetupCard = false
@@ -70,6 +79,15 @@ struct UsView: View {
         }
         .sheet(isPresented: $showCoupleStory) {
             CoupleStoryView()
+        }
+        // Crop-and-zoom step after picking either photo. The result routes by
+        // isCouple to the couple photo (Storage) or the personal photo (local).
+        .fullScreenCover(item: $cropRequest) { req in
+            CropZoomView(
+                image: req.image,
+                onCancel: { cropRequest = nil },
+                onCrop: { cropped in handleCrop(cropped, isCouple: req.isCouple) }
+            )
         }
         // Keep the optional setup card's visibility in sync with paired state,
         // whether an anniversary is set, and the memory count (the re-surface
@@ -272,7 +290,10 @@ struct UsView: View {
         .disabled(isUploadingCouplePhoto)
         .onChange(of: couplePhotoItem) { _, item in
             guard let item else { return }
-            Task { await uploadCouplePhoto(item) }
+            Task {
+                await presentCrop(for: item, isCouple: true)
+                couplePhotoItem = nil
+            }
         }
     }
 
@@ -291,19 +312,38 @@ struct UsView: View {
         }
     }
 
+    // Load a picked item into a UIImage and open the crop-and-zoom step. Pre-shrunk
+    // to 2048 for a responsive crop view (the crop output is 1024 regardless).
+    @MainActor
+    private func presentCrop(for item: PhotosPickerItem, isCouple: Bool) async {
+        guard let raw = try? await item.loadTransferable(type: Data.self) else { return }
+        let image = ImageDownscaler.downscaledJPEG(from: raw, maxEdge: 2048, quality: 0.9)
+            .flatMap(UIImage.init(data:)) ?? UIImage(data: raw)
+        guard let image else { return }
+        cropRequest = CropRequest(image: image, isCouple: isCouple)
+    }
+
+    // The cropped result: couple photo -> Storage (1024/0.7); personal profile
+    // photo -> local ProfileStore (512/0.8).
+    private func handleCrop(_ cropped: UIImage, isCouple: Bool) {
+        cropRequest = nil
+        if isCouple {
+            Task { await uploadCouplePhotoImage(cropped) }
+        } else if let jpeg = ImageDownscaler.downscaledJPEG(cropped, maxEdge: 512, quality: 0.8) {
+            profileStore.setPhoto(jpeg)
+        }
+    }
+
     // Downscale to the shared photo budget (1024px / 0.7) and upload via the
-    // couple service. Errors are swallowed for now — the picker stays put so the
-    // user can simply try again.
-    private func uploadCouplePhoto(_ item: PhotosPickerItem) async {
+    // couple service. Errors are swallowed for now — the user can simply retry.
+    private func uploadCouplePhotoImage(_ image: UIImage) async {
         isUploadingCouplePhoto = true
         defer { isUploadingCouplePhoto = false }
 
-        guard let raw = try? await item.loadTransferable(type: Data.self),
-              let jpeg = ImageDownscaler.downscaledJPEG(from: raw, maxEdge: 1024, quality: 0.7)
+        guard let jpeg = ImageDownscaler.downscaledJPEG(image, maxEdge: 1024, quality: 0.7)
         else { return }
 
         try? await coupleService.setCouplePhoto(jpegData: jpeg)
-        couplePhotoItem = nil
     }
 
     // MARK: - Content below header
@@ -392,15 +432,12 @@ struct UsView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .louvShadow()
-        // Picked a new avatar — downscale to the avatar budget (512/0.8) and save
-        // locally. No couple sync: the profile photo is device-local for now.
+        // Picked a new avatar — send it through the crop step; the result saves
+        // locally (handleCrop). No couple sync: the profile photo is device-local.
         .onChange(of: profilePhotoItem) { _, item in
             guard let item else { return }
             Task {
-                if let raw = try? await item.loadTransferable(type: Data.self),
-                   let jpeg = ImageDownscaler.downscaledJPEG(from: raw, maxEdge: 512, quality: 0.8) {
-                    profileStore.setPhoto(jpeg)
-                }
+                await presentCrop(for: item, isCouple: false)
                 profilePhotoItem = nil
             }
         }

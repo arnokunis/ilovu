@@ -28,6 +28,7 @@ struct EditProfileView: View {
     @State private var draftName: String = ""
     @State private var draftPhoto: Data?
     @State private var pickerItem: PhotosPickerItem?
+    @State private var cropImage: IdentifiableImage?
     @State private var isSaving = false
 
     var body: some View {
@@ -62,14 +63,30 @@ struct EditProfileView: View {
             draftName = userName
             draftPhoto = profileStore.photoData
         }
-        // Load + downscale the picked image into the working copy.
+        // Picked an image → open the crop-and-zoom step before committing it.
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self) {
-                    draftPhoto = Self.downscaledJPEG(data) ?? data
+                    // Pre-shrink to 2048 for a responsive crop view.
+                    let image = ImageDownscaler.downscaledJPEG(from: data, maxEdge: 2048, quality: 0.9)
+                        .flatMap(UIImage.init(data:)) ?? UIImage(data: data)
+                    if let image { cropImage = IdentifiableImage(image: image) }
                 }
+                pickerItem = nil
             }
+        }
+        // Crop result → the working draft (committed on Save, downscaled to the
+        // avatar budget).
+        .fullScreenCover(item: $cropImage) { item in
+            CropZoomView(
+                image: item.image,
+                onCancel: { cropImage = nil },
+                onCrop: { cropped in
+                    draftPhoto = ImageDownscaler.downscaledJPEG(cropped, maxEdge: 512, quality: 0.8)
+                    cropImage = nil
+                }
+            )
         }
     }
 
@@ -179,26 +196,6 @@ struct EditProfileView: View {
         await couples.setDisplayName(trimmed)    // sync to partner via couple doc
         isSaving = false
         dismiss()
-    }
-
-    // MARK: - Image downscaling
-
-    /// Shrinks an image to a profile-sized JPEG so UserDefaults never holds the
-    /// full-resolution original. ~512px max edge, 0.8 quality — plenty for an
-    /// avatar, a few tens of KB on disk.
-    private static func downscaledJPEG(_ data: Data, maxEdge: CGFloat = 512) -> Data? {
-        guard let image = UIImage(data: data) else { return nil }
-        let longest = max(image.size.width, image.size.height)
-        let scale = longest > maxEdge ? maxEdge / longest : 1
-        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: target, format: format)
-        let resized = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
-        }
-        return resized.jpegData(compressionQuality: 0.8)
     }
 }
 
