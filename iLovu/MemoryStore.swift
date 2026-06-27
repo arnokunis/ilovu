@@ -49,9 +49,29 @@ final class MemoryStore {
             id: m.id, dateCompleted: m.dateCompleted,
             cardTitle: m.cardTitle, cardEmoji: m.cardEmoji,
             photoData: nil, rating: m.rating, note: m.note,
-            storagePath: storagePath, createdBy: m.createdBy
+            storagePath: storagePath, createdBy: m.createdBy,
+            photoVersion: m.photoVersion
         )
         save()
+    }
+
+    /// Replaces a memory's proof photo. Bumps photoVersion (busts the image
+    /// cache on both devices), stashes the new bytes locally so they show
+    /// instantly, then re-runs the sync sink to overwrite the Storage object +
+    /// mirror the new version to the partner. No-op if the id is unknown.
+    func replacePhoto(id: UUID, data: Data) {
+        guard let index = memories.firstIndex(where: { $0.id == id }) else { return }
+        let m = memories[index]
+        let updated = Memory(
+            id: m.id, dateCompleted: m.dateCompleted,
+            cardTitle: m.cardTitle, cardEmoji: m.cardEmoji,
+            photoData: data, rating: m.rating, note: m.note,
+            storagePath: m.storagePath, createdBy: m.createdBy,
+            photoVersion: m.photoVersion + 1
+        )
+        memories[index] = updated
+        save()
+        remoteUpsert?(updated)   // upload bytes → markSynced clears photoData, keeps version
     }
 
     // MARK: - Remote sync
@@ -65,13 +85,18 @@ final class MemoryStore {
     func mergeFromRemote(_ memory: Memory) {
         if let index = memories.firstIndex(where: { $0.id == memory.id }) {
             let existing = memories[index]
+            // A newer remote photoVersion means the partner replaced the photo —
+            // take it AND drop our now-stale local bytes so the fresh Storage copy
+            // is fetched. Otherwise keep our instant bytes (unchanged photo).
+            let remoteIsNewer = memory.photoVersion > existing.photoVersion
             memories[index] = Memory(
                 id: memory.id, dateCompleted: memory.dateCompleted,
                 cardTitle: memory.cardTitle, cardEmoji: memory.cardEmoji,
-                photoData: existing.photoData,                       // keep instant bytes if present
+                photoData: remoteIsNewer ? nil : existing.photoData,  // keep instant bytes unless superseded
                 rating: memory.rating, note: memory.note,
                 storagePath: memory.storagePath ?? existing.storagePath,
-                createdBy: memory.createdBy ?? existing.createdBy
+                createdBy: memory.createdBy ?? existing.createdBy,
+                photoVersion: max(memory.photoVersion, existing.photoVersion)
             )
         } else {
             memories.append(memory)

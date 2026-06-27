@@ -40,4 +40,11 @@ struct Memory: Identifiable, Codable, Equatable {
 
     // uid that saved the memory. Informational; nil for legacy local entries.
     var createdBy: String? = nil
+
+    // Bumped each time the proof photo is replaced (MemoryStore.replacePhoto).
+    // Used as the ImageCache version so a re-pick busts the download cache on
+    // BOTH devices — without it, overwriting the same Storage path would keep
+    // showing the stale cached image. Defaults to 1 so existing/legacy entries
+    // (and remote docs predating the field) decode cleanly.
+    var photoVersion: Int = 1
 }

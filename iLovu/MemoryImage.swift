@@ -26,8 +26,9 @@ struct MemoryImage<Content: View, Placeholder: View>: View {
                 placeholder()
             }
         }
-        // Re-resolve if the row is reused for a different memory.
-        .task(id: memory.id) { await loadRemoteIfNeeded() }
+        // Re-resolve if the row is reused for a different memory OR the photo was
+        // replaced (photoVersion bump) — the latter re-downloads the new bytes.
+        .task(id: "\(memory.id)#\(memory.photoVersion)") { await loadRemoteIfNeeded() }
     }
 
     // Local bytes win (instant, no flicker); otherwise the downloaded copy.
@@ -39,8 +40,8 @@ struct MemoryImage<Content: View, Placeholder: View>: View {
     private func loadRemoteIfNeeded() async {
         // Only fetch when there are no local bytes but we do have a Storage path.
         guard memory.photoData == nil, let path = memory.storagePath else { return }
-        // Memory photos are immutable once uploaded, so a fixed version is fine —
-        // the path already uniquely identifies the image.
-        downloaded = await ImageCache.shared.image(forPath: path, version: "1")
+        // photoVersion busts the cache when the photo is replaced (the path is
+        // overwritten in place, so the path alone wouldn't change).
+        downloaded = await ImageCache.shared.image(forPath: path, version: String(memory.photoVersion))
     }
 }

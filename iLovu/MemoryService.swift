@@ -35,6 +35,11 @@ struct RemoteMemory: Codable, Identifiable {
     var createdBy: String?
     var schemaVersion: Int
     @ServerTimestamp var createdAt: Timestamp?
+
+    /// Bumped when the proof photo is replaced; mirrors Memory.photoVersion so the
+    /// partner's image cache busts. Optional — docs predating the field decode as
+    /// nil and are treated as version 1.
+    var photoVersion: Int?
 }
 
 @MainActor
@@ -82,6 +87,7 @@ final class MemoryService {
                 "storagePath":   path,
                 "createdBy":     uid,
                 "schemaVersion": Self.currentSchemaVersion,
+                "photoVersion":  memory.photoVersion,
                 "createdAt":     FieldValue.serverTimestamp()
             ]
             data["rating"] = memory.rating ?? NSNull()

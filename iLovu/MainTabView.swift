@@ -338,7 +338,8 @@ struct MainTabView: View {
             rating: remote.rating,
             note: remote.note,
             storagePath: remote.storagePath,
-            createdBy: remote.createdBy
+            createdBy: remote.createdBy,
+            photoVersion: remote.photoVersion ?? 1
         )
         memoryStore.mergeFromRemote(memory)
     }
