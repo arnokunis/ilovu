@@ -69,6 +69,10 @@ struct MissionDetailView: View {
                 }
                 .padding(20)
             }
+            // Let the Budget keyboard be dismissed by dragging the list down —
+            // same scroll-behavior dismiss as the Daily Question card (no tap
+            // gesture, so it can't fight the field's focus).
+            .scrollDismissesKeyboard(.interactively)
             .background(Color.blushCream.ignoresSafeArea())
             .navigationTitle("Your Mission")
             .navigationBarTitleDisplayMode(.inline)
@@ -167,6 +171,11 @@ struct MissionDetailView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .louvShadow()
+        // The card is a fixed-light white surface, but the compact DatePicker's
+        // date value sets no explicit color, so it falls back to .primary and
+        // renders WHITE (invisible) in dark mode. Pin this card to the light
+        // scheme so the date reads dark — same fix as CoupleStoryView.
+        .environment(\.colorScheme, .light)
     }
 
     // MARK: - Budget
