@@ -75,9 +75,15 @@ final class MissionService {
         let ref = db.collection("couples").document(coupleId)
             .collection("missions").document(mission.cardId)
 
+        // Deck-aware so the partner rebuilds the right card: a date-card mission
+        // resolves in the static SampleCards deck (.dates); a Near You venue
+        // mission does not (.places -> the partner rebuilds from VenueCache by
+        // placeId, mirroring the .places MATCH rebuild). cardId == placeId for venues.
+        let deck: Deck = SampleCards.byId(mission.cardId) != nil ? .dates : .places
+
         var data: [String: Any] = [
             "cardId":    mission.cardId,
-            "deck":      Deck.dates.rawValue,            // missions only come from the date deck today
+            "deck":      deck.rawValue,
             "status":    mission.status.rawValue,
             "checklist": mission.checklist.map { [
                 "id":    $0.id.uuidString,
