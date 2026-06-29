@@ -200,7 +200,9 @@ struct PlacesService {
     // Google Places photos come as opaque "resource names" like
     // "places/{place_id}/photos/{photo_id}". We turn them into
     // fetchable image URLs by appending /media plus our API key.
-    // SwiftUI's AsyncImage can load these directly.
+    // Load these with BundledRemoteImage, NOT AsyncImage: the key is
+    // iOS-bundle-restricted, so the GET must carry the
+    // X-Ios-Bundle-Identifier header (AsyncImage can't) or Google 403s.
 
     func photoURL(name: String, maxWidthPx: Int = 800) -> URL? {
         guard hasAPIKey else { return nil }

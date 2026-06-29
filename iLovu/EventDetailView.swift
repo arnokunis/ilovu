@@ -80,8 +80,10 @@ struct EventDetailView: View {
     }
 
     // MARK: - Photo gallery
-    // Real Google photos when we have them (rendered with AsyncImage),
-    // otherwise our deterministic gradient placeholders.
+    // Real Google photos when we have them, otherwise our deterministic gradient
+    // placeholders. Rendered via PlaceholderPhoto -> BundledRemoteImage (NOT
+    // AsyncImage): the Places key is iOS-bundle-restricted, so the request must
+    // send the X-Ios-Bundle-Identifier header or Google 403s the photo.
 
     private var photoGallery: some View {
         ScrollView(.horizontal, showsIndicators: false) {
