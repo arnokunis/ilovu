@@ -33,6 +33,12 @@ struct EventMatchView: View {
     @State private var heartScale: CGFloat = 0.3
     @State private var calendarFeedback: CalendarFeedback = .idle
 
+    // Inline "more about this place" reveal on the card. Toggled by BOTH the
+    // "View Details" button and tapping the place name — no navigation, no
+    // external app; the extra venue info (rating, description, address) expands
+    // on the MiniEventCard itself.
+    @State private var showInfo = false
+
     var body: some View {
         ZStack {
             LouvGradient.coral.ignoresSafeArea()
@@ -50,7 +56,7 @@ struct EventMatchView: View {
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(.white)
 
-                MiniEventCard(event: event)
+                MiniEventCard(event: event, isExpanded: $showInfo)
 
                 Spacer()
 
@@ -112,13 +118,13 @@ struct EventMatchView: View {
             .buttonStyle(.plain)
             .disabled(calendarFeedback == .added)
 
-            // Tertiary: View Details — call back up to MainTabView so
-            // it can dismiss this cover and present EventDetailView.
+            // Tertiary: View Details — reveals the extra venue info INLINE on the
+            // card (rating / description / address); no navigation, stays on the
+            // celebration. Tapping the place name does the same thing.
             Button {
-                onViewDetails()
-                dismiss()
+                withAnimation(LouvAnimation.spring) { showInfo.toggle() }
             } label: {
-                Text("View Details")
+                Text(showInfo ? "Hide Details" : "View Details")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.vertical, 6)
@@ -205,6 +211,10 @@ private enum CalendarFeedback {
 private struct MiniEventCard: View {
     let event: LocalEvent
 
+    // Drives the inline info reveal. Toggled by the place name (below) and by the
+    // "View Details" button in EventMatchView — shared state, same gesture.
+    @Binding var isExpanded: Bool
+
     var body: some View {
         VStack(spacing: 10) {
             Text(event.emoji)
@@ -215,6 +225,12 @@ private struct MiniEventCard: View {
                 .foregroundStyle(Color.deepRose)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12)
+                // Tapping the place name reveals the inline info — same action as
+                // the View Details button. contentShape makes the whole label tappable.
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(LouvAnimation.spring) { isExpanded.toggle() }
+                }
 
             Text("\(event.venue) · \(event.date)")
                 .font(.system(size: 12, weight: .medium))
@@ -224,6 +240,11 @@ private struct MiniEventCard: View {
             HStack(spacing: 6) {
                 pill(text: event.category.rawValue, background: .louvCoral)
                 pill(text: event.price,             background: .louvOrange)
+            }
+
+            if isExpanded {
+                inlineInfo
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(.vertical, 20)
@@ -243,6 +264,56 @@ private struct MiniEventCard: View {
             .padding(.vertical, 4)
             .background(background)
             .clipShape(Capsule())
+    }
+
+    // The inline "more about this place" reveal: rating, description, address.
+    // All three come straight off the LocalEvent the card already has (Tier 1 —
+    // no extra fetching). Each row is hidden when its field is empty/nil.
+    @ViewBuilder
+    private var inlineInfo: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider().padding(.vertical, 2)
+
+            if let ratingLine {
+                HStack(spacing: 5) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.louvOrange)
+                    Text(ratingLine)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.deepRose)
+                }
+            }
+
+            if !event.description.isEmpty {
+                Text(event.description)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let address = event.address, !address.isEmpty {
+                HStack(alignment: .top, spacing: 5) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.louvCoral)
+                    Text(address)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.gray)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+    }
+
+    // "4.5 · 320 ratings" (count omitted if absent); nil when the venue is unrated.
+    private var ratingLine: String? {
+        guard let rating = event.rating else { return nil }
+        let r = String(format: "%.1f", rating)
+        guard let count = event.reviewCount else { return r }
+        return "\(r) · \(count) ratings"
     }
 }
 
