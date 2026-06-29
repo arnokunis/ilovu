@@ -67,6 +67,13 @@ struct UsView: View {
                     contentBelowHeader
                 }
             }
+            // Lets the Daily Question keyboard be dismissed by dragging the list
+            // down — no Save required. Deliberately a SCROLL behavior, not an
+            // added tap gesture: a blanket .onTapGesture here would fire
+            // alongside the answer field's own focus tap (dismissing the moment
+            // you tap to type) and could re-tangle with the memory-photo taps we
+            // just untangled with .contentShape. This can't conflict with either.
+            .scrollDismissesKeyboard(.interactively)
         }
         .fullScreenCover(item: $selectedMemory) { memory in
             MemoryDetailView(memory: memory)
