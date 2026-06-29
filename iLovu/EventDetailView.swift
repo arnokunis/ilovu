@@ -168,7 +168,9 @@ struct EventDetailView: View {
     }
 
     private func infoRow(icon: String, text: String) -> some View {
-        HStack(spacing: 10) {
+        // Top-aligned so the icon sits beside the FIRST line when the text wraps
+        // to multiple lines (e.g. the full weekly hours block).
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.louvCoral)
@@ -445,11 +447,14 @@ extension LocalEvent {
             return ReviewSnippet(author: author, rating: Int(rating.rounded()), text: text)
         }
 
-        // A single readable hours line. The cache deliberately does NOT
-        // store the volatile "open now" flag (it would be wrong the
-        // moment it's a few hours old), so unlike the old live path we
-        // can't show "Open now" — we show the first weekday hours line.
-        let hours: String? = cached.openingHoursWeekday?.first
+        // The full weekly hours, one day per line. The cache deliberately does
+        // NOT store the volatile "open now" flag (it would be wrong the moment
+        // it's a few hours old), so we show the static weekly schedule only —
+        // never "Open now". nil/empty stays nil so the row hides.
+        let hours: String? = {
+            guard let week = cached.openingHoursWeekday, !week.isEmpty else { return nil }
+            return week.joined(separator: "\n")
+        }()
 
         return LocalEvent(
             id:             original.id,

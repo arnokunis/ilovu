@@ -58,6 +58,9 @@ struct MissionDetailView: View {
     // missions, or until the async lookup lands.
     @State private var venueInfo: LocalEvent?
 
+    // Presents the full venue detail (EventDetailView) as a sheet — Route A.
+    @State private var showVenueDetails = false
+
     init(mission: Mission) {
         _mission = State(initialValue: mission)
     }
@@ -110,6 +113,13 @@ struct MissionDetailView: View {
                     handleCompletion(memory: memory)
                 }
             }
+            // Route A: the full venue detail (photos, full hours, reviews). It
+            // re-enriches read-only from VenueCache by placeId — no sync touch.
+            .sheet(isPresented: $showVenueDetails) {
+                if let venueInfo {
+                    EventDetailView(event: venueInfo)
+                }
+            }
             .alert("Mission complete! 🎉", isPresented: $showCompletionAlert) {
                 Button("Awesome") { dismiss() }
             } message: {
@@ -157,7 +167,7 @@ struct MissionDetailView: View {
     // when neither field is available, so nothing extra appears for normal cards.
     @ViewBuilder
     private var venueInfoCard: some View {
-        if let venueInfo, hasVenueDetail(venueInfo) {
+        if let venueInfo {
             VStack(alignment: .leading, spacing: 12) {
                 sectionLabel("About This Place")
 
@@ -183,6 +193,22 @@ struct MissionDetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                // Route A: open the full venue detail (photos, full hours,
+                // reviews) as a sheet.
+                Button {
+                    showVenueDetails = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("View place details")
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.louvCoral)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
@@ -190,10 +216,6 @@ struct MissionDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .louvShadow()
         }
-    }
-
-    private func hasVenueDetail(_ e: LocalEvent) -> Bool {
-        e.rating != nil || (e.address?.isEmpty == false)
     }
 
     // "4.5 · 320 ratings" (count omitted if absent); nil when the venue is unrated.
