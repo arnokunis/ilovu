@@ -18,6 +18,12 @@ struct EventDetailView: View {
 
     let event: LocalEvent
 
+    // When false, the bottom action bar omits "Add to Calendar" — used by the
+    // venue-mission sheet (Route A), where the mission already owns its date and
+    // its own calendar add, so a guessed-time calendar action doesn't fit. The
+    // Near You deck→detail path keeps the default (true), unchanged.
+    var showCalendarAction: Bool = true
+
     @Environment(\.dismiss) private var dismiss
 
     @State private var calendarFeedback: CalendarFeedback = .idle
@@ -256,21 +262,23 @@ struct EventDetailView: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                Task { await addToCalendar() }
-            } label: {
-                Image(systemName: calendarIcon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(calendarTint)
-                    .frame(width: 52, height: 52)
-                    .background(Color.white)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle().stroke(calendarTint.opacity(0.45), lineWidth: 1.5)
-                    )
+            if showCalendarAction {
+                Button {
+                    Task { await addToCalendar() }
+                } label: {
+                    Image(systemName: calendarIcon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(calendarTint)
+                        .frame(width: 52, height: 52)
+                        .background(Color.white)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle().stroke(calendarTint.opacity(0.45), lineWidth: 1.5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(calendarFeedback == .added)
             }
-            .buttonStyle(.plain)
-            .disabled(calendarFeedback == .added)
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)

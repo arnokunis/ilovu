@@ -117,7 +117,9 @@ struct MissionDetailView: View {
             // re-enriches read-only from VenueCache by placeId — no sync touch.
             .sheet(isPresented: $showVenueDetails) {
                 if let venueInfo {
-                    EventDetailView(event: venueInfo)
+                    // Hide the calendar action: a venue mission already has its own
+                    // schedule + Add to Calendar; keep only Book Now (opens Maps).
+                    EventDetailView(event: venueInfo, showCalendarAction: false)
                 }
             }
             .alert("Mission complete! 🎉", isPresented: $showCompletionAlert) {
