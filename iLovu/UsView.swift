@@ -565,6 +565,13 @@ struct UsView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 220)
                 .clipped()
+                // scaledToFill overflows the 220 frame; .clipped() hides the
+                // overflow visually but it stays HIT-TESTABLE, so the card's tap
+                // target bled above its visible bounds and stole taps meant for
+                // the Daily Question answer field right above it (field never
+                // focused; the memory opened instead). Constrain the hit region
+                // to the visible frame.
+                .contentShape(Rectangle())
         } placeholder: {
             // Shown while a partner-synced photo downloads, or if bytes are
             // somehow unavailable.
