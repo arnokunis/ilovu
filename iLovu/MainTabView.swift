@@ -305,13 +305,32 @@ struct MainTabView: View {
         listeningCoupleId = nil
     }
 
-    /// Rebuilds a full Mission from a synced RemoteMission (cardId -> DateCard via
-    /// the local sample deck, like CardMatch) and merges it into the store. Runs
-    /// on the main actor, so SampleCards access stays main-isolated. Skips cards
-    /// this build doesn't know about.
+    /// Rebuilds a full Mission from a synced RemoteMission and merges it into the
+    /// store. A date-card mission's card lives in the static SampleCards deck; a
+    /// Near You VENUE mission's card doesn't, so for `.places` we rebuild it from
+    /// the SHARED venue cache by placeId (cardId == placeId) — exactly like the
+    /// `.places` MATCH rebuild. Runs on the main actor (SampleCards stays
+    /// main-isolated). Skips a card this build can't resolve.
     private func applyRemoteMission(_ remote: RemoteMission) {
-        guard let card = SampleCards.byId(remote.cardId) else { return }
+        if let card = SampleCards.byId(remote.cardId) {
+            mergeRemoteMission(remote, into: card)
+        } else if remote.deck == Deck.places.rawValue {
+            // A planned Near You venue. Async — merge once the cache read lands.
+            // If the venue isn't cached yet, skip; the planner already cached it at
+            // match time, and a later listener fire resolves any cold-cache gap.
+            Task { @MainActor in
+                guard let venue = await VenueCache().venue(forId: remote.cardId)?.asLocalEvent()
+                else { return }
+                mergeRemoteMission(remote, into: DateCard(fromVenue: venue))
+            }
+        }
+        // Otherwise an unknown date card this build doesn't ship — skip (unchanged).
+    }
 
+    /// Shared merge: builds the Mission from a resolved DateCard + the remote
+    /// planning state and hands it to the store. Used by both the SampleCards and
+    /// the venue-cache rebuild paths above.
+    private func mergeRemoteMission(_ remote: RemoteMission, into card: DateCard) {
         let checklist = remote.checklist.map { item in
             Mission.ChecklistItem(
                 id: UUID(uuidString: item.id) ?? UUID(),
