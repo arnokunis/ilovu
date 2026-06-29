@@ -44,6 +44,13 @@ struct CoupleStoryView: View {
                         partnerBirthdaySection
                     }
                     .padding(20)
+                    // Every card here is a fixed-light Color.white surface, so pin
+                    // the content to the light color scheme. Otherwise default-
+                    // colored elements (notably the compact DatePicker date values)
+                    // fall back to .primary and render WHITE in dark mode —
+                    // invisible on the white card until tapped. Same class of bug
+                    // 198edf8 fixed for the text fields; DatePickers were missed.
+                    .environment(\.colorScheme, .light)
                 }
             }
             .navigationTitle("Your Story")
