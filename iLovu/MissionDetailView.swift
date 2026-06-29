@@ -52,6 +52,12 @@ struct MissionDetailView: View {
     // (whether they saved a memory or skipped it).
     @State private var showCompletionAlert: Bool = false
 
+    // Venue (places) missions don't store rating/address on the card — the
+    // venue→DateCard adapter is lossy. We look them up read-only from the durable
+    // VenueCache by placeId (cardId == placeId) for display. nil for date-card
+    // missions, or until the async lookup lands.
+    @State private var venueInfo: LocalEvent?
+
     init(mission: Mission) {
         _mission = State(initialValue: mission)
     }
@@ -61,6 +67,7 @@ struct MissionDetailView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     headerCard
+                    venueInfoCard
                     scheduleCard
                     budgetCard
                     checklistCard
@@ -84,6 +91,14 @@ struct MissionDetailView: View {
             }
             // Every time the local copy changes, sync it back to the
             // store. Mission is Equatable so SwiftUI dedupes no-op writes.
+            // A venue mission's card is lossy (no rating/address). It resolves
+            // NOT in SampleCards, so for those, look the venue up read-only from
+            // the durable VenueCache by placeId (cardId == placeId) — 0-bill, no
+            // sync/schema touch. Date-card missions resolve in SampleCards → skip.
+            .task {
+                guard SampleCards.byId(mission.cardId) == nil else { return }
+                venueInfo = await VenueCache().venue(forId: mission.cardId)?.asLocalEvent()
+            }
             .onChange(of: mission) { _, newValue in
                 missionStore.update(newValue)
             }
@@ -133,6 +148,60 @@ struct MissionDetailView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .louvShadow()
+    }
+
+    // MARK: - Venue info (places missions only)
+
+    // Rating + address for a venue mission, pulled from VenueCache (description
+    // already shows in the header). Hidden entirely for date-card missions and
+    // when neither field is available, so nothing extra appears for normal cards.
+    @ViewBuilder
+    private var venueInfoCard: some View {
+        if let venueInfo, hasVenueDetail(venueInfo) {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionLabel("About This Place")
+
+                if let ratingLine = venueRatingLine(venueInfo) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.louvOrange)
+                        Text(ratingLine)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.deepRose)
+                    }
+                }
+
+                if let address = venueInfo.address, !address.isEmpty {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.louvCoral)
+                        Text(address)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.gray)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .louvShadow()
+        }
+    }
+
+    private func hasVenueDetail(_ e: LocalEvent) -> Bool {
+        e.rating != nil || (e.address?.isEmpty == false)
+    }
+
+    // "4.5 · 320 ratings" (count omitted if absent); nil when the venue is unrated.
+    private func venueRatingLine(_ e: LocalEvent) -> String? {
+        guard let rating = e.rating else { return nil }
+        let r = String(format: "%.1f", rating)
+        guard let count = e.reviewCount else { return r }
+        return "\(r) · \(count) ratings"
     }
 
     // MARK: - Schedule
