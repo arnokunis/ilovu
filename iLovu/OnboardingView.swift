@@ -9,14 +9,17 @@
 import SwiftUI
 
 // MARK: - Vibe
-// Five fixed personality buckets the user picks on screen 3.
-// Stored as a raw String in @AppStorage so it survives app launches.
+// Personality buckets the user picks on screen 3. Multi-select — pick as many
+// as fit. Stored as a comma-joined raw String in @AppStorage so it survives app
+// launches (and stays backward-compatible with the old single-value storage).
 enum Vibe: String, CaseIterable, Identifiable {
     case romantic    = "Romantic"
     case adventurous = "Adventurous"
     case foodies     = "Foodies"
     case creative    = "Creative"
     case homebody    = "Homebody"
+    case cosy        = "Cosy"
+    case spontaneous = "Spontaneous"
 
     var id: String { rawValue }
 }
@@ -308,8 +311,9 @@ private struct ProfileScreen: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.gray)
 
-                // FlowLayout wraps the pills to a second row on narrower phones
-                // (five vibes won't fit one row on an iPhone SE).
+                // FlowLayout wraps the pills across rows on narrower phones
+                // (the vibes won't fit one row on an iPhone SE). Multi-select:
+                // tap to toggle each on/off.
                 FlowLayout(spacing: 8) {
                     ForEach(Vibe.allCases) { vibe in
                         vibePill(vibe)
@@ -326,12 +330,33 @@ private struct ProfileScreen: View {
         }
     }
 
+    // Selected vibes, parsed from the comma-joined @AppStorage string. Multi-
+    // select, so this is a Set; an old single value ("Romantic") still parses.
+    private var selectedVibes: Set<String> {
+        Set(userVibe.split(separator: ",").map(String.init))
+    }
+
+    // Toggle a vibe in/out, then re-serialise in enum order so the stored
+    // string stays deterministic regardless of tap order.
+    private func toggleVibe(_ vibe: Vibe) {
+        var current = selectedVibes
+        if current.contains(vibe.rawValue) {
+            current.remove(vibe.rawValue)
+        } else {
+            current.insert(vibe.rawValue)
+        }
+        userVibe = Vibe.allCases
+            .filter { current.contains($0.rawValue) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
     private func vibePill(_ vibe: Vibe) -> some View {
-        let isSelected = userVibe == vibe.rawValue
+        let isSelected = selectedVibes.contains(vibe.rawValue)
 
         return Button {
             withAnimation(LouvAnimation.spring) {
-                userVibe = vibe.rawValue
+                toggleVibe(vibe)
             }
         } label: {
             Text(vibe.rawValue)
@@ -380,7 +405,7 @@ private struct PrimaryButton: View {
 // MARK: - FlowLayout
 // A simple wrapping flow layout. Lays subviews left-to-right and breaks
 // to a new row when the next subview would overflow the available width.
-// Used by the vibe pill grid so five labels of varying widths wrap cleanly.
+// Used by the vibe pill grid so the labels of varying widths wrap cleanly.
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
