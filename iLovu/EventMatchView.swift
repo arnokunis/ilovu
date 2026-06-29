@@ -6,9 +6,9 @@
 // like the same product as Cards.
 //
 // What's different from MatchView: a MiniEventCard instead of
-// MiniMatchedCard, and three actions instead of two — Book Now
-// (opens a search for the event) and Add to Calendar (EventKit)
-// replace "Plan This Date", and "Keep Swiping" remains.
+// MiniMatchedCard, plus an "Add to Calendar" (EventKit) action. "Plan This
+// Date" is the shared primary — it adapts the venue into a DateCard and plans
+// it as a Mission (date/time + checklist), exactly like a swiped date card.
 
 import SwiftUI
 import EventKit
@@ -16,6 +16,12 @@ import EventKit
 struct EventMatchView: View {
 
     let event: LocalEvent
+
+    // Called when the user taps "Plan This Date" — hands the parent a fully-built
+    // Mission (the venue adapted into a DateCard) to add to the store and open the
+    // planning sheet, exactly like MatchView's onPlanThisDate. Defaulted to a no-op
+    // so previews still work.
+    var onPlanThisDate: (Mission) -> Void = { _ in }
 
     // Called when the user taps "View Details". MainTabView dismisses
     // the match cover and opens EventDetailView right after. Defaulted
@@ -71,11 +77,14 @@ struct EventMatchView: View {
 
     private var actions: some View {
         VStack(spacing: 12) {
-            // Primary: Book Now. For now this just opens a Google
-            // search for the event — placeholder until we wire up
-            // real booking integrations (Eventbrite, OpenTable, etc).
-            Button(action: openBookingSearch) {
-                Text("Book Now →")
+            // Primary: Plan This Date — the real CTA, mirroring MatchView. Adapts
+            // the venue into a DateCard and hands the parent a Mission to plan
+            // (date/time + checklist) in MissionDetailView.
+            Button {
+                onPlanThisDate(Mission(from: DateCard(fromVenue: event)))
+                dismiss()
+            } label: {
+                Text("Plan This Date →")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color.louvCoral)
                     .frame(maxWidth: .infinity)
@@ -136,18 +145,6 @@ struct EventMatchView: View {
         case .denied: return "Calendar access denied"
         case .error:  return "Couldn't add — try again"
         }
-    }
-
-    // MARK: - Book Now (placeholder)
-
-    private func openBookingSearch() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        let query = "\(event.title) \(event.venue)"
-        guard
-            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-            let url = URL(string: "https://www.google.com/search?q=\(encoded)")
-        else { return }
-        UIApplication.shared.open(url)
     }
 
     // MARK: - Add to Calendar

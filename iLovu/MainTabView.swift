@@ -154,7 +154,15 @@ struct MainTabView: View {
         // a time because matchedCard and matchedEvent are bound to
         // separate decks.
         .fullScreenCover(item: $matchedEvent) { event in
-            EventMatchView(event: event) {
+            EventMatchView(event: event) { mission in
+                // Plan This Date — identical to the card match flow: add the
+                // mission so it's already on the Home dashboard, then open the
+                // planning sheet once the cover finishes dismissing.
+                missionStore.add(mission)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    missionToPlan = mission
+                }
+            } onViewDetails: {
                 // View Details tapped — same delayed-present trick as
                 // the mission flow, so the cover can finish dismissing
                 // before the sheet starts coming up.
