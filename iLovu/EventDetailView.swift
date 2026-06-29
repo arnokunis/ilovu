@@ -443,19 +443,25 @@ extension LocalEvent {
         // with the current API key — so a rotated key works without re-caching.
         let photoURLs: [String] = cached.photoURLStrings(using: service)
 
-        // Top 3 reviews mapped into our snippet shape. compactMap
-        // drops any review missing the fields we need to render.
-        let snippets: [ReviewSnippet] = cached.reviews.prefix(3).compactMap { review in
-            guard
-                let text   = review.text,
-                let author = review.authorName,
-                let rating = review.rating
-            else { return nil }
-            // Google returns rating as a Double 1.0-5.0; our model
-            // is Int 1-5. .rounded() before Int conversion avoids
-            // a 4.9-rated review losing a star to truncation.
-            return ReviewSnippet(author: author, rating: Int(rating.rounded()), text: text)
-        }
+        // Up to 3 brand-safe review snippets: 4★+ ONLY (we never surface a 1–3★
+        // rant in an anti-pressure product), THEN take the top 3. Filtering on the
+        // raw rating (>= 4.0) before rounding means a 3.5 — which would round up to
+        // a 4-star display — is still excluded. compactMap also drops any review
+        // missing a field we need to render.
+        let snippets: [ReviewSnippet] = Array(
+            cached.reviews.compactMap { review -> ReviewSnippet? in
+                guard
+                    let text   = review.text,
+                    let author = review.authorName,
+                    let rating = review.rating,
+                    rating >= 4
+                else { return nil }
+                // Google returns rating as a Double 1.0-5.0; our model is Int 1-5.
+                // .rounded() before Int conversion avoids a 4.9 losing a star.
+                return ReviewSnippet(author: author, rating: Int(rating.rounded()), text: text)
+            }
+            .prefix(3)
+        )
 
         // The full weekly hours, one day per line. The cache deliberately does
         // NOT store the volatile "open now" flag (it would be wrong the moment
