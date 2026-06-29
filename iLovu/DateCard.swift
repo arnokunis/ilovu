@@ -121,3 +121,49 @@ extension DateCard {
         self.cardId        = try c.decodeIfPresent(String.self, forKey: .cardId) ?? Self.slug(title)
     }
 }
+
+// MARK: - Adapt a Near You venue (LocalEvent) into a DateCard
+// Lets a curated Google Places venue be PLANNED as a Mission exactly like a
+// swiped date card. The Mission / sync / planning / completion chain only ever
+// sees a DateCard, so nothing downstream changes. cardId == placeId (the stable
+// cross-device key) — also what the `.places` mission-rebuild path keys on.
+// The venue-less fields (difficulty/cost/whyItWorks/tips) map to sensible
+// defaults; MissionDetailView only renders emoji/title/description/difficulty.
+extension DateCard {
+    init(fromVenue e: LocalEvent) {
+        self.init(
+            title:         e.title,
+            description:   e.description,
+            emoji:         e.emoji,
+            difficulty:    .halfDay,                       // a venue is an outing, not a 5-min gesture
+            estimatedCost: Self.venueCost(e.price),
+            category:      Self.venueCategory(e.category),
+            whyItWorks:    "",                             // not rendered by MissionDetailView
+            tips:          [],                             // not rendered by MissionDetailView
+            cardId:        e.cardId                        // == placeId
+        )
+    }
+
+    // LocalEvent.Category -> DateCard.Category (approved mapping). `.cosy` is
+    // intentionally unreachable: it's the at-home vibe, and every venue is an outing.
+    private static func venueCategory(_ c: LocalEvent.Category) -> Category {
+        switch c {
+        case .foodDrink: return .foodie
+        case .outdoors:  return .adventure
+        case .nightlife: return .intimate
+        case .arts:      return .creative
+        case .music:     return .creative
+        }
+    }
+
+    // Venue price label (from asLocalEvent: "Free" / "€"…"€€€€" / "") -> Cost.
+    // Expensive tiers collapse to .medium (the enum ceiling); unknown -> .medium
+    // so we never undersell a pricey spot as cheap.
+    private static func venueCost(_ price: String) -> Cost {
+        switch price {
+        case "Free": return .free
+        case "€":    return .low
+        default:     return .medium      // €€ / €€€ / €€€€ and "" (unknown)
+        }
+    }
+}
