@@ -365,7 +365,7 @@ struct MissionDetailView: View {
 
     private var completeButton: some View {
         Button(action: markComplete) {
-            Text("Mark Complete ✓")
+            Text("Date completed ✓")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
