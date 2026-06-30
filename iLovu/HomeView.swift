@@ -148,14 +148,17 @@ struct HomeView: View {
         .sheet(item: $missionToOpen) { mission in
             MissionDetailView(mission: mission)
         }
-        // Soft paywall. Presented in place of opening the mission when the gate
-        // is armed; on dismiss we continue to the mission the user tapped, so
-        // the wall is always escapable and never blocks the actual date.
-        // RevenueCat wiring (purchase / restore) is a separate step — the
-        // callbacks are intentionally left as no-ops for now.
+        // Paywall presented in place of opening the mission when the gate is
+        // armed. In SOFT mode (paywallGate.hardMode == false) dismissing the
+        // wall continues to the tapped mission, so it never blocks the date. In
+        // HARD mode the dismiss-through is withheld unless the couple actually
+        // subscribed on the wall just now — the mission stays closed otherwise.
         .sheet(isPresented: $showPaywall, onDismiss: {
             guard let pending = missionAfterPaywall else { return }
             missionAfterPaywall = nil
+            // Hard mode blocks: only proceed to the mission in soft mode, or if
+            // the user subscribed while the wall was up (smooth post-purchase).
+            guard !paywallGate.hardMode || paywallGate.isSubscribed else { return }
             // Small hop so the just-dismissed sheet fully clears before the
             // mission sheet presents (SwiftUI dislikes back-to-back modals).
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -183,17 +186,22 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Mission open + soft paywall gate
+    // MARK: - Mission open + paywall gate
 
     // The calm "next mission start" entry point. If the paywall gate is armed
-    // (and the couple isn't subscribed), present the soft wall once instead of
-    // opening straight away; otherwise open the mission normally. Choosing this
-    // calm path — not the post-match "Plan This Date" flow — is what guarantees
-    // the wall never appears mid-celebration.
+    // (and the couple isn't subscribed), present the wall instead of opening
+    // straight away; otherwise open the mission normally. Choosing this calm
+    // path — not the post-match "Plan This Date" flow — is what guarantees the
+    // wall never appears mid-celebration. Hard vs. soft (block vs. dismiss-
+    // through) is decided in the .sheet onDismiss above via paywallGate.hardMode.
     private func openMission(_ mission: Mission) {
         if let coupleId = coupleService.coupleId,
            paywallGate.shouldPresentAtMissionStart(coupleId: coupleId) {
-            paywallGate.markShown(coupleId: coupleId)   // show-once
+            // Soft mode is show-once; latch it. Hard mode presents every time,
+            // so it deliberately never latches.
+            if !paywallGate.hardMode {
+                paywallGate.markShown(coupleId: coupleId)
+            }
             missionAfterPaywall = mission
             showPaywall = true
         } else {

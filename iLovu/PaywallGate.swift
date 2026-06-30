@@ -35,6 +35,16 @@ final class PaywallGate {
     /// .entitlement); set true once subscribed so the wall stops presenting.
     var isSubscribed: Bool = false
 
+    // MARK: - Hard mode (single reversible flag)
+    /// When true, the soft show-once wall becomes a persistent HARD wall:
+    /// once armed (and not subscribed) it presents on EVERY gated action,
+    /// ignoring the show-once latch, and the gated action is BLOCKED unless the
+    /// couple subscribes (HomeView refuses to open the mission on dismiss).
+    /// Flip to `false` to restore the original soft / dismiss-through /
+    /// show-once behavior — that single change reverts everything.
+    /// Arming (matchCount≥2 + memory, OR 14-day backstop) is unaffected either way.
+    var hardMode: Bool = true
+
     private let defaults = UserDefaults.standard
 
     // MARK: - Per-couple keys
@@ -75,12 +85,15 @@ final class PaywallGate {
 
     // MARK: - Presentation decision
 
-    /// True when the gate is armed, hasn't been shown yet, and the couple isn't
-    /// subscribed. HomeView calls this at the calm mission-start entry point.
+    /// True when the wall should present at the calm mission-start entry point.
+    /// Subscribed → never. Otherwise the couple must be armed; in hard mode it
+    /// then presents EVERY time (show-once latch ignored), in soft mode only
+    /// until it has been shown once.
     func shouldPresentAtMissionStart(coupleId: String) -> Bool {
         guard !isSubscribed else { return false }
-        return defaults.bool(forKey: armedKey(coupleId))
-            && !defaults.bool(forKey: shownKey(coupleId))
+        guard defaults.bool(forKey: armedKey(coupleId)) else { return false }
+        if hardMode { return true }                          // persistent
+        return !defaults.bool(forKey: shownKey(coupleId))    // soft: show once
     }
 
     /// Records that the wall has been presented — show-once, no nagging.
