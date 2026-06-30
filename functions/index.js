@@ -7,8 +7,7 @@
  *                  removed once onMatchCreated was verified on two phones.)
  * nudgePartner — manual "come swipe with me" nudge (callable, rate-limited).
  * sendDateReminders — SCHEDULED daily special-date reminders (anniversary,
- *                  engagement, wedding, birthdays). runDateRemindersNow is its
- *                  TEST-ONLY manual trigger (remove before launch).
+ *                  engagement, wedding, birthdays).
  *
  * GLOBAL GUARDRAILS — applied to EVERY function in this codebase:
  *   • maxInstances: a hard ceiling on concurrent instances, so a bug or a
@@ -441,23 +440,3 @@ exports.sendDateReminders = onSchedule(
   { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
   async () => { await runDateReminders(); },
 );
-
-// TEST-ONLY manual trigger — REMOVE BEFORE LAUNCH.
-// Lets you fire the reminder scan on demand (no waiting for 09:00 / a real date)
-// and see a JSON summary of exactly what it did. `?force=1` bypasses the per-day
-// dedup AND writes no stamp, so you can re-run freely and reset cleanly.
-// Guarded by a shared secret so the public URL can't be drive-by triggered.
-const TEST_TRIGGER_SECRET = "ilovu-reminders-test-7AU9U5Q6LT";
-exports.runDateRemindersNow = onRequest(async (req, res) => {
-  if (req.query.key !== TEST_TRIGGER_SECRET) {
-    res.status(403).send("forbidden");
-    return;
-  }
-  try {
-    const summary = await runDateReminders({ force: req.query.force === "1" });
-    res.json(summary);
-  } catch (err) {
-    console.error("runDateRemindersNow failed:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
