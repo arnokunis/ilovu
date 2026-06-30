@@ -1,7 +1,6 @@
 /**
  * iLovu Cloud Functions.
  *
- * helloWorld   — pipeline smoke test (HTTP).
  * onMatchCreated — Stage 5 partner nudge: pushes the partner who didn't complete
  *                  a match. (sendTestPush, the Stage 4 manual push rehearsal, was
  *                  removed once onMatchCreated was verified on two phones.)
@@ -19,7 +18,7 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
@@ -27,15 +26,6 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 setGlobalOptions({ maxInstances: 10, region: "europe-west1" });
-
-/**
- * Smoke test: confirms the write -> deploy -> live pipeline works end to end.
- * An HTTP function so you can hit its URL in a browser. Inherits maxInstances +
- * region from setGlobalOptions above. Safe to delete once the pipeline's proven.
- */
-exports.helloWorld = onRequest((req, res) => {
-  res.send("Hello from iLovu! 💕");
-});
 
 // ---------------------------------------------------------------------------
 // STAGE 5 — match nudge (the first real nudge).
