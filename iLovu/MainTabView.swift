@@ -369,6 +369,14 @@ struct MainTabView: View {
             photoVersion: remote.photoVersion ?? 1
         )
         memoryStore.mergeFromRemote(memory)
+
+        // Remote-synced memory → update the gate's memory count too, so the
+        // partner who RECEIVES a memory arms Condition A without a relaunch.
+        // Mirrors local completion (MissionDetailView) + attach: same source the
+        // gate reads (memoryStore.memories.count). Read-side gate counting only.
+        if let id = coupleId {
+            paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: id)
+        }
     }
 
     /// Called for every match the listener delivers (existing + live). Presents
