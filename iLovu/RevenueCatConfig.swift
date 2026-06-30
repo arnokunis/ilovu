@@ -15,9 +15,12 @@ enum RevenueCatConfig {
     /// no current offering is configured.
     static let offeringID = "default"
 
-    // For reference — configured in the dashboard, NOT matched by string in code:
-    //   package $rc_annual  → product com.ilovu.app.annual  ($49.99/yr)
-    //   package $rc_monthly → product com.ilovu.app.monthly ($6.99/mo)
-    // The app resolves these via Offering.annual / .monthly (by package type),
-    // so they need no string constants here.
+    /// App Store Connect product identifiers behind the offering's packages.
+    /// The PURCHASE flow resolves packages via Offering.annual / .monthly (by
+    /// package type), so it needs no ids — but the settings STATUS row labels
+    /// which plan the subscriber bought, read off
+    /// customerInfo.entitlements[...].productIdentifier, which IS a raw id. These
+    /// must match the dashboard / ASC products byte-for-byte.
+    static let annualProductID  = "com.ilovu.app.annual"   // $49.99/yr ($rc_annual)
+    static let monthlyProductID = "com.ilovu.app.monthly"  // $6.99/mo  ($rc_monthly)
 }

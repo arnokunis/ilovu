@@ -51,6 +51,24 @@ final class SubscriptionService {
     /// UI on this alone or the non-paying partner loses access.
     private(set) var myEntitlementActive = false
 
+    /// The product id of THIS user's active "premium" entitlement (e.g.
+    /// `com.ilovu.app.annual`), or nil when they have no own active entitlement.
+    /// Lets the settings status row label the plan (Annual/Monthly). Kept live off
+    /// the same `apply(_:)` as the entitlement flag. Only the payer's own device
+    /// can know this — the partner reads premium off the couple doc (no plan type).
+    private(set) var myPlanProductID: String?
+
+    /// Human-readable plan name for THIS user's active entitlement ("Annual" /
+    /// "Monthly"), or nil if they have no own entitlement or it's an unrecognized
+    /// product.
+    var myPlanLabel: String? {
+        switch myPlanProductID {
+        case RevenueCatConfig.annualProductID:  return "Annual"
+        case RevenueCatConfig.monthlyProductID: return "Monthly"
+        default: return nil
+        }
+    }
+
     /// Fired when `myEntitlementActive` changes (purchase, renewal, expiry).
     /// iLovuApp wires this to CoupleService so the payer mirrors premium onto the
     /// shared couple doc. Set once at the app root.
@@ -86,7 +104,11 @@ final class SubscriptionService {
     }
 
     private func apply(_ info: CustomerInfo) {
-        let active = info.entitlements[RevenueCatConfig.entitlementID]?.isActive == true
+        let entitlement = info.entitlements[RevenueCatConfig.entitlementID]
+        let active = entitlement?.isActive == true
+        // Track WHICH plan is active independently of the change-guard below, so a
+        // same-state renewal or a plan switch (monthly→annual) still refreshes it.
+        myPlanProductID = active ? entitlement?.productIdentifier : nil
         guard active != myEntitlementActive else { return }
         myEntitlementActive = active
         onEntitlementChange?(active)

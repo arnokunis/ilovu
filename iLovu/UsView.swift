@@ -6,6 +6,7 @@
 
 import SwiftUI
 import PhotosUI
+import StoreKit
 
 struct UsView: View {
 
@@ -23,6 +24,13 @@ struct UsView: View {
 
     // Decides whether the optional "set up your story" card is shown.
     @Environment(CoupleSetupPrompt.self) private var setupPrompt
+
+    // RevenueCat truth for the subscription status row + "Manage Subscription".
+    @Environment(SubscriptionService.self) private var subscriptionService
+
+    // Fallback for the Manage button when the native StoreKit sheet can't present
+    // (no window scene / it throws): opens Apple's subscriptions web page.
+    @Environment(\.openURL) private var openURL
 
     // The couple-photo picker + its in-flight upload state.
     @State private var couplePhotoItem: PhotosPickerItem?
@@ -371,6 +379,8 @@ struct UsView: View {
                 coupleStoryRow
             }
 
+            subscriptionRow
+
             DailyQuestionCard(coupleId: coupleService.coupleId)
 
             if memoryStore.memories.isEmpty {
@@ -510,6 +520,101 @@ struct UsView: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 8)
+    }
+
+    // MARK: - Subscription (status + Manage)
+    // Status derives from the SAME source as the paywall gate
+    // (premiumActive = my own entitlement OR the shared couple flag), so the two
+    // can never diverge. "Manage Subscription" is shown ONLY to the payer (this
+    // device's Apple ID holds the entitlement) and deep-links to Apple's native
+    // management sheet — the app NEVER tries to cancel a sub itself (Apple forbids
+    // it). The non-paying partner sees who covers them, with no button (nothing of
+    // their own to manage). App Store 3.1.2 wants a working manage link for
+    // subscribers — the owner (and a reviewer's purchasing account) gets it.
+
+    private var subscriptionStatusText: String {
+        if subscriptionService.myEntitlementActive {
+            if let plan = subscriptionService.myPlanLabel { return "Premium — \(plan)" }
+            return "Premium"   // active but plan id not resolved yet / unrecognized
+        }
+        if coupleService.couple?.isPremium == true {
+            return "Premium — covered by \(payerName)"
+        }
+        return "Free"
+    }
+
+    /// The payer's display name (couple.subscriptionOwner), for the partner's
+    /// "covered by …" line. Falls back to a warm generic when unknown.
+    private var payerName: String {
+        let couple = coupleService.couple
+        if let owner = couple?.subscriptionOwner,
+           let name = couple?.displayNames?[owner]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return name
+        }
+        return "your partner"
+    }
+
+    private var subscriptionRow: some View {
+        let isPremium = subscriptionService.premiumActive(couple: coupleService.couple)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: isPremium ? "crown.fill" : "crown")
+                    .font(.system(size: 20))
+                    .foregroundStyle(isPremium ? Color.louvCoral : .gray)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Subscription")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                    Text(subscriptionStatusText)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color.deepRose)
+                }
+                Spacer()
+            }
+
+            // Manage shown ONLY when THIS device's Apple ID holds the entitlement.
+            if subscriptionService.myEntitlementActive {
+                Button {
+                    openManageSubscriptions()
+                } label: {
+                    Text("Manage Subscription")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.deepRose)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.blushCream)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            } else if coupleService.couple?.isPremium == true {
+                Text("Managed by \(payerName)")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .louvShadow()
+    }
+
+    /// Deep-links to Apple's native manage-subscriptions sheet (StoreKit 2). The
+    /// app must never cancel a sub itself; this hands off to Apple. Falls back to
+    /// the App Store subscriptions web page if there's no scene or the sheet throws.
+    private func openManageSubscriptions() {
+        let fallback = URL(string: "https://apps.apple.com/account/subscriptions")!
+        guard let scene = activeWindowScene() else { openURL(fallback); return }
+        Task { @MainActor in
+            do { try await AppStore.showManageSubscriptions(in: scene) }
+            catch { openURL(fallback) }
+        }
+    }
+
+    private func activeWindowScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
     }
 
     private func memoryCard(_ memory: Memory) -> some View {
