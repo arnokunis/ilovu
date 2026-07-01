@@ -148,48 +148,63 @@ final class CoupleService {
     /// linking creator + redeemer. Returns the new couple's id.
     @discardableResult
     func redeem(token: String) async throws -> String {
-        guard let uid = Auth.auth().currentUser?.uid else { throw InviteError.notSignedIn }
+        guard Auth.auth().currentUser != nil else { throw InviteError.notSignedIn }
 
-        let inviteRef = db.collection("invites").document(token)
-
-        // Read first, for precise error messages. The rules re-check every one
-        // of these conditions on the write itself, so a redeemer who races past
-        // this read still can't slip an invalid redemption through.
-        let snapshot = try await inviteRef.getDocument()
-        guard snapshot.exists, let invite = try? snapshot.data(as: Invite.self) else {
-            throw InviteError.inviteNotFound
+        // Atomic redemption is a Cloud Function now: it consumes the invite AND
+        // creates the couple doc in ONE Firestore transaction (Admin SDK), so the
+        // two writes can't half-complete or be raced. firestore.rules forbids
+        // client couple-creation and client invite-consumption outright — this
+        // callable is the only path. Only NEW pairings run this; already-paired
+        // couples never call redeem, so they're untouched.
+        let coupleId: String
+        let members: [String]
+        do {
+            let result = try await functions.httpsCallable("redeemInvite").call(["token": token])
+            guard let data = result.data as? [String: Any],
+                  let id = data["coupleId"] as? String,
+                  let mems = data["members"] as? [String] else {
+                throw InviteError.inviteNotFound
+            }
+            coupleId = id
+            members = mems
+        } catch let error as InviteError {
+            throw error
+        } catch {
+            throw Self.mapRedeemError(error)
         }
-        guard invite.status == .pending else { throw InviteError.alreadyConsumed }
-        guard invite.creatorId != uid else { throw InviteError.cannotRedeemOwnInvite }
 
-        // Consume the invite — touches ONLY status + consumedBy (redeem rule).
-        // If someone redeemed it between our read and here, the rule denies this
-        // write and it throws — which is the correct outcome (one-shot invite).
-        try await inviteRef.updateData([
-            "status": InviteStatus.consumed.rawValue,
-            "consumedBy": uid
-        ])
-
-        // Link the two users. members must be exactly two and include us (create rule).
-        let coupleRef = db.collection("couples").document()
-        try await coupleRef.setData([
-            "members": [invite.creatorId, uid],
-            "createdAt": FieldValue.serverTimestamp()
-        ])
-
-        // Publish the new couple locally right away. This is what lets the
-        // redeemer's app flip from "unpaired" to "paired" mid-session — without
-        // it, the couple existed in Firestore but nothing on this device knew,
-        // so swipes kept hitting the solo coin-flip fallback. createdAt stays nil
-        // until a read resolves the server timestamp; we don't need it locally.
-        couple = Couple(id: coupleRef.documentID, members: [invite.creatorId, uid], createdAt: nil)
-        // If a name was set while still unpaired, write it now that there's a couple.
+        // Publish the new couple locally right away — this lets the redeemer's app
+        // flip from "unpaired" to "paired" mid-session (before, nothing on-device
+        // knew the couple existed, so swipes hit the solo coin-flip fallback).
+        // createdAt stays nil until a read resolves the server timestamp.
+        couple = Couple(id: coupleId, members: members, createdAt: nil)
+        // A name / FCM token parked while unpaired now has somewhere to go.
         await flushPendingDisplayName()
-        // Same for an FCM token that arrived before pairing.
         await flushPendingFCMToken()
-        // And seed the onboarding name (which never goes through setDisplayName).
+        // Seed the onboarding name (which never goes through setDisplayName).
         await seedDisplayNameFromLocalIfNeeded()
-        return coupleRef.documentID
+        return coupleId
+    }
+
+    /// Maps a `redeemInvite` callable failure back to the InviteError the redeem
+    /// UI already knows. The machine-readable `reason` in the error details is what
+    /// distinguishes "already used" from "your own invite" (the HttpsError code
+    /// alone can't). Unknown / transport errors are returned unchanged so a network
+    /// blip doesn't masquerade as "invalid invite".
+    private static func mapRedeemError(_ error: Error) -> Error {
+        let ns = error as NSError
+        guard ns.domain == FunctionsErrorDomain else { return error }
+        let details = ns.userInfo[FunctionsErrorDetailsKey] as? [String: Any]
+        switch details?["reason"] as? String {
+        case "not_found":        return InviteError.inviteNotFound
+        case "already_consumed": return InviteError.alreadyConsumed
+        case "own_invite":       return InviteError.cannotRedeemOwnInvite
+        default:
+            if let code = FunctionsErrorCode(rawValue: ns.code), code == .unauthenticated {
+                return InviteError.notSignedIn
+            }
+            return error
+        }
     }
 
     // MARK: - Lookup

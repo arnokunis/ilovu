@@ -104,6 +104,57 @@ exports.cacheWrite = onCall((request) => {
 });
 
 // ---------------------------------------------------------------------------
+// redeemInvite — atomic invite redemption (pre-launch hardening #1).
+//
+// The client used to consume the invite and create the couple doc in TWO
+// separate writes, which could half-complete or be raced. This callable does
+// both in ONE Firestore transaction (Admin SDK), so redemption is all-or-nothing
+// and tamper-proof. firestore.rules now forbids client couple-creation and client
+// invite-consumption outright (allow create / update: if false) — this function
+// is the ONLY path. Only NEW pairings run this; already-paired couples are
+// untouched. Returns { coupleId, members } so the client can publish the couple
+// locally and flip to "paired" mid-session, exactly as the old client path did.
+exports.redeemInvite = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You need to be signed in.");
+  }
+  const uid = request.auth.uid;
+  const token = request.data && request.data.token;
+  if (typeof token !== "string" || token.length === 0) {
+    throw new HttpsError("invalid-argument", "Missing invite token.");
+  }
+
+  const db = admin.firestore();
+  const inviteRef = db.collection("invites").doc(token);
+
+  // The transaction re-reads the invite and commits both writes atomically, so a
+  // race between two redeemers resolves to exactly one winner (the loser's
+  // pending-check fails inside the transaction and retries → already-used).
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(inviteRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "This invite link isn't valid.", { reason: "not_found" });
+    }
+    const invite = snap.data();
+    if (invite.status !== "pending") {
+      throw new HttpsError("failed-precondition", "This invite has already been used.", { reason: "already_consumed" });
+    }
+    if (invite.creatorId === uid) {
+      throw new HttpsError("failed-precondition", "You can't redeem your own invite.", { reason: "own_invite" });
+    }
+
+    const members = [invite.creatorId, uid];
+    const coupleRef = db.collection("couples").doc();
+    tx.update(inviteRef, { status: "consumed", consumedBy: uid });
+    tx.set(coupleRef, {
+      members,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { coupleId: coupleRef.id, members };
+  });
+});
+
+// ---------------------------------------------------------------------------
 // STAGE 5 — match nudge (the first real nudge).
 //
 // Fires when a match doc is created under couples/{coupleId}/matches/{cardId}.
