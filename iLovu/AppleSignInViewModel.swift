@@ -108,6 +108,41 @@ final class AppleSignInViewModel {
         }
     }
 
+    // MARK: - Reviewer/demo login (email + password)
+
+    /// App Review can't use Sign in with Apple, so a demo account signs in with a
+    /// plain Firebase email+password. It flows through the SAME path as Apple —
+    /// AuthState's listener fires, ContentView routes, MainTabView resolves the
+    /// couple — so a demo account that's already paired lands straight in the
+    /// two-partner experience. Credentials are handed to App Review out-of-band
+    /// (App Review notes); they are NEVER hardcoded here, and the app has no
+    /// sign-up path (never calls createUser), so only accounts created
+    /// server-side (i.e. the single demo account) can ever sign in this way.
+    /// Reached only via the hidden long-press reveal in SignInView.
+    func signIn(email: String, password: String) async {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, !password.isEmpty else {
+            show("Enter an email and password.")
+            return
+        }
+
+        isSigningIn = true
+        defer { isSigningIn = false }
+
+        do {
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            errorMessage = nil
+            // Skip first-run onboarding so the reviewer lands directly in
+            // MainTabView, where currentCouple() resolves the pre-paired demo
+            // couple. Matches the @AppStorage key ContentView routes on.
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            print("✅ Firebase email sign-in success — uid: \(result.user.uid)")
+        } catch {
+            print("⚠️ Firebase email sign-in error: \(error.localizedDescription)")
+            show("We couldn't sign you in. Check the email and password and try again.")
+        }
+    }
+
     // MARK: - Error handling
 
     private func handle(_ error: Error) {
