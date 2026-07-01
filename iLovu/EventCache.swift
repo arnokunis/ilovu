@@ -36,6 +36,7 @@ import FirebaseFirestore
 struct EventCache {
 
     private let service = TicketmasterService()
+    private let cacheWriter = CacheWriteService()
     private var db: Firestore { Firestore.firestore() }
 
     // MARK: - Public: the deck for a location bucket
@@ -119,7 +120,7 @@ struct EventCache {
                 log("NO date-appropriate events for \(key)")
                 // Still write an empty pointer so we don't re-search every open
                 // within the window; SWR will retry it after queryMaxAge.
-                try writeQuery(key: key, eventIds: [])
+                try await writeQuery(key: key, eventIds: [])
                 return []
             }
 
@@ -130,7 +131,7 @@ struct EventCache {
                 try writeEvent(cached)
                 ordered.append(cached)
             }
-            try writeQuery(key: key, eventIds: ordered.map(\.eventId))
+            try await writeQuery(key: key, eventIds: ordered.map(\.eventId))
             log("WROTE deck \(key) — \(ordered.count) events")
             return ordered
         } catch {
@@ -191,17 +192,24 @@ struct EventCache {
     }
 
     // MARK: - Firestore writes
-    // Codable write-through, same rules as VenueCache: @DocumentID id stays nil
-    // (the doc ref carries identity); @ServerTimestamp fetchedAt/resolvedAt encode
-    // to a server sentinel so the server stamps freshness.
+    // The eventQueries pointer is Cloud-Function-only now (firestore.rules:
+    // write:false) — routed via CacheWriteService, @ServerTimestamp resolvedAt
+    // stripped + re-stamped server-side, same as the venue caches.
+    //
+    // events/{eventId} is deliberately NOT gated yet: this path is DORMANT (no
+    // date-appropriate Vilnius events) and CachedEvent carries a concrete `expireAt`
+    // Timestamp that doesn't fit the JSON-only cacheWrite relay. It stays a direct
+    // signed-in write for now; gate it (convert expireAt to millis in the relay)
+    // when the events market is reactivated, or with the server-side-fetch fast-follow.
 
     private func writeEvent(_ event: CachedEvent) throws {
         try db.collection("events").document(event.eventId).setData(from: event)
     }
 
-    private func writeQuery(key: String, eventIds: [String]) throws {
+    private func writeQuery(key: String, eventIds: [String]) async throws {
         let pointer = EventQuery(id: nil, eventIds: eventIds, resolvedAt: nil)
-        try db.collection("eventQueries").document(key).setData(from: pointer)
+        try await cacheWriter.write(pointer, to: "eventQueries", docId: key,
+                                    serverTimestampFields: ["resolvedAt"])
     }
 
     // MARK: - Staleness (pointer LIST, not individual events)

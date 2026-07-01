@@ -219,26 +219,25 @@ service cloud.firestore {
 
     // ---------- venues/{placeId} ----------
     // Cached Google Places data, keyed by the resolved place.id. Venues aren't
-    // private, so reads are open to everyone (even unauthenticated). Writes are
-    // allowed for any signed-in user for v1.
+    // private, so reads are open to everyone (even unauthenticated).
     //
-    // PRE-LAUNCH HARDENING: "any signed-in user can write" means a logged-in
-    // client could poison the cache (write a bad doc under a real placeId). The
-    // clean end-state is `allow write: if false` here and do all cache writes
-    // from a Cloud Function (Admin SDK bypasses rules) — same trajectory as the
-    // invite redemption hardening note. Accepted for v1.
+    // HARDENED: writes are Cloud-Function-only (the `cacheWrite` callable, Admin SDK
+    // bypasses rules) — a signed-in client can no longer poison the cache or write
+    // huge docs straight into it. The app still fetches Places on-device and hands
+    // the resolved doc to cacheWrite to persist (thin gate; moving the fetch itself
+    // server-side is the post-launch fast-follow).
     match /venues/{placeId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if false;
     }
 
     // ---------- venueQueries/{queryKey} ----------
     // Pointer cache: a normalized free-text query + location bucket -> placeId,
-    // so repeat lookups skip the billed Text Search. Same posture as venues:
-    // world-readable, signed-in writes for v1, Cloud-Function-only later.
+    // so repeat lookups skip the billed Text Search. World-readable; writes are
+    // Cloud-Function-only via cacheWrite (same as venues).
     match /venueQueries/{queryKey} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if false;
     }
 
     // ---------- events/{eventId} ----------
@@ -263,21 +262,23 @@ service cloud.firestore {
     // ---------- eventQueries/{queryKey} ----------
     // Pointer cache: a location bucket + date window -> an ordered list of event
     // ids (the curated deck), so repeat lookups skip the rate-limited Discovery
-    // search. Same posture as venueQueries: world-readable, signed-in writes for
-    // v1, Cloud-Function-only later.
+    // search. World-readable; writes are Cloud-Function-only via cacheWrite (same
+    // as venueQueries). NOTE: events/{eventId} above is still signed-in-writable —
+    // it's the one deferred cache collection (dormant + concrete expireAt Timestamp
+    // that doesn't fit the JSON-only cacheWrite relay); gate it when events revives.
     match /eventQueries/{queryKey} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if false;
     }
 
     // ---------- placeDeckQueries/{queryKey} ----------
     // Pointer cache for the Near You PLACES deck: a location bucket -> an ordered
     // list of curated placeIds (the deck). The resolved venues themselves live in
-    // venues/{placeId} (ruled above). Same posture as venueQueries/eventQueries:
-    // world-readable, signed-in writes for v1, Cloud-Function-only later.
+    // venues/{placeId} (ruled above). World-readable; writes are Cloud-Function-only
+    // via cacheWrite (same as venueQueries/eventQueries).
     match /placeDeckQueries/{queryKey} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if false;
     }
 
     // Anything not matched above is denied by default.

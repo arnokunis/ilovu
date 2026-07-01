@@ -28,6 +28,82 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10, region: "europe-west1" });
 
 // ---------------------------------------------------------------------------
+// cacheWrite — the ONLY writer for the shared, world-readable cache collections.
+//
+// venues / venueQueries / placeDeckQueries / eventQueries are readable by anyone
+// but writable by NO client (firestore.rules: `allow write: if false`). The app
+// still fetches from Google Places on-device (bundle-restricted key) and hands
+// the resolved doc here to persist — so a signed-in client can no longer write
+// arbitrary docs straight into these collections (the cache-poisoning / cost-abuse
+// hole flagged in the PRE-LAUNCH HARDENING notes). The Admin SDK bypasses rules.
+//
+// THIN GATE (deliberate, pre-launch): this trusts the client-fetched payload and
+// only controls WHERE it may land + how big it may be. Moving the Places fetch
+// itself server-side (data becomes authoritative AND the API key leaves the
+// device) is the post-launch fast-follow. `events/{eventId}` is intentionally NOT
+// gated here yet — that path is dormant and its doc carries a concrete `expireAt`
+// Timestamp that doesn't fit this JSON-only relay; gate it when events reactivates.
+//
+// @ServerTimestamp fields (fetchedAt / resolvedAt) encode to a FieldValue sentinel
+// that can't cross the callable JSON boundary, so the client strips them and names
+// them in serverTimestampFields; we re-stamp them with server time here —
+// producing exactly the same doc the old client setData(from:) wrote.
+const CACHE_WRITE_COLLECTIONS = new Set([
+  "venues",
+  "venueQueries",
+  "placeDeckQueries",
+  "eventQueries",
+]);
+
+// Bound the relayed payload so a bad/hostile client can't write huge docs (cost).
+// A real venue doc (reviews + hours + photo names) is a few KB; 200 KB is generous.
+const MAX_CACHE_DOC_BYTES = 200 * 1024;
+
+exports.cacheWrite = onCall((request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in to write the cache.");
+  }
+
+  const { collection, docId, data, serverTimestampFields } = request.data || {};
+
+  if (!CACHE_WRITE_COLLECTIONS.has(collection)) {
+    throw new HttpsError("invalid-argument", `Collection not cache-writable: ${collection}`);
+  }
+  if (
+    typeof docId !== "string" ||
+    docId.length === 0 ||
+    docId.length > 1500 ||
+    docId.includes("/")
+  ) {
+    throw new HttpsError("invalid-argument", "Invalid docId.");
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "data must be an object.");
+  }
+  if (Buffer.byteLength(JSON.stringify(data), "utf8") > MAX_CACHE_DOC_BYTES) {
+    throw new HttpsError("invalid-argument", "Cache doc too large.");
+  }
+  const tsFields = Array.isArray(serverTimestampFields) ? serverTimestampFields : [];
+  if (!tsFields.every((f) => typeof f === "string")) {
+    throw new HttpsError("invalid-argument", "serverTimestampFields must be strings.");
+  }
+
+  // Full overwrite (matches the client's old setData(from:)), server-stamping the
+  // freshness fields the client stripped.
+  const doc = { ...data };
+  for (const field of tsFields) {
+    doc[field] = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  return admin
+    .firestore()
+    .collection(collection)
+    .doc(docId)
+    .set(doc)
+    .then(() => ({ ok: true }));
+});
+
+// ---------------------------------------------------------------------------
 // STAGE 5 — match nudge (the first real nudge).
 //
 // Fires when a match doc is created under couples/{coupleId}/matches/{cardId}.

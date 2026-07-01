@@ -31,6 +31,7 @@ import FirebaseFirestore
 struct VenueCache {
 
     private let places = PlacesService()
+    private let cacheWriter = CacheWriteService()
     private var db: Firestore { Firestore.firestore() }
 
     /// Cached venues older than this are served stale, then refreshed in the
@@ -111,8 +112,8 @@ struct VenueCache {
             }
 
             var venue = CachedVenue.from(top)   // id nil, fetchedAt nil
-            try writeVenue(venue, placeId: top.id)             // venues/{placeId}
-            try writeQuery(key: key, placeId: top.id, rawQuery: query)  // venueQueries/{key}
+            try await writeVenue(venue, placeId: top.id)             // venues/{placeId}
+            try await writeQuery(key: key, placeId: top.id, rawQuery: query)  // venueQueries/{key}
             log("WROTE cache \(top.id) for \"\(query)\"")
 
             venue.id = top.id   // for the returned copy only; never re-encoded
@@ -169,18 +170,22 @@ struct VenueCache {
         }
     }
 
-    // MARK: - Firestore writes
-    // Codable write-through. @DocumentID id stays nil so it isn't encoded (the
-    // doc ref carries identity); @ServerTimestamp fetchedAt/resolvedAt encode to
-    // a server-timestamp sentinel, so the server stamps the freshness time.
+    // MARK: - Firestore writes (via the cacheWrite Cloud Function)
+    // Cache writes are Cloud-Function-only now (firestore.rules: write:false) — see
+    // CacheWriteService. @DocumentID id stays nil so it isn't encoded (the doc ref
+    // carries identity); the @ServerTimestamp freshness field is stripped client-
+    // side and re-stamped server-side, so the stored doc is identical to the old
+    // setData(from:) write and the `.estimate` staleness reads are unaffected.
 
-    private func writeVenue(_ venue: CachedVenue, placeId: String) throws {
-        try db.collection("venues").document(placeId).setData(from: venue)
+    private func writeVenue(_ venue: CachedVenue, placeId: String) async throws {
+        try await cacheWriter.write(venue, to: "venues", docId: placeId,
+                                    serverTimestampFields: ["fetchedAt"])
     }
 
-    private func writeQuery(key: String, placeId: String, rawQuery: String) throws {
+    private func writeQuery(key: String, placeId: String, rawQuery: String) async throws {
         let pointer = VenueQuery(id: nil, placeId: placeId, rawQuery: rawQuery, resolvedAt: nil)
-        try db.collection("venueQueries").document(key).setData(from: pointer)
+        try await cacheWriter.write(pointer, to: "venueQueries", docId: key,
+                                    serverTimestampFields: ["resolvedAt"])
     }
 
     // MARK: - Staleness
@@ -250,7 +255,7 @@ struct VenueCache {
         let ranked = PlaceCuration.rank(raw)
         guard !ranked.isEmpty else {
             log("DECK no curated venues for \(bucket)")
-            try? writePlaceDeck(key: bucket, placeIds: [])   // record empty so we don't re-search every open
+            try? await writePlaceDeck(key: bucket, placeIds: [])   // record empty so we don't re-search every open
             return []
         }
 
@@ -258,13 +263,13 @@ struct VenueCache {
         for item in ranked {
             let venue = CachedVenue.from(item.place, category: item.verdict.category)
             do {
-                try writeVenue(venue, placeId: item.place.id)   // reuse the venues/{placeId} truth layer
+                try await writeVenue(venue, placeId: item.place.id)   // reuse the venues/{placeId} truth layer
                 ordered.append(venue)
             } catch {
                 log("DECK write venue \(item.place.id): \(error.localizedDescription)")
             }
         }
-        do { try writePlaceDeck(key: bucket, placeIds: ordered.map(\.placeId)) }
+        do { try await writePlaceDeck(key: bucket, placeIds: ordered.map(\.placeId)) }
         catch { log("DECK write pointer \(bucket): \(error.localizedDescription)") }
         log("DECK WROTE \(bucket) — \(ordered.count) venues")
         return ordered
@@ -300,9 +305,10 @@ struct VenueCache {
         }
     }
 
-    private func writePlaceDeck(key: String, placeIds: [String]) throws {
+    private func writePlaceDeck(key: String, placeIds: [String]) async throws {
         let pointer = PlaceDeckQuery(id: nil, placeIds: placeIds, resolvedAt: nil)
-        try db.collection("placeDeckQueries").document(key).setData(from: pointer)
+        try await cacheWriter.write(pointer, to: "placeDeckQueries", docId: key,
+                                    serverTimestampFields: ["resolvedAt"])
     }
 
     private func isDeckStale(_ pointer: PlaceDeckQuery) -> Bool {
