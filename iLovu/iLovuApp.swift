@@ -7,7 +7,29 @@
 
 import SwiftUI
 import FirebaseCore
+import FirebaseAppCheck
 import RevenueCat
+
+// App Check provider factory. Attests that Firebase traffic comes from a genuine,
+// unmodified build of THIS app (device-level, via Apple's App Attest) — the
+// device-attestation half of the pre-launch hardening. On real devices we use
+// AppAttestProvider; DEBUG builds (simulator / Xcode) can't App-Attest, so they
+// use the debug provider, which prints a debug token to the console on first run
+// that must be registered in the Firebase console (App Check → Manage debug tokens).
+//
+// IMPORTANT: registering the factory does NOT block anything on its own. App Check
+// starts in MONITORING mode — the console records verified vs unverified traffic
+// but nothing is rejected. Enforcement is flipped ON in the console only after all
+// client call sites are stable (the #4b step of the hardening sprint).
+final class ILovuAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        #if DEBUG
+        return AppCheckDebugProvider(app: app)
+        #else
+        return AppAttestProvider(app: app)
+        #endif
+    }
+}
 
 @main
 struct iLovuApp: App {
@@ -83,6 +105,12 @@ struct iLovuApp: App {
     // create AuthState. Order matters: AuthState observes Auth.auth(), which
     // requires FirebaseApp.configure() to have already run.
     init() {
+        // App Check MUST be registered before FirebaseApp.configure() so the
+        // very first Firebase requests carry an attestation token. Monitoring
+        // mode only (see ILovuAppCheckProviderFactory) — this changes no runtime
+        // behavior until enforcement is enabled server-side.
+        AppCheck.setAppCheckProviderFactory(ILovuAppCheckProviderFactory())
+
         FirebaseApp.configure()
 
         // RevenueCat, configured at launch alongside Firebase. The public SDK
