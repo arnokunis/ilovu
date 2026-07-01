@@ -183,6 +183,9 @@ final class CoupleService {
         await flushPendingFCMToken()
         // Seed the onboarding name (which never goes through setDisplayName).
         await seedDisplayNameFromLocalIfNeeded()
+        // Pull the freshly-set coupleId claim into this device's token (Storage
+        // membership enforcement reads it).
+        await refreshAuthClaims()
         return coupleId
     }
 
@@ -232,6 +235,9 @@ final class CoupleService {
             // Seed the onboarding name on first couple load (e.g. inviter's
             // cold launch / when the partner joins) if it's not already set.
             await seedDisplayNameFromLocalIfNeeded()
+            // Ensure this device's token carries the coupleId claim (covers the
+            // creator discovering the couple, and every paired launch).
+            await refreshAuthClaims()
         }
         return resolved
     }
@@ -256,6 +262,30 @@ final class CoupleService {
                       let updated = try? snapshot.data(as: Couple.self) else { return }
                 self.couple = updated
             }
+    }
+
+    // MARK: - Auth claims (couple membership)
+
+    /// Force-refreshes the signed-in user's ID token so the `coupleId` custom claim
+    /// (stamped on both members by the redeemInvite CF / backfill) lands in the
+    /// token THIS device uses. storage.rules enforces couples/{coupleId}/** via
+    /// `request.auth.token.coupleId` — Storage rules can't read Firestore — so the
+    /// token must carry it. Called after redeem (redeemer) and on couple resolve
+    /// (currentCouple → covers the creator + every launch). Never throws; a failed
+    /// refresh just retries at the next resolve, and nothing enforces the claim
+    /// until the Storage rule flip, so a miss is harmless in the meantime.
+    @discardableResult
+    func refreshAuthClaims() async -> String? {
+        guard let user = Auth.auth().currentUser else { return nil }
+        do {
+            let result = try await user.getIDTokenResult(forcingRefresh: true)
+            let claim = result.claims["coupleId"] as? String
+            log("auth claims refreshed — coupleId=\(claim ?? "nil")")
+            return claim
+        } catch {
+            log("auth claims refresh failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - Display name
