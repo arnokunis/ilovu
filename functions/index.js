@@ -18,7 +18,7 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
@@ -171,38 +171,6 @@ exports.redeemInvite = onCall(async (request) => {
   }
 
   return result;
-});
-
-// ---------------------------------------------------------------------------
-// backfillCoupleClaims — ONE-OFF migration. redeemInvite (above) stamps the
-// coupleId claim on new couples; this stamps it on the members of every EXISTING
-// couple, so already-paired couples keep Storage access once storage.rules starts
-// enforcing request.auth.token.coupleId. Secret-guarded (?key=), same pattern as
-// the retired runDateRemindersNow trigger. DELETE this (source + deployed) once
-// it has been run and the claim is confirmed on device.
-const BACKFILL_SECRET = "kf83Jd0aQ2xP7mL9zR4tV6bN1sW5cH8";
-exports.backfillCoupleClaims = onRequest(async (req, res) => {
-  if (req.query.key !== BACKFILL_SECRET) {
-    res.status(403).send("forbidden");
-    return;
-  }
-  const db = admin.firestore();
-  const snap = await db.collection("couples").get();
-  let couples = 0;
-  let claims = 0;
-  for (const doc of snap.docs) {
-    const members = (doc.data().members) || [];
-    couples += 1;
-    for (const memberUid of members) {
-      try {
-        await admin.auth().setCustomUserClaims(memberUid, { coupleId: doc.id });
-        claims += 1;
-      } catch (e) {
-        console.error(`backfill: setCustomUserClaims failed for ${memberUid} (${doc.id})`, e);
-      }
-    }
-  }
-  res.json({ ok: true, couples, claims });
 });
 
 // ---------------------------------------------------------------------------
