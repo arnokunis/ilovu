@@ -50,7 +50,6 @@ struct PaywallView: View {
     enum Plan: Hashable { case annual, monthly }
 
     @State private var selectedPlan: Plan = .annual
-    @State private var showOtherOptions = false   // monthly hides behind a disclosure
     @State private var appeared = false           // drives the one-shot entrance
 
     // Purchase / restore in-flight + the last friendly error, if any. Owned here
@@ -246,37 +245,13 @@ struct PaywallView: View {
     // MARK: - Plans
 
     private var plans: some View {
+        // Both plans are shown upfront — no product is hidden behind a tap.
+        // Annual stays pre-selected/highlighted (the plan we push); Monthly sits
+        // directly below it as a fully selectable option.
         VStack(spacing: 14) {
             planCard(annualInfo)
-
-            // Monthly stays out of the way until the user asks for it.
-            if showOtherOptions {
-                planCard(monthlyInfo)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            } else {
-                otherOptionsDisclosure
-            }
+            planCard(monthlyInfo)
         }
-    }
-
-    private var otherOptionsDisclosure: some View {
-        Button {
-            withAnimation(reduceMotion ? nil : LouvAnimation.spring) {
-                showOtherOptions = true
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text("See other options")
-                Image(systemName: "chevron.down")
-                    .font(.system(size: smallSize - 2, weight: .semibold))
-            }
-            .font(.system(size: smallSize, weight: .semibold))
-            .foregroundStyle(.gray)
-        }
-        .buttonStyle(.plain)
-        .padding(.top, 2)
-        .accessibilityLabel("See other plans")
-        .accessibilityHint("Shows the monthly plan")
     }
 
     /// One selectable plan card. Selection is local state; tapping selects.

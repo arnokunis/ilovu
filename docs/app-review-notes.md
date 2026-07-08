@@ -40,8 +40,11 @@ it captures a Proof Photo into the shared Memory Vault.
 SUBSCRIPTION / IN-APP PURCHASE (for IAP review)
 iLovu offers an auto-renewing subscription (annual or monthly). The demo account
 is FREE (not subscribed), so you can review the purchase flow directly:
-  • From the Home tab, tap any Mission card — the subscription paywall appears,
-    showing the plans and prices.
+  • When the paywall appears: from the Home tab, tap any Mission card. The demo
+    account is not subscribed, so this opens the subscription paywall immediately.
+  • The paywall shows BOTH plans upfront — "iLovu Annual" and, directly below it,
+    "iLovu Monthly" — each with its price and selectable. No plan is hidden behind
+    an extra tap; Annual is pre-selected by default.
   • You can complete the purchase there (it completes in the StoreKit sandbox
     for review and unlocks Premium), or tap the "X" in the top corner to close it.
   • The app stays fully usable without subscribing: swiping, matching, and —

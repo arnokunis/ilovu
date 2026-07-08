@@ -15,6 +15,11 @@
 	     add a capability and will strip both this comment and the calendar key
 	     (it did exactly that adding Push/Background Modes). If you edit
 	     capabilities in the GUI, re-check that the calendar key survived. -->
+	<!-- No non-exempt encryption: iLovu only uses standard HTTPS/TLS. Declared
+	     here (not as INFOPLIST_KEY_) so it reliably lands in the built binary and
+	     App Store Connect skips the export-compliance prompt on each upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>iLovu adds your planned dates and event matches to your calendar so you both remember when they are.</string>
 	<key>CFBundleURLTypes</key>
