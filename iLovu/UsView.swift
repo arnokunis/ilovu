@@ -65,6 +65,12 @@ struct UsView: View {
     // Presents the edit-name / edit-photo sheet.
     @State private var showEditProfile = false
 
+    // Account deletion (App Store 5.1.1(v)): the confirm alert, the in-flight
+    // spinner while the Cloud Function runs, and a friendly error if it fails.
+    @State private var showDeleteConfirm = false
+    @State private var isDeletingAccount = false
+    @State private var deleteError: String?
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -94,6 +100,22 @@ struct UsView: View {
         }
         .sheet(isPresented: $showCoupleStory) {
             CoupleStoryView()
+        }
+        // Account deletion confirmation (App Store 5.1.1(v)). Honest, couple-aware
+        // copy; the destructive action actually deletes the Firebase account.
+        .alert("Delete your account?", isPresented: $showDeleteConfirm) {
+            Button("Delete Account", role: .destructive) { deleteAccount() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(deleteConfirmMessage)
+        }
+        // Surfaced only if the delete call fails — the user stays signed in.
+        .alert("Couldn't delete account",
+               isPresented: Binding(get: { deleteError != nil },
+                                    set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
         }
         // Crop-and-zoom step after picking either photo. The result routes by
         // isCouple to the couple photo (Storage) or the personal photo (local).
@@ -369,7 +391,14 @@ struct UsView: View {
         VStack(spacing: 16) {
             profileRow
 
-            connectButton
+            // Partner gone → a gentle, honest notice replaces the "Connect" button
+            // (which would dead-end, since re-pairing ships later). Otherwise the
+            // normal connect entry point.
+            if coupleService.isOrphaned {
+                partnerLeftNotice
+            } else {
+                connectButton
+            }
 
             // Optional, dismissible invitation right after connecting; once it's
             // gone (set or dismissed), the permanent "Your story" row takes over.
@@ -381,7 +410,12 @@ struct UsView: View {
 
             subscriptionRow
 
-            DailyQuestionCard(coupleId: coupleService.coupleId)
+            // Orphaned → pass nil so answering falls back to local journaling (never
+            // the perpetual "waiting for your partner" lock), with a warm solo panel.
+            DailyQuestionCard(
+                coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
+                isOrphaned: coupleService.isOrphaned
+            )
 
             if memoryStore.memories.isEmpty {
                 emptyState
@@ -392,6 +426,7 @@ struct UsView: View {
             }
 
             signOutButton
+            deleteAccountButton
         }
         .padding(20)
     }
@@ -522,6 +557,93 @@ struct UsView: View {
         .padding(.top, 8)
     }
 
+    // MARK: - Partner left (orphaned couple) notice
+    // Shown when the partner has deleted their account. Honest and warm, and
+    // reassures that the shared memories are safe — never blames, never nags.
+
+    private var partnerLeftNotice: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "heart.slash.fill")
+                .font(.system(size: 26))
+                .foregroundStyle(Color.louvCoral)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Your partner left iLovu")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.deepRose)
+                Text("Everything you saved together is still safe in your Vault 💕")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .louvShadow()
+    }
+
+    // MARK: - Delete Account (App Store 5.1.1(v))
+    // Users must be able to INITIATE account deletion in-app. Tapping asks for
+    // confirmation (couple-aware copy), then the `deleteAccount` Cloud Function
+    // deletes the Firebase Auth user + their data; the partner keeps the shared
+    // Vault. On success we wipe local state and sign out (routes to SignInView).
+
+    private var deleteAccountButton: some View {
+        Button {
+            showDeleteConfirm = true
+        } label: {
+            Group {
+                if isDeletingAccount {
+                    ProgressView().tint(Color.passRed)
+                } else {
+                    Text("Delete Account")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.passRed)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDeletingAccount)
+        .accessibilityLabel("Delete Account")
+    }
+
+    /// Confirmation copy — honest about what deletion does, and couple-aware: a
+    /// paired user is told their partner keeps the shared memories.
+    private var deleteConfirmMessage: String {
+        if coupleService.coupleId != nil && !coupleService.isOrphaned {
+            return "This permanently deletes your account and you'll leave your relationship. Your partner keeps the memories you've shared. This can't be undone."
+        }
+        return "This permanently deletes your account and your data. This can't be undone."
+    }
+
+    /// Runs the deletion: calls the Cloud Function, then (on success) wipes ALL
+    /// local state so a future sign-in on this device starts clean — the zombie
+    /// half-paired @AppStorage gotcha — and signs out. On failure the user stays
+    /// signed in and sees a gentle error.
+    private func deleteAccount() {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        Task {
+            do {
+                try await coupleService.deleteAccount()
+                if let bundleId = Bundle.main.bundleIdentifier {
+                    UserDefaults.standard.removePersistentDomain(forName: bundleId)
+                }
+                profileStore.setPhoto(nil)   // clear the in-memory local photo too
+                authState.signOut()          // Auth listener → SignInView
+            } catch {
+                isDeletingAccount = false
+                deleteError = "Something went wrong deleting your account. Please try again."
+            }
+        }
+    }
+
     // MARK: - Subscription (status + Manage)
     // Status derives from the SAME source as the paywall gate
     // (premiumActive = my own entitlement OR the shared couple flag), so the two
@@ -538,7 +660,9 @@ struct UsView: View {
             return "Premium"   // active but plan id not resolved yet / unrecognized
         }
         if coupleService.couple?.isPremium == true {
-            return "Premium — covered by \(payerName)"
+            // Partner gone → don't attribute it to the departed member; just show
+            // the plain status (the shared flag may still be active).
+            return coupleService.isOrphaned ? "Premium" : "Premium — covered by \(payerName)"
         }
         return "Free"
     }
@@ -588,7 +712,7 @@ struct UsView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-            } else if coupleService.couple?.isPremium == true {
+            } else if coupleService.couple?.isPremium == true && !coupleService.isOrphaned {
                 Text("Managed by \(payerName)")
                     .font(.system(size: 13))
                     .foregroundStyle(.gray)

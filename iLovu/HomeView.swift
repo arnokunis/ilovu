@@ -57,9 +57,6 @@ struct HomeView: View {
     // RevenueCat: real prices for the wall + the purchase / restore flows.
     @Environment(SubscriptionService.self) private var subscriptionService
 
-    // Opens the paywall's Terms / Privacy links in Safari (external browser).
-    @Environment(\.openURL) private var openURL
-
     // 0...5. Drives how many of the five flame emojis are lit.
     // Conceptually: one completed Mission = a big spark boost; a quick
     // micro-moment = a small boost. The UI doesn't differentiate them
@@ -121,7 +118,11 @@ struct HomeView: View {
                     gentleReminder
                     thisWeeksSuggestionCard
                     missionsSection
-                    nudgeButton
+                    // Hidden once the partner has deleted their account — there's
+                    // no one to nudge (the call would ghost / error out).
+                    if !coupleService.isOrphaned {
+                        nudgeButton
+                    }
                     quickStatsRow
                 }
                 .padding(.horizontal, 20)
@@ -175,10 +176,10 @@ struct HomeView: View {
                     case .monthly: await subscriptionService.purchaseMonthly()
                     }
                 },
-                onRestore: { await subscriptionService.restore() },
-                // Live URLs (ilovu.io pages ship separately — fine if they 404 today).
-                onTerms:   { openURL(URL(string: "https://ilovu.io/terms")!) },
-                onPrivacy: { openURL(URL(string: "https://ilovu.io/privacy")!) }
+                onRestore: { await subscriptionService.restore() }
+                // Terms of Use / Privacy Policy links live inside PaywallView now
+                // (real live ilovu.io pages) so they're always present for
+                // App Store 3.1.2(c) — no call-site wiring needed.
             )
             // Load the real offering as the wall appears; PaywallView shows its
             // static fallback copy until the prices land.

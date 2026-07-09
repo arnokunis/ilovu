@@ -174,6 +174,97 @@ exports.redeemInvite = onCall(async (request) => {
 });
 
 // ---------------------------------------------------------------------------
+// deleteAccount — in-app account deletion (App Store Guideline 5.1.1(v)).
+//
+// CALLABLE (onCall): the Firebase SDK attaches the caller's auth, so
+// request.auth.uid is a VERIFIED signed-in user — we only ever delete the CALLER,
+// never a client-supplied id. The client can't do any of this itself: couples +
+// every subcollection are `allow delete: if false`, and Auth.user.delete() needs
+// a fresh Sign-in-with-Apple reauth. The Admin SDK bypasses rules and reauth.
+//
+// THE COUPLE CASE (locked design — "1-lite"): a couple is a SHARED doc both
+// partners point to, with shared memories/photos beneath it. When ONE member
+// deletes and the other is still around, we do NOT delete the shared data — the
+// surviving partner keeps the Vault (matches the locked breakup policy: "both keep
+// their own copy of shared memories", and the Privacy Policy's "your data deleted
+// within 30 days"). We ORPHAN the couple instead: flag the leaver in
+// `deletedMembers` and scrub their personal identifiers (name / birthday / push
+// token). `members` is left intact so the surviving partner's read rule + partner
+// resolution keep working structurally; the app branches on `deletedMembers` to
+// show a gentle "your partner left — your memories are safe" state.
+//
+// Only when NO living partner remains (a solo member, or the partner already
+// deleted earlier) is there nobody left to keep the shared data — then we tear the
+// whole couple down (subcollections + Storage + doc).
+//
+// IAM: admin.auth().deleteUser touches Auth (not just Firestore), so the compute
+// SA needs roles/firebaseauth.admin — the SAME role already granted for
+// redeemInvite's setCustomUserClaims. datastore.user covers the Firestore work.
+//
+// COST: inherits maxInstances:10 + region from setGlobalOptions. A rare, deliberate
+// user action — never fans out.
+exports.deleteAccount = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in to delete your account.");
+  }
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+
+  // Resolve the caller's couple by membership — never trust a client-passed id.
+  const snap = await db.collection("couples")
+    .where("members", "array-contains", uid).limit(1).get();
+
+  if (!snap.empty) {
+    const coupleRef = snap.docs[0].ref;
+    const couple = snap.docs[0].data() || {};
+    const members = couple.members || [];
+    const alreadyDeleted = couple.deletedMembers || [];
+    const partnerUid = members.find((m) => m !== uid);
+    const partnerLiving = Boolean(partnerUid) && !alreadyDeleted.includes(partnerUid);
+
+    if (partnerLiving) {
+      // ORPHAN: partner keeps the shared couple doc + memories. Flag the leaver and
+      // scrub their personal identifiers (dot-path deletes touch only their keys).
+      await coupleRef.update({
+        deletedMembers: admin.firestore.FieldValue.arrayUnion(uid),
+        [`displayNames.${uid}`]: admin.firestore.FieldValue.delete(),
+        [`birthdays.${uid}`]: admin.firestore.FieldValue.delete(),
+        [`fcmTokens.${uid}`]: admin.firestore.FieldValue.delete(),
+      });
+    } else {
+      // No living partner remains — nobody is left to keep the shared data, so tear
+      // the whole couple down. recursiveDelete removes the doc + every subcollection
+      // (swipes / matches / missions / memories / dailyAnswers); Storage is purged
+      // separately. Best-effort Storage so a bucket hiccup can't block the delete.
+      await purgeCoupleStorage(coupleRef.id);
+      await db.recursiveDelete(coupleRef);
+    }
+  }
+
+  // Remove any invites this user minted (pending or spent) — leftover data of theirs.
+  const invites = await db.collection("invites").where("creatorId", "==", uid).get();
+  await Promise.all(invites.docs.map((d) => d.ref.delete()));
+
+  // Finally, delete the Auth user itself. Do this LAST: the steps above run under
+  // the caller's still-valid token, and deleting the user invalidates it.
+  await admin.auth().deleteUser(uid);
+
+  console.log(`deleteAccount: deleted ${uid}`);
+  return { ok: true };
+});
+
+// Best-effort delete of a couple's Storage prefix (couple photo + proof photos).
+// Wrapped so a Storage error never blocks the Firestore/Auth teardown; the doc is
+// already the source of truth, and orphaned bytes are harmless (and cheap).
+async function purgeCoupleStorage(coupleId) {
+  try {
+    await admin.storage().bucket().deleteFiles({ prefix: `couples/${coupleId}/` });
+  } catch (e) {
+    console.error(`purgeCoupleStorage ${coupleId} failed (non-fatal):`, e.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // STAGE 5 — match nudge (the first real nudge).
 //
 // Fires when a match doc is created under couples/{coupleId}/matches/{cardId}.
@@ -545,6 +636,11 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
 
   for (const doc of couplesSnap.docs) {
     const couple = doc.data() || {};
+    // Skip orphaned couples (a member deleted their account) — never ping the
+    // surviving partner about the anniversary/birthday of a relationship that
+    // ended. The leaver's identifiers are already scrubbed, but the shared dates
+    // (milestones) linger on the doc, so guard here.
+    if ((couple.deletedMembers || []).length > 0) continue;
     const reminders = buildReminders(couple, todayMD, headsMD);
     if (reminders.length === 0) continue;
 

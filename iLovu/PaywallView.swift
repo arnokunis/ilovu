@@ -38,11 +38,18 @@ struct PaywallView: View {
     /// can dismiss on success, ignore a cancel, or surface a friendly error.
     var onPurchase: (Plan) async -> PurchaseOutcome = { _ in .cancelled }
 
-    // The quiet footer actions. Restore is async (returns an outcome); terms /
-    // privacy stay simple no-op-able callbacks. Defaults keep previews drop-in.
+    // The quiet footer action. Restore is async (returns an outcome). Default
+    // keeps previews drop-in.
     var onRestore: () async -> PurchaseOutcome = { .cancelled }
-    var onTerms:   () -> Void = {}
-    var onPrivacy: () -> Void = {}
+
+    // Legal links live HERE, not as caller-supplied closures — App Store 3.1.2(c)
+    // requires the paywall itself to display functional Terms of Use (EULA) and
+    // Privacy Policy links, so we bake the real URLs in and open them directly.
+    // This guarantees they're present and working from EVERY presentation of the
+    // wall (and in previews), never dependent on a call site remembering to wire
+    // them. Overridable only if a future market needs different pages.
+    var termsURL:   URL = URL(string: "https://ilovu.io/terms")!
+    var privacyURL: URL = URL(string: "https://ilovu.io/privacy")!
 
     // MARK: - State
 
@@ -62,6 +69,9 @@ struct PaywallView: View {
     // Dismiss works when presented as a sheet / fullScreenCover (the intended
     // use). The close button is the soft "wall" escape hatch.
     @Environment(\.dismiss) private var dismiss
+
+    // Opens the Terms of Use / Privacy Policy pages in Safari.
+    @Environment(\.openURL) private var openURL
 
     // Honor the system "Reduce Motion" setting — we skip the slide-in transform
     // (a gentle opacity fade is still fine) when it's on.
@@ -425,13 +435,19 @@ struct PaywallView: View {
         }
     }
 
+    // Two rows so the legal links (App Store 3.1.2(c)) are always fully legible
+    // and never truncate on a narrow screen or at large Dynamic Type sizes:
+    // Restore on top, the required "Terms of Use · Privacy Policy" beneath. The
+    // exact phrases Apple's reviewers look for, opening the real live pages.
     private var footer: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 10) {
             footerButton("Restore purchase") { Task { await runRestore() } }
-            footerDot
-            footerButton("Terms", action: onTerms)
-            footerDot
-            footerButton("Privacy", action: onPrivacy)
+
+            HStack(spacing: 10) {
+                footerButton("Terms of Use") { openURL(termsURL) }
+                footerDot
+                footerButton("Privacy Policy") { openURL(privacyURL) }
+            }
         }
         .font(.system(size: fineSize))
         .foregroundStyle(.gray)

@@ -27,7 +27,14 @@ import FirebaseFirestore
 struct DailyQuestionCard: View {
 
     /// The current couple's id, or nil when unpaired (local-only fallback).
+    /// The caller passes nil for an ORPHANED couple too, so answering falls back to
+    /// local journaling and never shows the "waiting for your partner" lock forever.
     let coupleId: String?
+
+    /// True when the partner has deleted their account. Only changes the copy of the
+    /// answered-state panel — a warm solo line instead of "connect to swap answers"
+    /// (there's no partner to connect to). Defaults false so previews stay drop-in.
+    var isOrphaned: Bool = false
 
     @Environment(DailyQuestionService.self) private var dailyService
 
@@ -148,6 +155,13 @@ struct DailyQuestionCard: View {
                         subtitle: "They'll see your answer once they answer too 💕"
                     )
                 }
+            } else if isOrphaned {
+                // Partner has left — keep it warm and solo, no invite to reconnect.
+                lockedPanel(
+                    icon: "heart.fill",
+                    title: "A little reflection, just for you 💕",
+                    subtitle: "Your answers stay here for you."
+                )
             } else {
                 // No partner to sync with yet.
                 lockedPanel(

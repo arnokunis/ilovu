@@ -100,10 +100,28 @@ struct Couple: Codable, Identifiable {
     /// button. nil until the first nudge. Optional/defaulted so older docs decode.
     var lastManualNudgeAt: Timestamp? = nil
 
-    /// The *other* member's uid, from the current user's point of view.
-    /// nil if this somehow isn't a two-person couple.
+    /// uids of members who DELETED their account (App Store 5.1.1(v) account
+    /// deletion). Written ONLY by the `deleteAccount` Cloud Function, which ALSO
+    /// scrubs that uid's personal identifiers (displayNames / birthdays / fcmTokens)
+    /// — so a departed partner leaves no ghost name or birthday behind, and the
+    /// surviving partner keeps the shared couple doc + Memory Vault. `members` is
+    /// left intact so read rules + partner resolution stay structurally valid; the
+    /// app branches on `isOrphaned` to show a gentle "your partner left" state.
+    /// Only the surviving partner can ever read this (the leaver's account is gone).
+    /// nil/absent on a healthy couple. Optional/defaulted so older docs decode.
+    var deletedMembers: [String]? = nil
+
+    /// True once a member has deleted their account — from the reader's point of
+    /// view that always means "my partner left" (the leaver can't read this doc).
+    var isOrphaned: Bool { !(deletedMembers ?? []).isEmpty }
+
+    /// The *other* member's uid, from the current user's point of view. nil if this
+    /// somehow isn't a two-person couple, OR if the resolved partner has deleted
+    /// their account — so every partner-identity site (name, birthday, nudge target)
+    /// degrades to "no partner" instead of surfacing a departed ghost.
     func partner(of uid: String) -> String? {
-        members.first { $0 != uid }
+        let gone = deletedMembers ?? []
+        return members.first { $0 != uid && !gone.contains($0) }
     }
 
     /// The partner's chosen display name, if they've set one yet.

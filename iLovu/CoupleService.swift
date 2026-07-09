@@ -56,6 +56,12 @@ final class CoupleService {
         return couple?.partnerName(currentUid: uid)
     }
 
+    /// True when the partner has deleted their account, leaving this user the sole
+    /// surviving member of the couple doc. The whole app branches on this to show a
+    /// gentle "your partner left" state and to suppress partner-facing affordances
+    /// (nudge, daily-question reveal) instead of hanging on a partner who's gone.
+    var isOrphaned: Bool { couple?.isOrphaned ?? false }
+
     /// Storage path of the shared couple photo, or nil if none set / unpaired.
     /// Views pass this to CachedStorageImage.
     var couplePhotoPath: String? { couple?.couplePhotoPath }
@@ -497,6 +503,30 @@ final class CoupleService {
             log("nudgePartner — failed: \(ns.localizedDescription)")
             return .failed
         }
+    }
+
+    // MARK: - Account deletion (App Store 5.1.1(v))
+    //
+    // In-app account deletion runs entirely through the `deleteAccount` callable
+    // Cloud Function (Admin SDK): the client can't delete the couple doc / its
+    // subcollections (all `allow delete: if false`) or the Auth user (that needs a
+    // fresh Sign-in-with-Apple reauth). The function orphans the couple when a
+    // partner survives (they keep the shared Vault) or tears it fully down when
+    // nobody's left, then deletes the Auth user. See functions/index.js.
+
+    /// Deletes the signed-in user's account via the `deleteAccount` callable. On
+    /// success the Auth user is gone server-side; the caller must then wipe local
+    /// state and sign out (the local session is now invalid). Clears the in-memory
+    /// couple + any parked local writes so nothing lingers. Throws on failure so the
+    /// UI can keep the user signed in and show a retry.
+    func deleteAccount() async throws {
+        guard Auth.auth().currentUser != nil else { throw InviteError.notSignedIn }
+        _ = try await functions.httpsCallable("deleteAccount").call()
+        // Server side is done — drop everything we hold about this couple so no
+        // observer keeps rendering a doc that no longer belongs to us.
+        couple = nil
+        pendingFCMToken = nil
+        UserDefaults.standard.removeObject(forKey: pendingDisplayNameKey)
     }
 
     // MARK: - Couple photo
