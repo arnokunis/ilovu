@@ -110,6 +110,8 @@ final class CoupleService {
         case inviteNotFound
         case alreadyConsumed
         case cannotRedeemOwnInvite
+        case inviteExpired
+        case tooManyAttempts
         case notPaired
 
         var errorDescription: String? {
@@ -118,6 +120,8 @@ final class CoupleService {
             case .inviteNotFound:        "This invite link isn't valid."
             case .alreadyConsumed:       "This invite has already been used."
             case .cannotRedeemOwnInvite: "You can't redeem your own invite."
+            case .inviteExpired:         "This invite has expired — ask for a fresh code."
+            case .tooManyAttempts:       "Too many attempts — please try again in an hour."
             case .notPaired:             "Connect with your partner first."
             }
         }
@@ -145,6 +149,7 @@ final class CoupleService {
             "consumedBy": NSNull(),                       // explicit null — create rule checks == null
             "createdAt": FieldValue.serverTimestamp()
         ])
+        AppAnalytics.log("invite_created")
         return token
     }
 
@@ -192,6 +197,7 @@ final class CoupleService {
         // Pull the freshly-set coupleId claim into this device's token (Storage
         // membership enforcement reads it).
         await refreshAuthClaims()
+        AppAnalytics.log("invite_redeemed")
         return coupleId
     }
 
@@ -208,6 +214,8 @@ final class CoupleService {
         case "not_found":        return InviteError.inviteNotFound
         case "already_consumed": return InviteError.alreadyConsumed
         case "own_invite":       return InviteError.cannotRedeemOwnInvite
+        case "expired":          return InviteError.inviteExpired
+        case "rate_limited":     return InviteError.tooManyAttempts
         default:
             if let code = FunctionsErrorCode(rawValue: ns.code), code == .unauthenticated {
                 return InviteError.notSignedIn
@@ -712,6 +720,10 @@ final class CoupleService {
     nonisolated static let inviteURLScheme = "ilovu"
     nonisolated static let inviteURLHost   = "invite"
 
+    /// The live App Store page (single source — reused anywhere we link the
+    /// store: invite shares, future review/marketing surfaces).
+    nonisolated static let appStoreURL = URL(string: "https://apps.apple.com/app/id6781237573")!
+
     /// Builds the shareable deep link for an invite token.
     /// `nonisolated`: pure string work, safe to call off the main actor.
     nonisolated static func inviteURL(token: String) -> URL {
@@ -735,14 +747,18 @@ final class CoupleService {
     // ambiguity). 32 divides 256, so `byte % 32` is perfectly unbiased.
     nonisolated static let tokenAlphabet = Array("0123456789abcdefghjkmnpqrstvwxyz")
 
-    /// Invite-code length in characters. 10 chars over a 32-symbol alphabet =
-    /// 50 bits of entropy. That's deliberately far shorter than the old 26-char
-    /// (128-bit) token — friendlier to read/type at the pairing moment — while
-    /// staying comfortably unguessable: the only valid targets are *currently
-    /// pending* invites, and 32^10 ≈ 1.1e15 means even a pool-wide online guess
-    /// against thousands of live invites needs astronomically many authed reads.
-    /// Easy to bump if we ever want more margin.
-    private static let tokenLength = 10
+    /// Invite-code length in characters. 5 chars over a 32-symbol alphabet =
+    /// 25 bits (32^5 ≈ 33.5M) — deliberately short enough to read aloud or type
+    /// in seconds at the pairing moment. That's NOT unguessable by brute force
+    /// on its own, so the security premise moved server-side (2026-07-18):
+    ///   * firestore.rules: invite reads are creator-only (redemption is
+    ///     CF-only, so nobody else needs to read them),
+    ///   * `redeemInvite` rate-limits failed attempts per account (the only
+    ///     guessing surface left) and expires invites after 7 days.
+    /// At ~10 guesses/hour against 33.5M combos, a brute force needs centuries.
+    /// Easy to bump if the threat model ever changes. Old 10-char pending
+    /// invites still redeem fine (the CF never checks length).
+    private static let tokenLength = 5
 
     /// `tokenLength` cryptographically-random Crockford-base32 chars. Unguessable
     /// by design — that's the entire security premise of the invite rules, since
@@ -773,15 +789,18 @@ final class CoupleService {
     }
 
     /// The warm, on-brand text shared from the invite share sheet. Leads with
-    /// the human-readable (grouped/uppercased) code as PLAIN TEXT, so even apps
-    /// that strip custom-scheme links (e.g. Messenger) still deliver a usable
-    /// code the partner can type/paste. The raw-token link follows as a secondary
-    /// convenience for apps that keep it (iMessage, WhatsApp). The link's token
-    /// is unchanged, so every existing redeem path still works.
+    /// the App Store link (plain https — never stripped, gives a partner
+    /// WITHOUT the app an install path), then the human-readable
+    /// (grouped/uppercased) code as PLAIN TEXT, so even apps that strip
+    /// custom-scheme links (e.g. Messenger) still deliver a usable code the
+    /// partner can type/paste. The raw-token link stays last as the fast path
+    /// for partners who already have the app (iMessage, WhatsApp keep it).
+    /// The link's token is unchanged, so every existing redeem path still works.
     nonisolated static func inviteShareMessage(token: String) -> String {
         """
         Join me on iLovu 💕
-        Enter this code to connect: \(formatInviteCode(token))
+        1. Get the app: \(appStoreURL.absoluteString)
+        2. Enter this code to connect: \(formatInviteCode(token))
         \(inviteURL(token: token).absoluteString)
         """
     }

@@ -44,11 +44,13 @@ service cloud.firestore {
                     && request.resource.data.status == 'pending'
                     && request.resource.data.consumedBy == null;
 
-      // READ: the creator can always read their invite. Any other signed-in
-      // user may read it too — they have to in order to redeem it. Security
-      // here rests on the token being unguessable (it's the doc ID), not on
-      // hiding the doc. No public/unauthenticated reads.
-      allow read: if isSignedIn();
+      // READ: creator-only (2026-07-18). Redemption is CF-only (Admin SDK
+      // bypasses rules), so no other client ever needs to read an invite —
+      // the old "any signed-in user may read to redeem" grant was a leftover
+      // from the client-redeem era. Tightening this matters now that codes
+      // are 5 chars: it closes direct-read enumeration, leaving `redeemInvite`
+      // (rate-limited, expiring) as the ONLY guessing surface.
+      allow read: if isSignedIn() && resource.data.creatorId == uid();
 
       // DELETE: only the creator can tear down their own invite (e.g. revoke).
       allow delete: if isSignedIn() && resource.data.creatorId == uid();

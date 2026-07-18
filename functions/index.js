@@ -127,31 +127,80 @@ exports.redeemInvite = onCall(async (request) => {
   const db = admin.firestore();
   const inviteRef = db.collection("invites").doc(token);
 
+  // Rate limit + expiry (2026-07-18): invite codes shrank to 5 chars
+  // (32^5 ≈ 33.5M combos) so they're typeable at the pairing moment. That's
+  // only safe because guessing is throttled HERE — this callable is the sole
+  // redemption path, and firestore.rules makes invite reads creator-only, so
+  // there is no other surface to enumerate tokens against. At 10 failed
+  // tries/hour, brute-forcing 33.5M combos takes centuries per account.
+  const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+  const RATE_LIMIT_MAX_FAILED = 10;
+  const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  // redeemAttempts/{uid} — server-only bookkeeping (no rules grant client
+  // access): { count, windowStart }. Best-effort, not transactional — a racing
+  // pair of guesses may slip one extra attempt through, which doesn't matter
+  // at this scale.
+  const attemptsRef = db.collection("redeemAttempts").doc(uid);
+  const attemptsSnap = await attemptsRef.get();
+  const attempts = attemptsSnap.exists ? attemptsSnap.data() : null;
+  const windowActive = !!(attempts && attempts.windowStart &&
+    Date.now() - attempts.windowStart.toMillis() < RATE_LIMIT_WINDOW_MS);
+  if (windowActive && attempts.count >= RATE_LIMIT_MAX_FAILED) {
+    throw new HttpsError("resource-exhausted",
+        "Too many attempts — please try again in an hour.",
+        { reason: "rate_limited" });
+  }
+
   // The transaction re-reads the invite and commits both writes atomically, so a
   // race between two redeemers resolves to exactly one winner (the loser's
   // pending-check fails inside the transaction and retries → already-used).
-  const result = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(inviteRef);
-    if (!snap.exists) {
-      throw new HttpsError("not-found", "This invite link isn't valid.", { reason: "not_found" });
-    }
-    const invite = snap.data();
-    if (invite.status !== "pending") {
-      throw new HttpsError("failed-precondition", "This invite has already been used.", { reason: "already_consumed" });
-    }
-    if (invite.creatorId === uid) {
-      throw new HttpsError("failed-precondition", "You can't redeem your own invite.", { reason: "own_invite" });
-    }
+  let result;
+  try {
+    result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(inviteRef);
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "This invite link isn't valid.", { reason: "not_found" });
+      }
+      const invite = snap.data();
+      if (invite.status !== "pending") {
+        throw new HttpsError("failed-precondition", "This invite has already been used.", { reason: "already_consumed" });
+      }
+      if (invite.creatorId === uid) {
+        throw new HttpsError("failed-precondition", "You can't redeem your own invite.", { reason: "own_invite" });
+      }
+      // Expiry: createdAt is always server-stamped on create; a missing one
+      // (shouldn't happen) is treated as still-valid rather than bricking.
+      if (invite.createdAt &&
+          Date.now() - invite.createdAt.toMillis() > INVITE_EXPIRY_MS) {
+        throw new HttpsError("failed-precondition",
+            "This invite has expired — ask for a fresh code.",
+            { reason: "expired" });
+      }
 
-    const members = [invite.creatorId, uid];
-    const coupleRef = db.collection("couples").doc();
-    tx.update(inviteRef, { status: "consumed", consumedBy: uid });
-    tx.set(coupleRef, {
-      members,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      const members = [invite.creatorId, uid];
+      const coupleRef = db.collection("couples").doc();
+      tx.update(inviteRef, { status: "consumed", consumedBy: uid });
+      tx.set(coupleRef, {
+        members,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { coupleId: coupleRef.id, members };
     });
-    return { coupleId: coupleRef.id, members };
-  });
+  } catch (e) {
+    // Count only guess-shaped failures (wrong/used/expired code) against the
+    // rate limit — own_invite and infrastructure errors aren't guessing.
+    const guessReasons = ["not_found", "already_consumed", "expired"];
+    if (e instanceof HttpsError && e.details && guessReasons.includes(e.details.reason)) {
+      await attemptsRef.set({
+        count: windowActive ? admin.firestore.FieldValue.increment(1) : 1,
+        windowStart: windowActive ?
+          attempts.windowStart :
+          admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    throw e;
+  }
 
   // Bind couple membership to BOTH members' auth tokens via a custom `coupleId`
   // claim. storage.rules enforces couples/{coupleId}/** with
