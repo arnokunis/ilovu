@@ -4,6 +4,16 @@ Project context for Claude Code sessions. Read this first.
 
 ---
 
+## CURRENT STATUS (updated 2026-07-18)
+
+**iLovu is LIVE on the App Store** as of ~July 11 2026: https://apps.apple.com/app/id6781237573 — **post-launch phase, NOT pre-launch.** Any "pre-launch" framing below is historical (the hardening sprint etc. happened before launch); read it as done-before-launch, not still-pending-for-launch.
+
+- **Real users:** ~13 downloads. **Apple Search Ads running** (~€2.23 CPI).
+- **Known live problem — 0 completed pairs:** invites are generated but never redeemed. Suspected cause: the invite share message carried only the `ilovu://` custom-scheme link (stripped/dead in messaging apps for a partner without the app) and **no App Store link**, so recipients had no install path. Code fix landed 2026-07-18: `inviteShareMessage` now leads with the App Store link + typed code (see the Invite link decision). Proper fix remains **Universal Links via `ilovu.io`** (planned).
+- **North-star metric:** completed dates (memories) per couple per month. Immediate diagnostic to watch: `invite_created → invite_redeemed` conversion.
+
+---
+
 ## What iLovu is
 
 A couples date-planning iOS app (SwiftUI). Core loop:
@@ -13,6 +23,35 @@ A couples date-planning iOS app (SwiftUI). Core loop:
 **Positioning is firmly anti-pressure**: "one real date a month, science-backed." Tagline: *"Show it. Don't just say it. 💕"* The completion/proof loop (match → Mission → Proof Photo → Memory Vault) is the competitive wedge — no competitor does "proof you went." Do **not** drift toward "relationship repair/reignite" framing; that's off-brand.
 
 **Brand voice pattern (locked):** "Clear keyword line + soul kicker." e.g. "Date ideas for couples who actually go." / "Show it. Don't just say it. 💕"
+
+---
+
+## Commands
+
+Scheme is `iLovu`; test targets are `iLovuTests` (unit, Swift Testing / `@Test`) and `iLovuUITests` (XCUITest). All Swift sources are flat in `iLovu/`; the two `*Service.swift` + `*Store.swift` pairs are the Firestore sync layer.
+
+**Build & test (iOS app)** — run from repo root:
+```bash
+# Build for the simulator
+xcodebuild -scheme iLovu -destination 'platform=iOS Simulator,name=iPhone 17' build
+
+# Run all unit tests
+xcodebuild test -scheme iLovu -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:iLovuTests
+
+# Run a single test (Type/method from the Swift Testing struct)
+xcodebuild test -scheme iLovu -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:iLovuTests/InviteDeepLinkTests/parsesTokenFromValidLink
+```
+Note: `SWIFT_USE_INTEGRATED_DRIVER = NO` is set in the project (Xcode 26.6 driver-crash workaround — see Environment notes); don't remove it. Day-to-day dev is normally driven from Xcode, not the CLI. `Secrets.swift` + `GoogleService-Info.plist` are gitignored and must exist on disk for a build to succeed.
+
+**Cloud Functions** (`functions/`, Node 22) — run from `functions/`:
+```bash
+npm install                    # deps
+npm run deploy                 # firebase deploy --only functions (europe-west1)
+npm run logs                   # firebase functions:log
+npm run serve                  # emulator (functions only)
+```
+Deploy rules from repo root: `firebase deploy --only firestore:rules` / `firebase deploy --only storage`. **Deploy order when tightening a rule: Cloud Function FIRST, then rules** (no window where a locked rule has no CF path). Firebase project: `ilovu-b5d87` (`.firebaserc` default). Deleting a deployed function: `firebase functions:delete <name> --region europe-west1`. No linter is configured (ESLint was declined at `init`).
 
 ---
 
@@ -63,9 +102,13 @@ couples/{coupleId}/memories/{memoryId}   // DONE — synced via MemoryService; M
 couples/{coupleId}/dailyAnswers/{dayKey} // DailyQuestionService — Daily Question sync (CODE NOT COMMITTED; rules deployed)
   answers: { uid: text }, questionId, updatedAt  // each writes ONLY own uid key; answer-to-unlock reveal, passive listener
 
-invites/{token}                          // Invite.swift — doc ID IS the token (unguessable, single-use)
+invites/{token}                          // Invite.swift — doc ID IS the token (5-char code, single-use)
   creatorId, status ("pending"|"consumed"), consumedBy (null until redeemed), createdAt
-  // no expiresAt yet; single-use enforced via status + firestore.rules
+  // 2026-07-18: token shrank 10 → 5 chars (typeable at the pairing moment). Guessing is
+  // closed server-side instead of by entropy: invite reads are CREATOR-ONLY in rules
+  // (redeem is CF-only, nobody else needs to read), redeemInvite rate-limits failed
+  // attempts (10/hr/uid, bookkept in server-only redeemAttempts/{uid}) and enforces a
+  // 7-DAY EXPIRY off createdAt (no expiresAt field; old 10-char invites still redeem)
   // redemption is ATOMIC via the redeemInvite CF ✓ (consume + couple-create in one
   // transaction); firestore.rules: invites-update + couples-create are CF-only (write:false)
 
@@ -90,6 +133,7 @@ Lives in `MatchService`: `recordLike(coupleId:cardId:deck:)` + `observeMatches(c
 
 ### Invite link — custom scheme now, Universal Links later
 `ilovu://invite/<token>` via Info.plist + `onOpenURL`, parsed by `CoupleService.inviteToken(from:)` / built by `inviteURL(token:)`. The invite lifecycle is `CoupleService.createInvite()` → `redeem(token:)` → `currentCouple()`. **Firebase Dynamic Links is dead (shut down Aug 25 2025)** — do not use it. Custom scheme only resolves if the app is already installed; manual "Have a code?" field is the backup. Universal Links via `ilovu.io` (AASA on Netlify) + deferred deep-linking is the future upgrade.
+- **LIVE BUG + fix (2026-07-18):** in production this produced **0 completed pairs** — the share message had NO App Store link, so a partner without the app hit a dead `ilovu://` link and a code for an app they couldn't find. `inviteShareMessage` now leads with the App Store link (`CoupleService.appStoreURL`, id6781237573) then the typed code, with the scheme link last as the installed-fast-path. Universal Links is the proper fix and is now the top growth priority.
 
 ### Cost architecture (critical — 95% margin target)
 Naive per-user live Places fetching is catastrophic (~$16k/mo at 300 users). **Cache everything**: fetch each venue once to Firestore, serve both card and detail from cache. Scales with venues, not users. Set a Billing budget alert the moment paid billing is attached.
@@ -102,7 +146,7 @@ Naive per-user live Places fetching is catastrophic (~$16k/mo at 300 users). **C
 - **Gate arming fix ✓ (commit `f534326`):** the gate's `memoryCount` now also updates when a memory arrives via REMOTE sync (`applyRemoteMemory` → `recordMemoryCount`), not only on local completion + couple-attach — so the partner who RECEIVES a synced memory arms Condition A without a relaunch (previously the Vault could show N memories while the gate still read 0).
 - **Couple sharing ("one sub unlocks both"):** `premiumActive(couple:) = myEntitlementActive OR couple.isPremium`. On an entitlement flip, `onEntitlementChange` → `CoupleService.syncPremiumEntitlement` mirrors `isPremium` onto the shared couple doc (PAYER only), so the non-paying partner unlocks off the doc.
 - **Subscription status + management UI ✓ (commit `0d09ff2`):** the "Us" tab (`UsView`) shows the couple's state derived from the SAME source as the gate (`premiumActive`), so it can't diverge — "Premium — Annual/Monthly" (payer; plan read from `customerInfo.entitlements["premium"].productIdentifier` via new `RevenueCatConfig` product-id constants), "Premium — covered by [partner]" (mirrored partner), or "Free". A **"Manage Subscription"** button (never a fake "Cancel" — Apple forbids self-cancel) deep-links to StoreKit 2's native `AppStore.showManageSubscriptions(in:)`, falling back to `apps.apple.com/account/subscriptions` (no scene / throws). Shown ONLY when `myEntitlementActive` (this Apple ID owns the sub); the partner sees "Managed by [partner]", no button. **Satisfies App Store 3.1.2** (subscription apps must provide a way to manage/cancel).
-- **NOT verifiable from code (external):** whether the RevenueCat dashboard `default` offering + the two App Store Connect products are actually configured/purchasable. If missing, `loadOfferings()` leaves packages nil and a buy returns the friendly "Plans are still loading — try again," not a crash. **Confirm dashboard + ASC before a TestFlight purchase test.**
+- **NOT verifiable from code (external):** whether the RevenueCat dashboard `default` offering + the two App Store Connect products are actually configured/purchasable. If missing, `loadOfferings()` leaves packages nil and a buy returns the friendly "Plans are still loading — try again," not a crash. The app passed App Review with subscriptions and is live, so ASC products exist; still confirm a real production purchase completes end-to-end.
 - **HARDENING (v1 gap):** entitlement **revocation is client-mirror only** — if the payer's sub lapses and they never reopen the app, the couple-doc `isPremium` lingers (premium too long; never wrongly drops). Clean end-state: a **RevenueCat webhook → Cloud Function** writing the couple doc authoritatively (grant AND revoke), which also closes the "a member could set `isPremium=true` without paying" hole. Tracked with the other `// PRE-LAUNCH HARDENING` items.
 
 ### Near You — curated Google Places, not events (pivoted, committed 778a857, works on device)
@@ -160,7 +204,7 @@ Locked down the client-authed surfaces flagged in the old `// PRE-LAUNCH HARDENI
 - **Claude chat** (the project): architecture, strategy, planning.
 - Real-device testing requires cable install (deep link won't bootstrap an install). Two-phone tests need two **different Apple IDs**.
 - **Two-phone re-test reset:** deleting `couples` + `invites` in Firestore (and `couples/` photos in Storage) is NOT enough — local `@AppStorage` keeps a zombie half-paired state. You MUST **delete + reinstall the app on BOTH phones**. Keep the shared caches (`venues`, `venueQueries`, `eventQueries`, `placeDeckQueries`); only couple data needs clearing.
-- Security is day-one, not retrofitted: Firestore rules, single-use invite tokens, photo/Vault access control all built in (token *expiry* is a planned addition, not yet implemented). Proof photos now live in Cloud Storage (not UserDefaults). **Pre-launch hardening sprint (2026-07-01) ✓** landed cache-write gating, atomic invite redemption, and Storage couple-membership via a `coupleId` auth claim (see the decision section). Remaining: App Check enforcement (#4b, blocked on a parked debug-token 403) + the RevenueCat grant/revoke webhook.
+- Security is day-one, not retrofitted: Firestore rules, single-use invite tokens (7-day server-side expiry + rate-limited redemption since 2026-07-18), photo/Vault access control all built in. Proof photos now live in Cloud Storage (not UserDefaults). **Pre-launch hardening sprint (2026-07-01) ✓** landed cache-write gating, atomic invite redemption, and Storage couple-membership via a `coupleId` auth claim (see the decision section). Remaining: App Check enforcement (#4b, blocked on a parked debug-token 403) + the RevenueCat grant/revoke webhook.
 
 ---
 
@@ -172,9 +216,11 @@ $6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split 
 
 ## Current phase
 
-**Phase 2 (Firebase) — in progress.** Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall ✓** (`PaywallGate` — arms at 2nd match + 1st memory, or a 14-day backstop, never mid-celebration; **hard mode default ON** behind a reversible `hardMode` flag — presents at every calm mission-start + blocks until subscribed; soft show-once restored by flipping the flag — see decision above), **RevenueCat purchase/entitlement ✓** (real `Purchases.shared.purchase`/`restore` + live `premium` entitlement → couple-doc `isPremium` mirror — see decision above), **subscription status + Manage UI ✓** (status + StoreKit `showManageSubscriptions` deep-link in the Us tab; App Store 3.1.2 — see decision above), **Near You ✓** (curated Google Places, deck-cached; **venues now plannable as Missions** — date/time + checklist + partner-sync, with rich venue info (photos/hours/4★+ reviews/maps) on the mission — see decision above), **Push notifications ✓** (all 5 stages; match nudge + manual nudge + scheduled special-date reminders all live, verified on phone — see Push section). **Daily Question sync** built (rules deployed) but PENDING two-phone test + commit. Remaining: verify the RevenueCat **dashboard offering + App Store Connect products** are configured (external, not code — required for a real purchase to complete); the **RevenueCat webhook → Cloud Function** for authoritative grant/revoke (the v1 client-mirror revocation gap); further nudge types (on hold for tone testing); (test functions `runDateRemindersNow` + `helloWorld` both removed ✅); **Cloud Functions hardening sprint ✓** (App Check SDK/monitoring, cache-write gating, atomic invite redemption, Storage couple-membership via `coupleId` claim — all committed + pushed 2026-07-01), leaving **App Check enforcement (#4b)** as the one remaining hardening item (blocked on a parked debug-token 403).
+**LAUNCHED — post-launch growth + hardening.** The app is live on the App Store (see CURRENT STATUS at top); the build-out below is the shipped feature inventory, and "Remaining" items are now the post-launch backlog. Top post-launch priorities, in order: **(1)** fix the live pairing funnel (App Store link in invite shipped 2026-07-18; Universal Links via `ilovu.io` next), **(2)** analytics/funnel instrumentation (Firebase Analytics — flying blind otherwise), **(3)** RevenueCat webhook + App Check #4b, **(4)** retention surfaces (rating prompt, memory share-card, widgets).
 
-**Phase 3:** Events — **DEPRIORITIZED / pivoted.** Eventbrite is dead (public API removed); Ticketmaster code is built but dormant until we target event-rich markets (London/US). No Facebook Events, no SerpApi. Near You ships on curated Places instead.
-**Phase 4:** Polish + launch. Post-launch priority: iOS shared widgets (next-Mission, Memory-photo, days-together) — keep WARM, not guilt-tripping.
+Shipped feature inventory: Auth ✓, invite/couple pairing ✓, real matching ✓, deep link ✓, name sync ✓, **Memory Vault sync ✓** (shared couple photo + proof photos via Firebase Storage; couple doc live-syncs name + photo via a snapshot listener), **paywall ✓** (`PaywallGate` — arms at 2nd match + 1st memory, or a 14-day backstop, never mid-celebration; **hard mode default ON** behind a reversible `hardMode` flag — presents at every calm mission-start + blocks until subscribed; soft show-once restored by flipping the flag — see decision above), **RevenueCat purchase/entitlement ✓** (real `Purchases.shared.purchase`/`restore` + live `premium` entitlement → couple-doc `isPremium` mirror — see decision above), **subscription status + Manage UI ✓** (status + StoreKit `showManageSubscriptions` deep-link in the Us tab; App Store 3.1.2 — see decision above), **Near You ✓** (curated Google Places, deck-cached; **venues now plannable as Missions** — date/time + checklist + partner-sync, with rich venue info (photos/hours/4★+ reviews/maps) on the mission — see decision above), **Push notifications ✓** (all 5 stages; match nudge + manual nudge + scheduled special-date reminders all live, verified on phone — see Push section). **Daily Question sync** built (rules deployed) but PENDING two-phone test + commit. Remaining: verify the RevenueCat **dashboard offering + App Store Connect products** are configured (external, not code — required for a real purchase to complete); the **RevenueCat webhook → Cloud Function** for authoritative grant/revoke (the v1 client-mirror revocation gap); further nudge types (on hold for tone testing); (test functions `runDateRemindersNow` + `helloWorld` both removed ✅); **Cloud Functions hardening sprint ✓** (App Check SDK/monitoring, cache-write gating, atomic invite redemption, Storage couple-membership via `coupleId` claim — all committed + pushed 2026-07-01), leaving **App Check enforcement (#4b)** as the one remaining hardening item (blocked on a parked debug-token 403).
 
-**Onboarding (to build):** SHORT — name, vibe, relationship status only. Progressive collection of dates after first match/memory, fully skippable. No spark rating (off-brand).
+**Events:** **DEPRIORITIZED / pivoted.** Eventbrite is dead (public API removed); Ticketmaster code is built but dormant until we target event-rich markets (London/US). No Facebook Events, no SerpApi. Near You ships on curated Places instead.
+**Widgets (post-launch backlog):** iOS shared widgets (next-Mission, Memory-photo, days-together) — keep WARM, not guilt-tripping.
+
+**Onboarding (SHIPPED, lite):** `OnboardingView.swift` — welcome + concept + name/vibe collection (`@AppStorage`), gated by `hasCompletedOnboarding`. Relationship status is NOT collected there (set later via `CoupleService.setRelationshipStage`); progressive collection of dates after first match/memory stays the design. No spark rating (off-brand).
