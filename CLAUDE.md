@@ -203,6 +203,7 @@ Locked down the client-authed surfaces flagged in the old `// PRE-LAUNCH HARDENI
 - **Claude Code** (this tool): multi-file coordinated edits, builds, repo-wide changes.
 - **Claude chat** (the project): architecture, strategy, planning.
 - Real-device testing requires cable install (deep link won't bootstrap an install). Two-phone tests need two **different Apple IDs**.
+- **Website source lives in `site/`** (ilovu.io — landing, privacy, terms, support; imported from the live Netlify deploy 2026-07-18). Deploys via Netlify drag-and-drop of the `site/` folder — edit here, redeploy there. Future home of the invite landing page + AASA (Universal Links).
 - **Two-phone re-test reset:** deleting `couples` + `invites` in Firestore (and `couples/` photos in Storage) is NOT enough — local `@AppStorage` keeps a zombie half-paired state. You MUST **delete + reinstall the app on BOTH phones**. Keep the shared caches (`venues`, `venueQueries`, `eventQueries`, `placeDeckQueries`); only couple data needs clearing.
 - Security is day-one, not retrofitted: Firestore rules, single-use invite tokens (7-day server-side expiry + rate-limited redemption since 2026-07-18), photo/Vault access control all built in. Proof photos now live in Cloud Storage (not UserDefaults). **Pre-launch hardening sprint (2026-07-01) ✓** landed cache-write gating, atomic invite redemption, and Storage couple-membership via a `coupleId` auth claim (see the decision section). Remaining: App Check enforcement (#4b, blocked on a parked debug-token 403) + the RevenueCat grant/revoke webhook.
 

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support — iLovu</title>
+<meta name="description" content="iLovu Support — get help, ask questions, and contact the iLovu team.">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --coral: #FF6B6B; --coral-warm: #FF8E53; --blush: #FFF5F3;
+    --rose: #C44569; --ink: #2B1B1E; --ink-soft: #6B5458;
+    --gradient: linear-gradient(120deg, #FF6B6B 0%, #FF8E53 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    background: var(--blush); color: var(--ink); line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .blob { position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.25; z-index: 0; pointer-events: none; }
+  .blob-1 { width: 420px; height: 420px; background: var(--coral); top: -160px; right: -120px; }
+  .blob-2 { width: 380px; height: 380px; background: var(--coral-warm); bottom: -140px; left: -120px; }
+  .wrap { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; }
+  .logo { font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; letter-spacing: -0.02em; color: var(--rose); text-decoration: none; }
+  .logo span { color: var(--coral); }
+  .back { font-weight: 600; font-size: 14px; color: var(--rose); text-decoration: none; padding: 9px 18px; border-radius: 100px; border: 1.5px solid rgba(196,69,105,0.25); transition: all .25s ease; }
+  .back:hover { background: var(--rose); color: #fff; border-color: var(--rose); }
+  .doc { background: #fff; border-radius: 28px; padding: 56px 48px; margin: 20px 0 60px; box-shadow: 0 30px 70px -35px rgba(196,69,105,0.3); }
+  .doc h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(34px, 5vw, 48px); letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .doc h1 .o { background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .doc .lede { color: var(--ink-soft); font-size: 16px; margin-bottom: 32px; }
+  .doc h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22px; color: var(--rose); margin: 36px 0 12px; }
+  .doc h3 { font-weight: 700; font-size: 16px; color: var(--ink); margin: 22px 0 6px; }
+  .doc p, .doc li { font-size: 15.5px; color: var(--ink); margin-bottom: 14px; }
+  .doc ul { padding-left: 22px; margin-bottom: 14px; }
+  .doc li { margin-bottom: 8px; }
+  .doc strong { color: var(--ink); font-weight: 700; }
+  .doc a { color: var(--rose); }
+  .contact-card { background: rgba(255,142,83,0.10); border-left: 3px solid var(--coral-warm); padding: 18px 20px; border-radius: 10px; margin-bottom: 8px; }
+  .contact-card p { margin-bottom: 6px; }
+  .doc hr { border: none; border-top: 1px solid rgba(196,69,105,0.12); margin: 32px 0; }
+  form { margin-top: 8px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--ink); }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 12px 14px; font-size: 15px; font-family: inherit;
+    border: 1.5px solid rgba(196,69,105,0.25); border-radius: 12px; background: #fff; color: var(--ink);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--rose); }
+  .field textarea { min-height: 130px; resize: vertical; }
+  .submit-btn {
+    display: inline-block; background: var(--gradient); color: #fff; font-weight: 700; font-size: 15px;
+    border: none; padding: 13px 30px; border-radius: 100px; cursor: pointer; transition: opacity .25s ease;
+  }
+  .submit-btn:hover { opacity: 0.88; }
+  .fine { font-size: 13px; color: var(--ink-soft); margin-top: 10px; }
+  footer { text-align: center; padding: 0 0 50px; color: var(--ink-soft); font-size: 13px; position: relative; z-index: 1; }
+  footer a { color: var(--rose); text-decoration: none; }
+  footer .sep { margin: 0 8px; opacity: 0.4; }
+  @media (max-width: 620px) { .doc { padding: 36px 26px; } }
+</style>
+</head>
+<body>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="wrap">
+  <nav>
+    <a href="index.html" class="logo">iL<span>o</span>vu</a>
+    <a href="index.html" class="back">← Back</a>
+  </nav>
+
+  <article class="doc">
+    <h1>Supp<span class="o">o</span>rt</h1>
+    <p class="lede">Questions, problems, or feedback about iLovu? We're here to help — send us a ticket below or email us directly.</p>
+
+    <div class="contact-card">
+      <p><strong>Email:</strong> <a href="mailto:contact@ilovu.io">contact@ilovu.io</a></p>
+      <p><strong>Response time:</strong> we aim to reply within 1–2 business days.</p>
+      <p><strong>Operated by:</strong> KUNIS, MB · Vilnius, Lithuania</p>
+    </div>
+
+    <h2>Send us a support ticket</h2>
+    <form name="support" method="POST" data-netlify="true" netlify-honeypot="bot-field" action="/support-sent.html">
+      <input type="hidden" name="form-name" value="support">
+      <p style="display:none;"><label>Don't fill this out: <input name="bot-field"></label></p>
+      <div class="field">
+        <label for="name">Your name</label>
+        <input type="text" id="name" name="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Your email (so we can reply)</label>
+        <input type="email" id="email" name="email" required>
+      </div>
+      <div class="field">
+        <label for="topic">Topic</label>
+        <select id="topic" name="topic">
+          <option>Pairing with my partner</option>
+          <option>Subscription &amp; billing</option>
+          <option>Account &amp; data deletion</option>
+          <option>Bug report</option>
+          <option>Feature request</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="message">How can we help?</label>
+        <textarea id="message" name="message" required placeholder="Tell us what's happening — include your device model and iOS version for bugs."></textarea>
+      </div>
+      <button type="submit" class="submit-btn">Send ticket</button>
+      <p class="fine">Prefer email? Write to <a href="mailto:contact@ilovu.io">contact@ilovu.io</a> — same team, same inbox.</p>
+    </form>
+
+    <hr>
+
+    <h2>Frequently asked questions</h2>
+
+    <h3>How do I pair with my partner?</h3>
+    <p>One of you creates an invite in the app (Us tab → invite your partner) and shares the code or link. The other enters the code after signing in. Each invite works once — if a code says it's already been used, just create a fresh one.</p>
+
+    <h3>How does the subscription work?</h3>
+    <p>iLovu Premium is one subscription for both of you — when either partner subscribes, Premium unlocks for the whole couple. Plans are monthly or annual, billed through your Apple ID.</p>
+
+    <h3>How do I cancel my subscription?</h3>
+    <p>Subscriptions are managed by Apple. Open the iLovu app → Us tab → Manage Subscription, or go to your device's <strong>Settings → your name → Subscriptions</strong>. Cancelling stops the next renewal; you keep Premium until the end of the paid period.</p>
+
+    <h3>How do I restore a purchase on a new device?</h3>
+    <p>Sign in with the same Apple ID you used to subscribe — your Premium status follows your account. If it doesn't appear, reach out and we'll sort it.</p>
+
+    <h3>How do I delete my account and data?</h3>
+    <p>You can request deletion from within the app, or email <a href="mailto:contact@ilovu.io">contact@ilovu.io</a> from the address linked to your account. We'll remove your account and associated personal data as described in our <a href="privacy.html">Privacy Policy</a>.</p>
+
+    <h3>Who can see our photos and answers?</h3>
+    <p>Only the two of you. Everything you create — proof photos, memories, daily answers — is private to your couple. There's no public feed and no strangers. Details are in our <a href="privacy.html">Privacy Policy</a>.</p>
+
+    <h3>I found a bug — what should I include?</h3>
+    <p>Your device model, iOS version, what you did, and what happened instead. A screenshot helps a lot. Send it via the form above or to <a href="mailto:contact@ilovu.io">contact@ilovu.io</a>.</p>
+  </article>
+</div>
+<footer>
+  <a href="index.html">Home</a><span class="sep">·</span><a href="privacy.html">Privacy</a><span class="sep">·</span><a href="terms.html">Terms</a><span class="sep">·</span><a href="support.html">Support</a>
+  <p style="margin-top:10px;">© 2026 iLovu · KUNIS, MB</p>
+</footer>
+</body>
+</html>

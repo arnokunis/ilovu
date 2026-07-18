@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iLovu — Date Ideas & Date Night for Couples</title>
+<meta name="description" content="Date ideas for couples who want more moments, less pressure. Swipe date night ideas together, match on what you both love, and turn it into a memory you'll keep.">
+
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+<meta property="og:title" content="iLovu — Show it. Don't just say it.">
+<meta property="og:description" content="The couples app for more moments, less pressure. One real date a month is all it takes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ilovu.io">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --coral: #FF6B6B;
+    --coral-warm: #FF8E53;
+    --blush: #FFF5F3;
+    --rose: #C44569;
+    --match-green: #34C759;
+    --ink: #2B1B1E;
+    --ink-soft: #6B5458;
+    --gradient: linear-gradient(120deg, #FF6B6B 0%, #FF8E53 100%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    background: var(--blush);
+    color: var(--ink);
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Ambient blobs */
+  .blob { position: fixed; border-radius: 50%; filter: blur(80px); opacity: 0.35; z-index: 0; pointer-events: none; }
+  .blob-1 { width: 480px; height: 480px; background: var(--coral); top: -160px; right: -120px; animation: float1 18s ease-in-out infinite; }
+  .blob-2 { width: 420px; height: 420px; background: var(--coral-warm); bottom: -140px; left: -120px; animation: float2 22s ease-in-out infinite; }
+  .blob-3 { width: 300px; height: 300px; background: #FFD3C4; top: 45%; left: 50%; animation: float3 20s ease-in-out infinite; }
+  @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,40px)} }
+  @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,-30px)} }
+  @keyframes float3 { 0%,100%{transform:translate(-50%,0)} 50%{transform:translate(-50%,-40px)} }
+
+  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; }
+  .logo { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; letter-spacing: -0.02em; color: var(--rose); }
+  .logo span { color: var(--coral); }
+  .soon-pill {
+    font-weight: 600; font-size: 13px; color: var(--rose);
+    background: rgba(255,107,107,0.1); padding: 8px 16px; border-radius: 100px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .soon-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--match-green); box-shadow: 0 0 0 4px rgba(52,199,89,0.2); animation: blink 2.5s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Hero — centered, full height feel */
+  .hero {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 50px 0 80px;
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,107,107,0.1); color: var(--rose);
+    font-weight: 600; font-size: 13px; letter-spacing: 0.01em;
+    padding: 8px 18px; border-radius: 100px; margin-bottom: 32px;
+    opacity: 0; animation: rise .8s ease forwards .1s;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--match-green); box-shadow: 0 0 0 4px rgba(52,199,89,0.2); }
+
+  .hero h1 {
+    font-family: 'Fraunces', serif; font-weight: 500;
+    font-size: clamp(40px, 7vw, 76px); line-height: 1.04; letter-spacing: -0.03em;
+    color: var(--ink); margin-bottom: 16px;
+  }
+  .hero h1 em {
+    font-style: italic;
+    background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero h1 .line { display: block; opacity: 0; animation: rise .9s ease forwards; }
+  .hero h1 .line:nth-child(1){ animation-delay:.2s } .hero h1 .line:nth-child(2){ animation-delay:.35s }
+
+  .hero .kicker {
+    font-family: 'Fraunces', serif; font-style: italic; font-weight: 400;
+    font-size: clamp(18px, 2.6vw, 24px); color: var(--rose);
+    margin-bottom: 28px; opacity: 0; animation: rise .9s ease forwards .45s;
+  }
+
+  .hero p.sub {
+    font-size: clamp(16px, 2.2vw, 19px); color: var(--ink-soft);
+    max-width: 540px; margin: 0 auto 40px; opacity: 0; animation: rise .9s ease forwards .55s;
+  }
+
+  .launching {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: 'Fraunces', serif; font-style: italic; font-size: clamp(20px, 3vw, 26px);
+    color: var(--rose); opacity: 0; animation: rise .9s ease forwards .65s;
+  }
+  .launching .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--gradient); animation: pulseRing 2s ease-in-out infinite; }
+  @keyframes pulseRing { 0%{box-shadow:0 0 0 0 rgba(255,107,107,.5)} 70%{box-shadow:0 0 0 12px rgba(255,107,107,0)} 100%{box-shadow:0 0 0 0 rgba(255,107,107,0)} }
+
+  /* Phone mockup */
+  .stage { margin: 64px auto 0; max-width: 290px; position: relative; opacity: 0; animation: rise 1s ease forwards .85s; }
+  .phone { background: #1a1014; border-radius: 44px; padding: 12px; box-shadow: 0 40px 80px -20px rgba(196,69,105,0.45); }
+  .screen { background: var(--blush); border-radius: 33px; overflow: hidden; aspect-ratio: 9/19.5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 22px; text-align: center; }
+  .card-emoji { font-size: 60px; margin-bottom: 18px; animation: pulse 3s ease-in-out infinite; }
+  .card-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; color: var(--rose); margin-bottom: 10px; line-height: 1.2; }
+  .card-desc { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 20px; }
+  .card-tags { display: flex; gap: 7px; justify-content: center; }
+  .tag { font-size: 11px; font-weight: 600; color: #fff; padding: 5px 12px; border-radius: 100px; }
+  .tag.coral { background: var(--coral); } .tag.orange { background: var(--coral-warm); }
+  .swipe-row { display: flex; gap: 22px; margin-top: 24px; }
+  .swipe-btn { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 21px; box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+  .swipe-btn.no { background: #fff; color: var(--ink-soft); }
+  .swipe-btn.yes { background: var(--gradient); color: #fff; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
+  footer { text-align: center; padding: 36px 0 50px; color: var(--ink-soft); font-size: 14px; position: relative; z-index: 1; }
+  footer a { color: var(--rose); text-decoration: none; }
+
+  .appstore-btn {
+    display: inline-flex; align-items: center; gap: 11px;
+    background: var(--ink); color: #fff; text-decoration: none;
+    padding: 12px 24px; border-radius: 14px; margin-top: 6px;
+    box-shadow: 0 16px 34px -14px rgba(43,27,30,0.5);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .appstore-btn:hover { transform: translateY(-2px); box-shadow: 0 22px 40px -14px rgba(43,27,30,0.55); }
+  .appstore-btn span span { display: block; line-height: 1.1; text-align: left; }
+  .appstore-btn .small { font-size: 11px; font-weight: 500; opacity: 0.85; }
+  .appstore-btn .big { font-size: 19px; font-weight: 700; font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Features */
+  .features { max-width: 1000px; margin: 40px auto 0; padding: 40px 24px 20px; }
+  .feat-kicker { text-align: center; font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--coral); margin-bottom: 10px; }
+  .feat-title { text-align: center; font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(28px, 4.5vw, 44px); letter-spacing: -0.02em; color: var(--ink); margin-bottom: 56px; line-height: 1.1; }
+  .feat-title em { font-style: italic; background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .feat-row { display: flex; align-items: center; gap: 56px; margin-bottom: 72px; }
+  .feat-row.reverse { flex-direction: row-reverse; }
+  .feat-shot { flex: 0 0 auto; width: 260px; }
+  .feat-shot img {
+    width: 100%; display: block; border-radius: 34px;
+    border: 6px solid #1c1c1e; background: #1c1c1e;
+    box-shadow: 0 40px 80px -30px rgba(196,69,105,0.4);
+  }
+  .feat-text { flex: 1; }
+  .feat-num { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--coral-warm); letter-spacing: 0.1em; }
+  .feat-text h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 3.4vw, 34px); color: var(--ink); margin: 8px 0 14px; letter-spacing: -0.01em; }
+  .feat-text p { font-size: 17px; line-height: 1.65; color: var(--ink-soft); max-width: 440px; }
+  .feat-cta { text-align: center; padding: 20px 0 10px; }
+  .feat-cta p { font-family: 'Fraunces', serif; font-style: italic; font-size: 19px; color: var(--rose); margin-bottom: 18px; }
+  @media (max-width: 760px) {
+    .feat-row, .feat-row.reverse { flex-direction: column; gap: 24px; margin-bottom: 56px; text-align: center; }
+    .feat-shot { width: 210px; }
+    .feat-text p { margin: 0 auto; }
+    .feat-title { margin-bottom: 40px; }
+  }
+
+  @media (max-width: 720px) { .hero { padding: 30px 0 60px; } }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="wrap">
+  <nav>
+    <div class="logo">iL<span>o</span>vu</div>
+    <span class="soon-pill"><span class="dot"></span> Now on the App Store</span>
+  </nav>
+
+  <header class="hero">
+    <div class="badge"><span class="dot"></span> Date ideas for couples — more moments, less pressure</div>
+    <h1>
+      <span class="line">Date ideas for couples</span>
+      <span class="line">who actually <em>go</em>.</span>
+    </h1>
+    <p class="kicker">Show it. Don't just say it. 💕</p>
+    <p class="sub">iLovu helps couples actually <em>do</em> the dates they keep meaning to. Swipe <strong>date night ideas</strong> together, match on what you both love, and turn it into a memory you'll keep.</p>
+
+    <a class="appstore-btn" href="https://apps.apple.com/app/id6781237573" aria-label="Download iLovu on the App Store">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.365 1.43c0 1.14-.417 2.2-1.11 2.99-.75.86-1.98 1.52-3.16 1.43-.14-1.1.42-2.28 1.08-3.02.75-.85 2.06-1.48 3.19-1.4zM20.7 17.14c-.58 1.34-.86 1.94-1.61 3.13-1.05 1.66-2.53 3.73-4.36 3.74-1.63.02-2.05-1.06-4.26-1.05-2.21.01-2.67 1.07-4.3 1.05-1.83-.02-3.23-1.88-4.28-3.54-2.94-4.66-3.25-10.13-1.43-13.04 1.29-2.07 3.33-3.28 5.25-3.28 1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.7 0 3.51.93 4.8 2.53-4.22 2.31-3.53 8.34.83 10.46z"/></svg>
+      <span><span class="small">Download on the</span><span class="big">App Store</span></span>
+    </a>
+
+    <div class="stage">
+      <div class="phone">
+        <div class="screen">
+          <div class="card-emoji">🌹</div>
+          <div class="card-title">Recreate Your First Date</div>
+          <div class="card-desc">Same meal, same music, same nervous butterflies — relive the night it all started.</div>
+          <div class="card-tags">
+            <span class="tag coral">Quick · 30 min</span>
+            <span class="tag orange">Free</span>
+          </div>
+          <div class="swipe-row">
+            <div class="swipe-btn no">✕</div>
+            <div class="swipe-btn yes">♥</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="features">
+    <p class="feat-kicker">How iLovu works</p>
+    <h2 class="feat-title">Everything you need to <em>actually go</em>.</h2>
+
+    <div class="feat-row">
+      <div class="feat-shot"><img src="shots/swipe-match.png" alt="Swipe and match on date ideas" loading="lazy"></div>
+      <div class="feat-text">
+        <span class="feat-num">01</span>
+        <h3>Swipe &amp; match</h3>
+        <p>Browse date ideas together, just like swiping. When you both like the same one, it's a match — and it becomes a plan you'll actually keep.</p>
+      </div>
+    </div>
+
+    <div class="feat-row reverse">
+      <div class="feat-shot"><img src="shots/near-you.png" alt="Discover local restaurants and spots" loading="lazy"></div>
+      <div class="feat-text">
+        <span class="feat-num">02</span>
+        <h3>Discover spots near you</h3>
+        <p>Real local restaurants, bars, and cafés — hand-picked, highly rated, and ready to book. Find places for two you'd never have stumbled on.</p>
+      </div>
+    </div>
+
+    <div class="feat-row">
+      <div class="feat-shot"><img src="shots/plan-mission.png" alt="Plan the date with a checklist" loading="lazy"></div>
+      <div class="feat-text">
+        <span class="feat-num">03</span>
+        <h3>Turn it into a real date</h3>
+        <p>Every match becomes a Mission — pick a date and time, set a budget, tick off a simple checklist. No planning stress, just a plan.</p>
+      </div>
+    </div>
+
+    <div class="feat-row reverse">
+      <div class="feat-shot"><img src="shots/us-story.png" alt="Your shared story and memories" loading="lazy"></div>
+      <div class="feat-text">
+        <span class="feat-num">04</span>
+        <h3>Keep the memory</h3>
+        <p>Snap a proof photo when you go — saved forever in a private Memory Vault that's just for the two of you. Plus daily questions to stay close between dates.</p>
+      </div>
+    </div>
+
+    <div class="feat-cta">
+      <p>One real date a month. No pressure, no guilt.</p>
+      <a class="appstore-btn" href="https://apps.apple.com/app/id6781237573" aria-label="Download iLovu on the App Store">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.365 1.43c0 1.14-.417 2.2-1.11 2.99-.75.86-1.98 1.52-3.16 1.43-.14-1.1.42-2.28 1.08-3.02.75-.85 2.06-1.48 3.19-1.4zM20.7 17.14c-.58 1.34-.86 1.94-1.61 3.13-1.05 1.66-2.53 3.73-4.36 3.74-1.63.02-2.05-1.06-4.26-1.05-2.21.01-2.67 1.07-4.3 1.05-1.83-.02-3.23-1.88-4.28-3.54-2.94-4.66-3.25-10.13-1.43-13.04 1.29-2.07 3.33-3.28 5.25-3.28 1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.7 0 3.51.93 4.8 2.53-4.22 2.31-3.53 8.34.83 10.46z"/></svg>
+        <span><span class="small">Download on the</span><span class="big">App Store</span></span>
+      </a>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <p style="font-family:'Fraunces',serif; font-style:italic; font-size:16px; color:var(--rose); margin-bottom:10px;">One real date a month. No pressure, no guilt.</p>
+  <p style="margin-bottom:8px;"><a href="privacy.html" style="color:var(--rose); text-decoration:none;">Privacy</a> &nbsp;·&nbsp; <a href="terms.html" style="color:var(--rose); text-decoration:none;">Terms</a> &nbsp;·&nbsp; <a href="support.html" style="color:var(--rose); text-decoration:none;">Support</a></p>
+  <p>© 2026 iLovu · <a href="mailto:contact@ilovu.io">contact@ilovu.io</a></p>
+</footer>
+
+</body>
+</html>
