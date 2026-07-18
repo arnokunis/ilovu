@@ -102,6 +102,7 @@ final class AppleSignInViewModel {
             // out of SignInView; this view model just completes the credential
             // exchange. Console line kept as a build-testing breadcrumb.
             print("✅ Firebase sign-in success — uid: \(user.uid), email: \(user.email ?? "none"), name: \(user.displayName ?? "none")")
+            AppAnalytics.log("sign_in", ["method": "apple"])
         } catch {
             print("⚠️ Firebase sign-in error: \(error.localizedDescription)")
             show("We couldn't sign you in. Please try again.")

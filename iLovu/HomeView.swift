@@ -155,6 +155,7 @@ struct HomeView: View {
         // HARD mode the dismiss-through is withheld unless the couple actually
         // subscribed on the wall just now — the mission stays closed otherwise.
         .sheet(isPresented: $showPaywall, onDismiss: {
+            AppAnalytics.log("paywall_dismissed")
             guard let pending = missionAfterPaywall else { return }
             missionAfterPaywall = nil
             // Hard mode blocks: only proceed to the mission in soft mode, or if
@@ -205,6 +206,7 @@ struct HomeView: View {
             }
             missionAfterPaywall = mission
             showPaywall = true
+            AppAnalytics.log("paywall_shown", ["trigger": "mission_start"])
         } else {
             missionToOpen = mission
         }

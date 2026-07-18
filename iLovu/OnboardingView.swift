@@ -84,6 +84,7 @@ struct OnboardingView: View {
         withAnimation(.easeInOut(duration: 0.35)) {
             hasCompletedOnboarding = true
         }
+        AppAnalytics.log("onboarding_complete")
     }
 }
 

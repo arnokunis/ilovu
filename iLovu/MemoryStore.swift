@@ -36,6 +36,9 @@ final class MemoryStore {
         memories.append(memory)
         save()
         remoteUpsert?(memory)
+        // North-star event: a real date happened. Local completions only —
+        // the partner's synced copy lands via mergeFromRemote (not counted).
+        AppAnalytics.log("memory_completed")
     }
 
     /// Marks a memory as uploaded: records its Storage path and drops the inline

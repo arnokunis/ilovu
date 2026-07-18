@@ -164,6 +164,8 @@ final class SubscriptionService {
             let result = try await Purchases.shared.purchase(package: package)
             if result.userCancelled { return .cancelled }
             apply(result.customerInfo)   // flips entitlement -> triggers couple-doc mirror
+            AppAnalytics.log("purchase_success",
+                             ["product": package.storeProduct.productIdentifier])
             return .success
         } catch {
             log("purchase failed: \(error.localizedDescription)")
@@ -178,6 +180,7 @@ final class SubscriptionService {
         do {
             let info = try await Purchases.shared.restorePurchases()
             apply(info)
+            if myEntitlementActive { AppAnalytics.log("restore_success") }
             return myEntitlementActive
                 ? .success
                 : .failed("No active subscription found to restore.")

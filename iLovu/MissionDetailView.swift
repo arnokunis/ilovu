@@ -14,6 +14,7 @@
 
 import SwiftUI
 import EventKit
+import StoreKit
 
 struct MissionDetailView: View {
 
@@ -32,6 +33,12 @@ struct MissionDetailView: View {
     // SwiftUI's built-in dismiss action. Works because we're presented
     // as a sheet by the parent.
     @Environment(\.dismiss) private var dismiss
+
+    // App Store rating prompt, asked right after the happiest moment in the
+    // app — a completed date. Once per app version (persisted below); the
+    // system additionally rate-limits, so this can never spam.
+    @Environment(\.requestReview) private var requestReview
+    @AppStorage("reviewRequestedVersion") private var reviewRequestedVersion: String = ""
 
     // The home-screen Spark Score. Marking a mission complete bumps it.
     @AppStorage("sparkScore") private var sparkScore: Int = 2
@@ -123,7 +130,10 @@ struct MissionDetailView: View {
                 }
             }
             .alert("Mission complete! 🎉", isPresented: $showCompletionAlert) {
-                Button("Awesome") { dismiss() }
+                Button("Awesome") {
+                    dismiss()
+                    maybeRequestReview()
+                }
             } message: {
                 Text("Your spark grew 🔥")
             }
@@ -515,6 +525,21 @@ struct MissionDetailView: View {
         // like stacked modal transitions.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             showCompletionAlert = true
+        }
+    }
+
+    // Fires the system rating prompt once per app version, right after the
+    // completion alert's "Awesome" — the peak-happiness moment. The short
+    // delay lets this sheet finish dismissing so the prompt presents over
+    // the underlying screen. requestReview is a value the closure captures,
+    // so it's safe to call after the view is gone; the system decides
+    // whether the prompt actually appears (silently skipped in dev builds).
+    private func maybeRequestReview() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        guard reviewRequestedVersion != version else { return }
+        reviewRequestedVersion = version
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            requestReview()
         }
     }
 

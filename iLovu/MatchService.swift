@@ -70,6 +70,8 @@ final class MatchService {
 
             // The rules guarantee every entry in likedBy is a distinct member who
             // added only themselves, so two distinct uids == both partners liked.
+            AppAnalytics.log("card_liked", ["deck": deck.rawValue])
+
             guard likedBy.count >= 2 else {
                 log("LIKE \(cardId) [\(deck.rawValue)] recorded — waiting on partner")
                 return false
@@ -91,6 +93,7 @@ final class MatchService {
                 ], merge: true)
 
             log("MATCH \(cardId) [\(deck.rawValue)] — both liked 🎉")
+            AppAnalytics.log("match_created", ["deck": deck.rawValue])
             return true
         } catch {
             log("ERROR recordLike \(cardId): \(error.localizedDescription)")

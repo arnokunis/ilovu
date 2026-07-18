@@ -47,6 +47,9 @@ final class MissionStore {
         missions.append(mission)
         save()
         remoteUpsert?(mission)
+        // Local creations only — remote-synced missions arrive via
+        // mergeFromRemote, so the partner's device doesn't double-count.
+        AppAnalytics.log("mission_created")
     }
 
     func update(_ mission: Mission) {
