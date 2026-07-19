@@ -210,7 +210,14 @@ struct VenueCache {
     func deck(bucket: String) async -> [LocalEvent] {
         guard let center = LocationBucket.center(of: bucket) else { return [] }
 
-        if let pointer = await loadPlaceDeck(bucket) {
+        let pointer = await loadPlaceDeck(bucket)
+        // A deck written by an OLDER curation version is stale by definition (its
+        // categories/scoring predate a curation change) — treat it as a miss and
+        // re-resolve synchronously, so e.g. the new Hikes & Trails venues show on
+        // the FIRST open rather than after a background SWR pass.
+        let versionCurrent = (pointer?.curationVersion ?? 0) == PlaceCuration.curationVersion
+
+        if let pointer, versionCurrent {
             let venues = await loadVenuesInOrder(pointer.placeIds)
             let stale = isDeckStale(pointer)
             if !venues.isEmpty {
@@ -227,6 +234,8 @@ struct VenueCache {
             // pointer earns a fresh search.
             guard stale else { log("DECK EMPTY (fresh) \(bucket) — falling back"); return [] }
             log("DECK EMPTY (stale) \(bucket) — re-resolving")
+        } else if pointer != nil {
+            log("DECK curation v\(pointer?.curationVersion ?? 0)→v\(PlaceCuration.curationVersion) \(bucket) — re-resolving")
         } else {
             log("DECK MISS \(bucket) — no pointer")
         }
@@ -306,7 +315,9 @@ struct VenueCache {
     }
 
     private func writePlaceDeck(key: String, placeIds: [String]) async throws {
-        let pointer = PlaceDeckQuery(id: nil, placeIds: placeIds, resolvedAt: nil)
+        let pointer = PlaceDeckQuery(id: nil, placeIds: placeIds,
+                                     curationVersion: PlaceCuration.curationVersion,
+                                     resolvedAt: nil)
         try await cacheWriter.write(pointer, to: "placeDeckQueries", docId: key,
                                     serverTimestampFields: ["resolvedAt"])
     }

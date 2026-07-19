@@ -126,17 +126,12 @@ private struct WelcomeScreen: View {
 
             Spacer()
 
-            VStack(spacing: 14) {
-                PrimaryButton(title: "Get Started →", action: onNext)
-
-                // Concatenated Text lets us color "Sign in" differently
-                // without splitting into two separate views.
-                (Text("Already have an account? ").foregroundStyle(.gray)
-                 + Text("Sign in").foregroundStyle(Color.louvCoral).fontWeight(.semibold))
-                    .font(.system(size: 14))
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            // Sign-in happens BEFORE onboarding (ContentView routes signed-out
+            // users to SignInView), so the welcome screen only needs the forward
+            // CTA — no "already have an account?" link (you already signed in).
+            PrimaryButton(title: "Get Started →", action: onNext)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
         }
     }
 

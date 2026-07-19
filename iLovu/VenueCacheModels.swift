@@ -235,6 +235,12 @@ struct PlaceDeckQuery: Codable, Identifiable {
     /// keeps their cardIds aligned for matching — same role as EventQuery.eventIds.
     var placeIds: [String]
 
+    /// The curation-logic version that produced this deck (PlaceCuration.curationVersion).
+    /// A mismatch means the deck predates a curation change, so VenueCache treats it
+    /// as a miss and re-resolves. Optional/nil for decks written before this field
+    /// existed — they re-resolve once, then carry the current version.
+    var curationVersion: Int? = nil
+
     /// Server time this deck last resolved — drives the SWR refresh window.
     @ServerTimestamp var resolvedAt: Timestamp?
 }

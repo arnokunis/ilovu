@@ -19,6 +19,14 @@ import Foundation
 
 enum PlaceCuration {
 
+    /// Bumped whenever the curation logic changes (search groups, type→category
+    /// mapping, scoring, or quality gates) in a way that should INVALIDATE already-
+    /// cached decks. VenueCache stamps this onto each placeDeckQueries doc and
+    /// treats a mismatch as a miss, so a curation change re-resolves the deck on
+    /// the next Near You open instead of waiting out the 7-day SWR window.
+    /// v2 (2026-07-19): added the Hikes & Trails category.
+    static let curationVersion = 2
+
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
     struct Verdict {
