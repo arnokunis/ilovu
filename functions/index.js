@@ -188,7 +188,9 @@ exports.redeemInvite = onCall(async (request) => {
         members,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      return { coupleId: coupleRef.id, members };
+      // creatorFcmToken rides along (internal only — stripped before returning
+      // to the client) so the creator gets the "you're connected" push below.
+      return { coupleId: coupleRef.id, members, creatorFcmToken: invite.creatorFcmToken || null };
     });
   } catch (e) {
     // Count only guess-shaped failures (wrong/used/expired code) against the
@@ -222,7 +224,28 @@ exports.redeemInvite = onCall(async (request) => {
     console.error("redeemInvite: setCustomUserClaims failed (couple still created)", e);
   }
 
-  return result;
+  // Pairing push (2026-07-19): the creator granted notifications at the
+  // pairing moment and their token rode in on the invite doc — tell them the
+  // wait is over. Best-effort: a dead/absent token never fails redemption, and
+  // there's no stale-token cleanup to do (the invite is consumed regardless).
+  // Brand rule: warm + partner-framed, never time/guilt-based.
+  if (result.creatorFcmToken) {
+    try {
+      await admin.messaging().send({
+        token: result.creatorFcmToken,
+        notification: {
+          title: "You're connected 💕",
+          body: "Your person just joined you on iLovu — go swipe together!",
+        },
+      });
+      console.log(`redeemInvite ${result.coupleId}: pairing push sent to creator`);
+    } catch (err) {
+      console.log("redeemInvite: pairing push failed (non-fatal):", err.code || err.message);
+    }
+  }
+
+  // Strip the internal token before answering the redeemer's client.
+  return { coupleId: result.coupleId, members: result.members };
 });
 
 // ---------------------------------------------------------------------------
