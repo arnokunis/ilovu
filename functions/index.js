@@ -4,6 +4,9 @@
  * onMatchCreated — Stage 5 partner nudge: pushes the partner who didn't complete
  *                  a match. (sendTestPush, the Stage 4 manual push rehearsal, was
  *                  removed once onMatchCreated was verified on two phones.)
+ * onDailyAnswer — pushes the partner when one member answers the Daily Question:
+ *                  a "your partner answered — answer to see theirs" nudge, or the
+ *                  "they answered too, tap to see" reveal when the pair completes.
  * nudgePartner — manual "come swipe with me" nudge (callable, rate-limited).
  * sendDateReminders — SCHEDULED daily special-date reminders (anniversary,
  *                  engagement, wedding, birthdays).
@@ -19,7 +22,7 @@
 
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
@@ -401,6 +404,103 @@ exports.onMatchCreated = onDocumentCreated(
           [`fcmTokens.${recipient}`]: admin.firestore.FieldValue.delete(),
         });
         console.log(`onMatchCreated ${coupleId}: removed stale token for ${recipient}`);
+      }
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// DAILY-QUESTION NUDGE — pushes the partner when one member answers today's
+// shared Daily Question (couples/{id}/dailyAnswers/{dateKey}).
+//
+// The card is "answer to unlock": you see your partner's answer only once you've
+// answered too. This function turns that mechanic into a warm partner signal:
+//   • FIRST answer of the day  -> nudge the OTHER partner ("Inesa answered today's
+//     question — answer to see theirs"). This is what pulls them in to unlock the
+//     reveal, the whole point of the feature.
+//   • SECOND answer (pair now complete) -> tell the partner who answered FIRST that
+//     the reveal just landed ("Inesa answered too — tap to see"). The second
+//     answerer is already in the app watching it unlock, so they're never pushed.
+// Either way we notify the member who did NOT just answer.
+//
+// BRAND — reconciling with "anti-pressure, no notifications" (DailyQuestionCard's
+// header + CLAUDE.md): that rule bans GUILT/nagging pings ("you haven't answered
+// today", streaks, shame). This is the opposite kind — warm + PARTNER-framed, the
+// same social-invite tone as onMatchCreated ("Inesa is swiping — join her"). No
+// time/guilt copy, ever. (A deliberate softening of the original "no notifications"
+// stance; noted in CLAUDE.md's Daily Questions decision.)
+//
+// TRIGGER SHAPE — onDocumentWritten (not ...Created): we diff before/after to find
+// the answer key that is NEW on this write. That makes us fire ONLY on a genuinely
+// new answer — an EDIT to an existing answer (key already present) and a pure
+// updatedAt/serverTimestamp resolution both leave newAnswerers empty, so neither
+// re-nudges the partner. A rare simultaneous both-answered write (>1 new key) is
+// skipped too: nobody is waiting, both see the reveal in-app.
+//
+// COST: inherits maxInstances:10 + region. One answer/day/couple → fires seldom;
+// reuses the onMatchCreated send path, fcmTokens, and stale-token cleanup.
+exports.onDailyAnswer = onDocumentWritten(
+  "couples/{coupleId}/dailyAnswers/{dateKey}",
+  async (event) => {
+    const after = event.data.after.exists ? event.data.after.data() : null;
+    if (!after) return; // deletion — nothing to notify on
+    const before = event.data.before.exists ? event.data.before.data() : null;
+
+    const beforeAnswers = (before && before.answers) || {};
+    const afterAnswers = after.answers || {};
+
+    // The answer key(s) present now but absent before = who just answered on THIS
+    // write. Exactly one is the normal case (each member writes only their own key).
+    // Empty = an edit or an updatedAt-only write → nothing to notify. More than one
+    // = a rare simultaneous double → skip (nobody's waiting on a reveal).
+    const newAnswerers = Object.keys(afterAnswers).filter((u) => !(u in beforeAnswers));
+    if (newAnswerers.length !== 1) return;
+    const answerer = newAnswerers[0];
+
+    const coupleId = event.params.coupleId;
+    const coupleRef = admin.firestore().doc(`couples/${coupleId}`);
+    const coupleSnap = await coupleRef.get();
+    if (!coupleSnap.exists) return;
+    const couple = coupleSnap.data() || {};
+
+    // Orphaned couple (a member deleted) — no living partner to notify, and the
+    // "waiting for your partner" reveal never completes. Skip, like sendDateReminders.
+    if ((couple.deletedMembers || []).length > 0) return;
+
+    const members = couple.members || [];
+    const recipient = members.find((m) => m !== answerer);
+    if (!recipient) return; // half-paired / self — nothing to send
+
+    // Token == granted permission (minted only after the match-time prompt), same
+    // proxy as onMatchCreated. No token → skip gracefully.
+    const token = (couple.fcmTokens || {})[recipient];
+    if (!token) {
+      console.log(`onDailyAnswer ${coupleId}: partner ${recipient} has no token, skipping`);
+      return;
+    }
+
+    // bothAnswered === this write COMPLETED the pair → the recipient (who answered
+    // first) can now see the reveal; otherwise they still need to answer to unlock it.
+    const bothAnswered = Object.keys(afterAnswers).length >= 2;
+    const names = couple.displayNames || {};
+    const who = (names[answerer] || "").trim();
+    const title = bothAnswered
+      ? (who ? `${who} answered too 💬` : "Your partner answered too 💬")
+      : (who ? `${who} answered today's question 💬` : "Your partner answered today's question 💬");
+    const body = bothAnswered ? "Tap to see what they said 💕" : "Answer to see theirs 💕";
+
+    try {
+      const messageId = await admin.messaging().send({ token, notification: { title, body } });
+      console.log(`onDailyAnswer ${coupleId}: notified ${recipient} (both=${bothAnswered}, msg ${messageId})`);
+    } catch (err) {
+      console.error("onDailyAnswer send failed:", err.code, err.message);
+      // Stale token (app deleted / permission revoked / rotated) — drop it, exactly
+      // as onMatchCreated does; the next launch re-registers a fresh one.
+      if (err.code === "messaging/registration-token-not-registered") {
+        await coupleRef.update({
+          [`fcmTokens.${recipient}`]: admin.firestore.FieldValue.delete(),
+        });
+        console.log(`onDailyAnswer ${coupleId}: removed stale token for ${recipient}`);
       }
     }
   },
