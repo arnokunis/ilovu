@@ -217,6 +217,7 @@ extension CachedVenue {
         case .nightlife: return "🍸"
         case .arts:      return "🎨"
         case .outdoors:  return "🌳"
+        case .trails:    return "🥾"
         case .music:     return "🎶"
         }
     }

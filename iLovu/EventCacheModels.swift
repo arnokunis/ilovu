@@ -211,6 +211,7 @@ extension CachedEvent {
         case .foodDrink: return "🍷"
         case .arts:      return "🎭"
         case .outdoors:  return "🎪"
+        case .trails:    return "🥾"
         case .nightlife: return "🎤"
         }
     }

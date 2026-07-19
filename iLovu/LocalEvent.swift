@@ -129,6 +129,7 @@ struct LocalEvent: Identifiable, Equatable {
         case foodDrink = "Food & Drink"
         case arts      = "Arts"
         case outdoors  = "Outdoors"
+        case trails    = "Hikes & Trails"
         case nightlife = "Nightlife"
 
         var id: String { rawValue }

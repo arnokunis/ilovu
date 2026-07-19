@@ -288,8 +288,9 @@ struct NearYouView: View {
                 filterPill(label: "Music",        value: .music)
                 filterPill(label: "Food & Drink", value: .foodDrink)
                 filterPill(label: "Arts",         value: .arts)
-                filterPill(label: "Outdoors",     value: .outdoors)
-                filterPill(label: "Nightlife",    value: .nightlife)
+                filterPill(label: "Outdoors",       value: .outdoors)
+                filterPill(label: "Hikes & Trails", value: .trails)
+                filterPill(label: "Nightlife",      value: .nightlife)
             }
             .padding(.horizontal, 24)
         }

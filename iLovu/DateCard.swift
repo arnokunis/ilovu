@@ -150,6 +150,7 @@ extension DateCard {
         switch c {
         case .foodDrink: return .foodie
         case .outdoors:  return .adventure
+        case .trails:    return .adventure
         case .nightlife: return .intimate
         case .arts:      return .creative
         case .music:     return .creative

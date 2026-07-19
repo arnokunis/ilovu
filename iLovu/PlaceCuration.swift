@@ -41,7 +41,9 @@ enum PlaceCuration {
         ["restaurant", "cafe", "coffee_shop", "bakery", "ice_cream_shop"],   // food & drink
         ["bar", "night_club"],                                               // nightlife
         ["art_gallery", "museum", "movie_theater", "book_store"],            // arts
-        ["tourist_attraction", "park"]                                       // outdoors / experiences
+        ["tourist_attraction", "plaza", "marina", "dog_park"],               // outdoors — open-air leisure
+        ["hiking_area", "national_park", "state_park", "park",               // hikes & trails — nature
+         "botanical_garden", "garden", "wildlife_park", "campground"]
     ]
 
     // MARK: - Curate one venue
@@ -58,17 +60,21 @@ enum PlaceCuration {
         if allTypes.contains(where: excludeTypes.contains) { return nil }
         if chainDenylist.contains(where: name.contains) { return nil }
 
-        // 2. Quality gate — open for business, with enough rating signal to trust.
+        // 2. Open for business.
         if let status = place.businessStatus, status != "OPERATIONAL" { return nil }
-        guard let rating = place.rating, rating >= minRating,
-              let count = place.userRatingCount, count >= minRatingCount else { return nil }
 
         // 3. Map to a deck category (first mapped type wins). Unmappable => drop.
+        // Done BEFORE the quality gate so the rating-count floor can be
+        // category-aware (nature spots draw far fewer reviews than restaurants).
         var mapped: (LocalEvent.Category, Int)?
         for type in allTypes {
             if let hit = typeScores[type] { mapped = hit; break }
         }
         guard let (category, base) = mapped else { return nil }
+
+        // 4. Quality gate — enough rating signal to trust, floor per category.
+        guard let rating = place.rating, rating >= minRating,
+              let count = place.userRatingCount, count >= minRatingCount(for: category) else { return nil }
 
         // Score = type base + a rating boost + a "wine" nudge (catches wine bars
         // that Google returns under the generic `bar` type).
@@ -112,8 +118,26 @@ enum PlaceCuration {
         "museum":             (.arts, 6),
         "movie_theater":      (.arts, 6),
         "book_store":         (.arts, 5),
+        // Outdoors — open-air leisure & sightseeing (kept distinct from Trails).
         "tourist_attraction": (.outdoors, 6),
-        "park":               (.outdoors, 5)
+        "marina":             (.outdoors, 5),
+        "plaza":              (.outdoors, 4),
+        "dog_park":           (.outdoors, 3),
+        // Hikes & Trails — nature you move through. Broad on purpose: in launch
+        // markets true hiking_area/national_park are thin, so parks/gardens/scenic
+        // spots fill the deck (they carry the ratings — see minRatingCount). Maps
+        // the primaryTypes Google actually returns (city_park, observation_deck)
+        // too, not just the searchable includedTypes.
+        "hiking_area":        (.trails, 8),
+        "national_park":      (.trails, 8),
+        "state_park":         (.trails, 7),
+        "park":               (.trails, 6),
+        "city_park":          (.trails, 6),
+        "botanical_garden":   (.trails, 6),
+        "wildlife_park":      (.trails, 6),
+        "observation_deck":   (.trails, 6),
+        "garden":             (.trails, 5),
+        "campground":         (.trails, 5)
     ]
 
     private static func ratingBoost(_ rating: Double) -> Int {
@@ -128,7 +152,18 @@ enum PlaceCuration {
     /// Quality gates — keep junk and unproven spots out of a romantic deck.
     /// Tunable; raised/lowered if Vilnius (or a future market) comes up thin.
     private static let minRating = 4.0
-    private static let minRatingCount = 30
+
+    /// Minimum rating count to trust a venue, per category. Restaurants/bars are
+    /// review-dense, so 30 keeps unproven spots out; parks, trails and gardens
+    /// draw a fraction of the reviews an eatery does, so a lower floor keeps real
+    /// nature spots in the Hikes & Trails deck without loosening the food/nightlife
+    /// bar. Highly-rated is still required (minRating) either way.
+    private static func minRatingCount(for category: LocalEvent.Category) -> Int {
+        switch category {
+        case .trails: return 10
+        default:      return 30
+        }
+    }
 
     /// Off-brand types — any match drops the venue regardless of score. The
     /// "not a date" list.
@@ -179,6 +214,7 @@ enum PlaceCuration {
         case .nightlife: return "Low-lit and easy — made for an evening out."
         case .arts:      return "Wander and see something new, side by side."
         case .outdoors:  return "Fresh air and unhurried conversation."
+        case .trails:    return "Lace up and wander somewhere green together."
         case .music:     return "Somewhere to share a song or two."
         }
     }
