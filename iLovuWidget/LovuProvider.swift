@@ -11,6 +11,7 @@
 
 import WidgetKit
 import SwiftUI
+import UIKit
 
 struct LovuEntry: TimelineEntry {
     let date: Date
