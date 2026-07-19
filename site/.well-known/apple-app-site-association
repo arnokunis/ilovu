@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["7AU9U5Q6LT.com.ilovu.app.iLovu"],
+        "components": [
+          {
+            "/": "/invite/*",
+            "comment": "Invite deep links — open the app and auto-redeem the pairing code"
+          }
+        ]
+      }
+    ]
+  }
+}

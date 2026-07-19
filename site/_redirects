@@ -1,3 +1,7 @@
+# AASA served at Apple's required path via internal rewrite (200 = transparent),
+# because Finder/browser drag-and-drop skips the hidden .well-known folder.
+/.well-known/apple-app-site-association   /aasa.json   200
+/invite/*   /invite.html     200
 /privacy    /privacy.html    200
 /terms      /terms.html      200
 /support    /support.html    200

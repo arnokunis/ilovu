@@ -1,0 +1,4 @@
+# Apple requires the AASA file served as JSON (it has no file extension,
+# so Netlify would otherwise guess application/octet-stream).
+/.well-known/apple-app-site-association
+  Content-Type: application/json

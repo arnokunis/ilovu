@@ -55,13 +55,21 @@ service cloud.firestore {
       // DELETE: only the creator can tear down their own invite (e.g. revoke).
       allow delete: if isSignedIn() && resource.data.creatorId == uid();
 
-      // UPDATE (redeem): Cloud-Function-only now. Consuming an invite happens
+      // UPDATE (redeem): Cloud-Function-only. Consuming an invite happens
       // inside the `redeemInvite` transaction (Admin SDK bypasses rules),
       // atomically with couple creation — so a client can't consume an invite on
       // its own and the consume+create pair can't half-complete or be raced.
-      // (Previously this allowed a non-creator to flip status->consumed + stamp
-      // consumedBy directly.)
-      allow update: if false;
+      // ONE narrow client carve-out (2026-07-19): the CREATOR may attach/refresh
+      // their own FCM token on their own still-pending invite — nothing else —
+      // so `redeemInvite` can push "you're connected 💕" the moment the partner
+      // joins (permission is granted at the pairing moment, AFTER creation, so
+      // the token often arrives late and needs this update path).
+      allow update: if isSignedIn()
+                    && resource.data.creatorId == uid()
+                    && resource.data.status == 'pending'
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['creatorFcmToken'])
+                    && request.resource.data.creatorFcmToken is string;
     }
 
     // ---------- couples/{coupleId} ----------

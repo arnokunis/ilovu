@@ -47,6 +47,47 @@ struct InviteDeepLinkTests {
         let url = URL(string: "ilovu://invite")!
         #expect(CoupleService.inviteToken(from: url) == nil)
     }
+
+    // Universal Links (https://ilovu.io/invite/<token>) — same parser, same
+    // onOpenURL delivery. The scheme link keeps working alongside.
+
+    @Test func parsesTokenFromUniversalLink() {
+        let url = URL(string: "https://ilovu.io/invite/k2mn8")!
+        #expect(CoupleService.inviteToken(from: url) == "k2mn8")
+    }
+
+    @Test func parsesTokenFromWWWUniversalLink() {
+        let url = URL(string: "https://www.ilovu.io/invite/k2mn8")!
+        #expect(CoupleService.inviteToken(from: url) == "k2mn8")
+    }
+
+    @Test func webBuildAndParseRoundTrip() {
+        let token = "abc23"
+        let url = CoupleService.inviteWebURL(token: token)
+        #expect(url.absoluteString == "https://ilovu.io/invite/abc23")
+        #expect(CoupleService.inviteToken(from: url) == token)
+    }
+
+    @Test func rejectsUniversalLinkOnWrongDomain() {
+        let url = URL(string: "https://evil.io/invite/k2mn8")!
+        #expect(CoupleService.inviteToken(from: url) == nil)
+    }
+
+    @Test func rejectsUniversalLinkWithWrongPath() {
+        // Not an invite path — e.g. the privacy page must not parse as a token.
+        let url = URL(string: "https://ilovu.io/privacy")!
+        #expect(CoupleService.inviteToken(from: url) == nil)
+    }
+
+    @Test func rejectsUniversalLinkWithMissingToken() {
+        let url = URL(string: "https://ilovu.io/invite")!
+        #expect(CoupleService.inviteToken(from: url) == nil)
+    }
+
+    @Test func rejectsUniversalLinkWithExtraPathParts() {
+        let url = URL(string: "https://ilovu.io/invite/k2mn8/extra")!
+        #expect(CoupleService.inviteToken(from: url) == nil)
+    }
 }
 
 // Partner display-name resolution — the pure logic behind "each user sees the

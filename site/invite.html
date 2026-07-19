@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>You're invited — iLovu</title>
+<meta name="description" content="Your partner invited you to iLovu — swipe date ideas together, match, and make it happen.">
+<meta property="og:title" content="You're invited to iLovu 💕">
+<meta property="og:description" content="Your partner wants to plan real dates together. Get the app and connect with your code.">
+<meta property="og:image" content="https://ilovu.io/favicon-512.png">
+<meta name="apple-itunes-app" content="app-id=6781237573">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --coral: #FF6B6B; --coral-warm: #FF8E53; --blush: #FFF5F3;
+    --rose: #C44569; --ink: #2B1B1E; --ink-soft: #6B5458;
+    --gradient: linear-gradient(120deg, #FF6B6B 0%, #FF8E53 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    background: var(--blush); color: var(--ink); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  .blob { position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.25; z-index: 0; pointer-events: none; }
+  .blob-1 { width: 420px; height: 420px; background: var(--coral); top: -160px; right: -120px; }
+  .blob-2 { width: 380px; height: 380px; background: var(--coral-warm); bottom: -140px; left: -120px; }
+  .wrap { position: relative; z-index: 1; max-width: 480px; margin: 0 auto; padding: 0 24px; text-align: center; }
+  nav { padding: 28px 0 8px; }
+  .logo { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; letter-spacing: -0.02em; color: var(--rose); text-decoration: none; }
+  .logo span { color: var(--coral); }
+  .card {
+    background: #fff; border-radius: 28px; padding: 40px 28px 34px; margin: 26px 0 40px;
+    box-shadow: 0 30px 70px -35px rgba(196,69,105,0.35);
+  }
+  .heart { font-size: 44px; margin-bottom: 10px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(28px, 6vw, 36px); letter-spacing: -0.02em; margin-bottom: 8px; }
+  h1 .o { background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .sub { color: var(--ink-soft); font-size: 15.5px; margin-bottom: 26px; }
+  .code-label { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 8px; }
+  .code {
+    font-family: 'Plus Jakarta Sans', monospace; font-weight: 700; font-size: 34px; letter-spacing: 0.14em;
+    color: var(--rose); background: rgba(255,107,107,0.08); border: 1.5px dashed rgba(196,69,105,0.35);
+    border-radius: 16px; padding: 14px 10px; margin-bottom: 10px; user-select: all; -webkit-user-select: all;
+  }
+  .copy-btn {
+    background: none; border: none; color: var(--rose); font-family: inherit; font-weight: 600;
+    font-size: 13.5px; cursor: pointer; margin-bottom: 26px; padding: 6px 12px;
+  }
+  .btn {
+    display: block; text-decoration: none; font-weight: 700; font-size: 16px; border-radius: 100px;
+    padding: 16px 24px; margin-bottom: 12px; transition: transform .15s ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--gradient); color: #fff; box-shadow: 0 14px 30px -12px rgba(255,107,107,0.55); }
+  .btn-secondary { background: none; color: var(--rose); border: 1.5px solid rgba(196,69,105,0.3); }
+  .steps { text-align: left; margin-top: 26px; padding-top: 22px; border-top: 1px solid rgba(196,69,105,0.12); }
+  .steps p { font-size: 14px; color: var(--ink-soft); margin-bottom: 8px; }
+  .steps strong { color: var(--ink); }
+  footer { text-align: center; padding: 0 0 40px; color: var(--ink-soft); font-size: 13px; position: relative; z-index: 1; }
+  footer a { color: var(--rose); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="wrap">
+  <nav><a href="/" class="logo">iL<span>o</span>vu</a></nav>
+
+  <div class="card">
+    <div class="heart">💌</div>
+    <h1>Y<span class="o">o</span>u're invited</h1>
+    <p class="sub">Your person wants to plan real dates with you — swipe ideas together, match, and make them happen.</p>
+
+    <div id="code-block" style="display:none;">
+      <p class="code-label">Your connection code</p>
+      <div class="code" id="code">·····</div>
+      <button class="copy-btn" id="copy" type="button">Copy code</button>
+    </div>
+
+    <a class="btn btn-primary" href="https://apps.apple.com/app/id6781237573">Get iLovu — it's free</a>
+    <a class="btn btn-secondary" id="open-app" href="#" style="display:none;">I have the app — open iLovu</a>
+
+    <div class="steps">
+      <p><strong>1.</strong> Get the app and sign in</p>
+      <p><strong>2.</strong> Tap "Have a code?" and enter the code above<br>&nbsp;&nbsp;&nbsp;&nbsp;(or just tap this link again — it opens the app)</p>
+      <p><strong>3.</strong> You're connected 💕</p>
+    </div>
+  </div>
+</div>
+<footer>
+  <a href="/">iLovu</a> · One real date a month. No pressure.
+</footer>
+
+<script>
+  // URL shape: /invite/<token>. Static hosting — the token lives only in the
+  // path; everything here is display-only (redemption happens in the app).
+  (function () {
+    var parts = window.location.pathname.split("/").filter(Boolean);
+    var token = (parts[0] === "invite" && parts[1]) ? parts[1] : null;
+    if (!token || !/^[a-z0-9]{4,26}$/i.test(token)) return; // no/garbage token → generic invite page
+
+    // Mirror the app's display format: uppercase, hyphen every 5 chars
+    // (a 5-char code shows as one clean group, old 10-char codes as XXXXX-XXXXX).
+    var formatted = token.toUpperCase().match(/.{1,5}/g).join("-");
+    document.getElementById("code").textContent = formatted;
+    document.getElementById("code-block").style.display = "block";
+
+    var openApp = document.getElementById("open-app");
+    openApp.href = "ilovu://invite/" + token;
+    openApp.style.display = "block";
+
+    var copy = document.getElementById("copy");
+    copy.addEventListener("click", function () {
+      navigator.clipboard.writeText(token).then(function () {
+        copy.textContent = "Copied ✓";
+        setTimeout(function () { copy.textContent = "Copy code"; }, 2000);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

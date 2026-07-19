@@ -143,12 +143,18 @@ final class CoupleService {
         guard let uid = Auth.auth().currentUser?.uid else { throw InviteError.notSignedIn }
 
         let token = Self.makeToken()
-        try await db.collection("invites").document(token).setData([
+        var data: [String: Any] = [
             "creatorId": uid,
             "status": InviteStatus.pending.rawValue,
             "consumedBy": NSNull(),                       // explicit null — create rule checks == null
             "createdAt": FieldValue.serverTimestamp()
-        ])
+        ]
+        // If push permission is already granted (a parked token exists), ride it
+        // along so redeemInvite can ping this creator the moment the partner
+        // connects. Creator-only invite reads keep the token private.
+        if let fcm = pendingFCMToken { data["creatorFcmToken"] = fcm }
+        try await db.collection("invites").document(token).setData(data)
+        activeInviteToken = token
         AppAnalytics.log("invite_created")
         return token
     }
@@ -404,6 +410,11 @@ final class CoupleService {
     // OR before pairing, so we stash it and flush once a couple is available.
     private var pendingFCMToken: String?
 
+    // The invite this user has open (creator side), so a token that arrives
+    // AFTER invite creation (permission granted at the pairing moment) can be
+    // attached to it — that's what powers the "your partner connected 💕" push.
+    private var activeInviteToken: String?
+
     /// Writes the signed-in user's FCM token to the shared couple doc. Stashes it
     /// first so it survives the common races (token before sign-in / before
     /// pairing); flushPendingFCMToken() retries it at the next couple load. A
@@ -420,6 +431,15 @@ final class CoupleService {
         if couple?.id == nil { _ = try? await currentCouple() }
         guard let coupleId = couple?.id else {
             log("persistFCMToken — no couple yet, parked")
+            // Unpaired but inviting: attach the token to the open invite so the
+            // redeem CF can notify this creator at connection. Best-effort — the
+            // rules allow the creator to update ONLY this field; token stays
+            // parked either way and flushes to the couple doc after pairing.
+            if let inviteToken = activeInviteToken {
+                try? await db.collection("invites").document(inviteToken)
+                    .updateData(["creatorFcmToken": token])
+                log("persistFCMToken — attached to open invite for pairing push")
+            }
             return
         }
         do {
@@ -720,25 +740,52 @@ final class CoupleService {
     nonisolated static let inviteURLScheme = "ilovu"
     nonisolated static let inviteURLHost   = "invite"
 
+    /// Universal Link host (2026-07-19). https://ilovu.io/invite/<token> is the
+    /// ONE link we share: iOS routes it into the app when installed (AASA on
+    /// Netlify + applinks entitlement), and Safari shows the invite landing
+    /// page (site/invite.html — code + App Store button) when not.
+    nonisolated static let universalLinkHost = "ilovu.io"
+
     /// The live App Store page (single source — reused anywhere we link the
     /// store: invite shares, future review/marketing surfaces).
     nonisolated static let appStoreURL = URL(string: "https://apps.apple.com/app/id6781237573")!
 
-    /// Builds the shareable deep link for an invite token.
+    /// Builds the custom-scheme deep link for an invite token (installed-only).
     /// `nonisolated`: pure string work, safe to call off the main actor.
     nonisolated static func inviteURL(token: String) -> URL {
         URL(string: "\(inviteURLScheme)://\(inviteURLHost)/\(token)")!
     }
 
-    /// Extracts the token from an incoming invite link, or nil if `url` isn't one.
+    /// Builds the Universal Link for an invite token — the one link that works
+    /// for everyone (opens the app if installed, the landing page if not).
+    nonisolated static func inviteWebURL(token: String) -> URL {
+        URL(string: "https://\(universalLinkHost)/\(inviteURLHost)/\(token)")!
+    }
+
+    /// Extracts the token from an incoming invite link, or nil if `url` isn't
+    /// one. Accepts BOTH forms — the custom scheme (ilovu://invite/<token>)
+    /// and the Universal Link (https://ilovu.io/invite/<token>, www too);
+    /// SwiftUI delivers both through the same onOpenURL.
     /// `nonisolated`: pure parsing, no actor state touched.
     nonisolated static func inviteToken(from url: URL) -> String? {
-        guard url.scheme == inviteURLScheme, url.host == inviteURLHost else { return nil }
-        // ilovu://invite/<token> -> pathComponents ["/", "<token>"]
-        guard let token = url.pathComponents.first(where: { $0 != "/" }), !token.isEmpty else {
-            return nil
+        if url.scheme == inviteURLScheme, url.host == inviteURLHost {
+            // ilovu://invite/<token> -> pathComponents ["/", "<token>"]
+            guard let token = url.pathComponents.first(where: { $0 != "/" }), !token.isEmpty else {
+                return nil
+            }
+            return token
         }
-        return token
+        if url.scheme == "https",
+           let host = url.host,
+           host == universalLinkHost || host == "www.\(universalLinkHost)" {
+            // https://ilovu.io/invite/<token> -> pathComponents ["/", "invite", "<token>"]
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2, parts[0] == inviteURLHost, !parts[1].isEmpty else {
+                return nil
+            }
+            return parts[1]
+        }
+        return nil
     }
 
     // MARK: - Token
@@ -788,20 +835,16 @@ final class CoupleService {
             .joined(separator: "-")
     }
 
-    /// The warm, on-brand text shared from the invite share sheet. Leads with
-    /// the App Store link (plain https — never stripped, gives a partner
-    /// WITHOUT the app an install path), then the human-readable
-    /// (grouped/uppercased) code as PLAIN TEXT, so even apps that strip
-    /// custom-scheme links (e.g. Messenger) still deliver a usable code the
-    /// partner can type/paste. The raw-token link stays last as the fast path
-    /// for partners who already have the app (iMessage, WhatsApp keep it).
-    /// The link's token is unchanged, so every existing redeem path still works.
+    /// The warm, on-brand text shared from the invite share sheet. ONE smart
+    /// link (the Universal Link): opens the app directly when installed, and
+    /// the invite landing page (code + App Store button) when not. The
+    /// human-readable code rides along as PLAIN TEXT so even a mangled link
+    /// leaves the partner with something typeable ("Have a code?" field).
     nonisolated static func inviteShareMessage(token: String) -> String {
         """
         Join me on iLovu 💕
-        1. Get the app: \(appStoreURL.absoluteString)
-        2. Enter this code to connect: \(formatInviteCode(token))
-        \(inviteURL(token: token).absoluteString)
+        Tap to connect: \(inviteWebURL(token: token).absoluteString)
+        Your code: \(formatInviteCode(token))
         """
     }
 

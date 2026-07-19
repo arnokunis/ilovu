@@ -34,6 +34,7 @@ struct PairingView: View {
     @State private var isWorking = false         // disables buttons mid-request
     @State private var errorMessage: String?
     @State private var didCopy = false           // brief "Copied ✓" feedback on the copy button
+    @State private var showPushAsk = false       // warm "know when they join" permission ask
 
     var body: some View {
         NavigationStack {
@@ -60,6 +61,15 @@ struct PairingView: View {
             }
             .navigationTitle("Connect")
             .navigationBarTitleDisplayMode(.inline)
+            // Warm, partner-framed permission ask (anti-pressure: "Not now"
+            // defers without burning the one-shot iOS prompt — that only fires
+            // on "Sounds good", mirroring the first-match ask).
+            .alert("Know the moment they join 💕", isPresented: $showPushAsk) {
+                Button("Sounds good") { Task { await PushAuthorization.request() } }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Want a heads-up when your partner connects with you?")
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -286,6 +296,13 @@ struct PairingView: View {
         errorMessage = nil
         do {
             inviteToken = try await couples.createInvite()
+            // Warm push ask at the pairing moment (same anti-pressure pattern as
+            // the first-match ask in MainTabView): the SYSTEM one-shot prompt
+            // only fires on "Sounds good", so "Not now" never burns it. Granting
+            // here is what powers the "your partner connected 💕" push.
+            if await PushAuthorization.status() == .notDetermined {
+                showPushAsk = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
