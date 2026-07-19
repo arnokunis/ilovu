@@ -123,6 +123,27 @@ struct iLovuApp: App {
         _authState = State(initialValue: AuthState())
     }
 
+    // A cheap signature of everything the widgets render. When it changes, the
+    // .task(id:) below rewrites the shared snapshot. Kept scalar (no image bytes)
+    // so recomputing it on every render is free; the newest-memory id+version
+    // catches a photo replace, and the earliest scheduled date catches replanning.
+    private var widgetDigest: String {
+        let daysValue: Int? = coupleService.couple?.daysTogether()
+        let days: String = daysValue.map { String($0) } ?? "-"
+
+        let upcoming: [Mission] = missionStore.missions.filter { $0.status == .upcoming }
+        let earliest: TimeInterval? = upcoming
+            .compactMap { $0.scheduledDate?.timeIntervalSince1970 }
+            .min()
+        let mission: String = earliest.map { String($0) } ?? "u\(missionStore.missions.count)"
+
+        let newest: Memory? = memoryStore.memories.max { $0.dateCompleted < $1.dateCompleted }
+        let memory: String = newest.map { "\($0.id)-\($0.photoVersion)" } ?? "none"
+
+        let partner: String = coupleService.partnerDisplayName ?? ""
+        return "\(days)|\(mission)|\(memory)|\(partner)"
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -138,6 +159,19 @@ struct iLovuApp: App {
                 .environment(subscriptionService)
                 .environment(coupleSetupPrompt)
                 .environment(dailyQuestionService)
+                // Keep the home-screen widgets fed. A cheap digest of the couple
+                // days / next mission / latest memory drives this: .task(id:) reruns
+                // the write whenever that digest changes (and once on first appear).
+                // No-ops until the App Group + widget extension exist (see
+                // WidgetDataWriter / WidgetShared), so it's safe to ship now.
+                .task(id: widgetDigest) {
+                    await WidgetDataWriter().refresh(
+                        couple: coupleService.couple,
+                        partnerName: coupleService.partnerDisplayName,
+                        missions: missionStore.missions,
+                        memories: memoryStore.memories
+                    )
+                }
                 // Wire MissionStore's write-through sink once. Every local
                 // add/update then mirrors to Firestore for the current couple;
                 // when unpaired (coupleId nil) it's a no-op and missions stay
