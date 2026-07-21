@@ -181,6 +181,16 @@ service cloud.firestore {
       allow delete:         if false;
     }
 
+    // ---------- couples/{coupleId}/bucketList/{itemId} ----------
+    // The shared date wishlist: custom date ideas the couple adds themselves. Doc
+    // id == the item's UUID. Either member may create/update AND delete (unlike
+    // missions/memories, wishlist items are meant to be removed). Scoped to the
+    // couple's two members. Same trust posture as missions/memories — a member
+    // could write arbitrary fields; field-shape validation is deferred.
+    match /couples/{coupleId}/bucketList/{itemId} {
+      allow read, create, update, delete: if isCoupleMember(coupleId);
+    }
+
     // ---------- couples/{coupleId}/dailyAnswers/{dateKey} ----------
     // One doc per calendar day for the shared Daily Question. `answers` is a
     // uid-keyed map (uid -> answer text); doc id is the local-date key. Scoped to

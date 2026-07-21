@@ -48,6 +48,10 @@ struct iLovuApp: App {
     @State private var missionStore = MissionStore()
     @State private var memoryStore  = MemoryStore()
 
+    // Shared date wishlist (custom date ideas). Same local-mirror + remote-sink
+    // shape as the stores above; synced to the partner via BucketListService.
+    @State private var bucketListStore = BucketListStore()
+
     // Local profile photo (name lives in @AppStorage and syncs via the couple
     // doc). Owned here so the Us tab and any avatar share one instance.
     @State private var profileStore = ProfileStore()
@@ -74,6 +78,10 @@ struct iLovuApp: App {
     // both partners share one durable vault. Same lazy-Firebase, safe-to-default
     // shape as the services above.
     @State private var memoryService = MemoryService()
+
+    // Firestore sync for the shared date wishlist (couples/{id}/bucketList).
+    // Same lazy-Firebase, safe-to-default shape as the services above.
+    @State private var bucketListService = BucketListService()
 
     // Decides WHEN the soft paywall appears (not the purchase). Couple-level,
     // UserDefaults-backed, no Firebase — safe to default-construct here. Read by
@@ -159,6 +167,8 @@ struct iLovuApp: App {
                 .environment(subscriptionService)
                 .environment(coupleSetupPrompt)
                 .environment(dailyQuestionService)
+                .environment(bucketListStore)
+                .environment(bucketListService)
                 // Keep the home-screen widgets fed. A cheap digest of the couple
                 // days / next mission / latest memory drives this: .task(id:) reruns
                 // the write whenever that digest changes (and once on first appear).
@@ -214,6 +224,17 @@ struct iLovuApp: App {
                                 memoryStore.markSynced(id: memory.id, storagePath: path)
                             }
                         }
+                    }
+                    // Bucket-list sync sinks: mirror an add/toggle up, and a delete.
+                    // No-op when unpaired (coupleId nil); items stay local until
+                    // pairing, then resyncAll() (in MainTabView) migrates them.
+                    bucketListStore.remoteUpsert = { [coupleService, bucketListService] item in
+                        guard let coupleId = coupleService.coupleId else { return }
+                        Task { await bucketListService.saveItem(coupleId: coupleId, item: item) }
+                    }
+                    bucketListStore.remoteDelete = { [coupleService, bucketListService] id in
+                        guard let coupleId = coupleService.coupleId else { return }
+                        Task { await bucketListService.deleteItem(coupleId: coupleId, itemId: id.uuidString) }
                     }
                 }
         }

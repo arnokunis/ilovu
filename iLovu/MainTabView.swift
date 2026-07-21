@@ -39,6 +39,12 @@ struct MainTabView: View {
     // path behind MemoryStore.remoteUpsert. Injected at the app root.
     @Environment(MemoryService.self) private var memoryService
 
+    // Shared date wishlist — store + its Firestore sync. MainTabView hosts the
+    // wishlist listener alongside the mission/memory ones so a partner's add,
+    // tick-off, or delete lands live.
+    @Environment(BucketListStore.self) private var bucketListStore
+    @Environment(BucketListService.self) private var bucketListService
+
     // RevenueCat entitlement. MainTabView is where premium is reconciled onto the
     // couple doc (subscribed-before-pairing) and where the effective premium
     // (mine OR the shared flag) is pushed into the paywall gate.
@@ -69,6 +75,9 @@ struct MainTabView: View {
     // or a changed couple photo lands live without a relaunch.
     @State private var memoryListener: ListenerRegistration?
     @State private var coupleListener: ListenerRegistration?
+
+    // The live wishlist listener, paired to the same couple as the others.
+    @State private var bucketListener: ListenerRegistration?
 
     // cardIds we've already celebrated on THIS device, persisted so old matches
     // don't replay their celebration on every launch. Keyed per couple. The
@@ -281,9 +290,18 @@ struct MainTabView: View {
         )
         // Live couple-doc updates (partner name + couple photo freshness).
         coupleListener = coupleService.observeCouple()
+        // Shared wishlist: deliver the partner's items (add/tick/remove) into the
+        // local store, converting the Firestore shape back to BucketListItem.
+        bucketListener = bucketListService.observeItems(
+            coupleId: id,
+            onUpsert: { remote in if let item = remote.asItem() { bucketListStore.mergeFromRemote(item) } },
+            onRemove: { itemId in bucketListStore.removeFromRemote(id: itemId) }
+        )
         // Migrate any local-only memories (pre-Storage, or saved while unpaired)
         // up to Storage now that we have a couple. Idempotent.
         memoryStore.resyncUnsynced()
+        // Same migration for wishlist items added while unpaired.
+        bucketListStore.resyncAll()
     }
 
     /// Pushes the effective couple-shared premium (my own entitlement OR the
@@ -302,6 +320,8 @@ struct MainTabView: View {
         memoryListener = nil
         coupleListener?.remove()
         coupleListener = nil
+        bucketListener?.remove()
+        bucketListener = nil
         listeningCoupleId = nil
     }
 

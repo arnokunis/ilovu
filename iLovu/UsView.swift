@@ -11,6 +11,7 @@ import StoreKit
 struct UsView: View {
 
     @Environment(MemoryStore.self) private var memoryStore
+    @Environment(BucketListStore.self) private var bucketListStore
 
     // App-level auth state, used by the Sign Out button below.
     @Environment(AuthState.self) private var authState
@@ -62,6 +63,9 @@ struct UsView: View {
     // Presents the partner-pairing sheet (create / redeem an invite).
     @State private var showPairing = false
 
+    // Presents the shared date-wishlist sheet.
+    @State private var showBucketList = false
+
     // Presents the edit-name / edit-photo sheet.
     @State private var showEditProfile = false
 
@@ -100,6 +104,9 @@ struct UsView: View {
         }
         .sheet(isPresented: $showCoupleStory) {
             CoupleStoryView()
+        }
+        .sheet(isPresented: $showBucketList) {
+            BucketListView()
         }
         // Account deletion confirmation (App Store 5.1.1(v)). Honest, couple-aware
         // copy; the destructive action actually deletes the Firebase account.
@@ -417,6 +424,8 @@ struct UsView: View {
                 isOrphaned: coupleService.isOrphaned
             )
 
+            bucketListRow
+
             if memoryStore.memories.isEmpty {
                 emptyState
             } else {
@@ -429,6 +438,40 @@ struct UsView: View {
             deleteAccountButton
         }
         .padding(20)
+    }
+
+    // Entry point to the shared date wishlist. Works locally when unpaired and
+    // syncs to the partner once paired (BucketListStore mirrors the pattern of the
+    // other stores). Subtitle nudges toward adding ideas / shows the active count.
+    private var bucketListRow: some View {
+        Button { showBucketList = true } label: {
+            HStack(spacing: 12) {
+                Text("💡").font(.system(size: 24))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Date Wishlist")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.deepRose)
+                    Text(bucketListSubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.gray.opacity(0.4))
+            }
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bucketListSubtitle: String {
+        if bucketListStore.items.isEmpty { return "Add date ideas you both want to try" }
+        let active = bucketListStore.activeCount
+        return active == 0 ? "All done — add more ideas ✨"
+                           : "\(active) idea\(active == 1 ? "" : "s") to try"
     }
 
     // MARK: - Profile (name + photo)
