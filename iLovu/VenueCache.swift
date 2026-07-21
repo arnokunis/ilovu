@@ -252,12 +252,13 @@ struct VenueCache {
         var raw: [Place] = []
         for group in PlaceCuration.searchGroups {
             do {
-                log("BILLED Nearby search \(bucket) \(group)")
-                let found = try await places.searchNearby(latitude: center.lat, longitude: center.lng, includedTypes: group)
+                log("BILLED Nearby search \(bucket) \(group.types) r=\(Int(group.radiusMeters))m")
+                let found = try await places.searchNearby(latitude: center.lat, longitude: center.lng,
+                                                          includedTypes: group.types, radiusMeters: group.radiusMeters)
                 raw.append(contentsOf: found)
             } catch {
                 // One group failing (e.g. an unknown type) shouldn't sink the deck.
-                log("DECK group error \(group): \(error.localizedDescription)")
+                log("DECK group error \(group.types): \(error.localizedDescription)")
             }
         }
 

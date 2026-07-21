@@ -25,7 +25,8 @@ enum PlaceCuration {
     /// treats a mismatch as a miss, so a curation change re-resolves the deck on
     /// the next Near You open instead of waiting out the 7-day SWR window.
     /// v2 (2026-07-19): added the Hikes & Trails category.
-    static let curationVersion = 2
+    /// v3 (2026-07-21): per-category search radius (10 km going-out / 30 km outdoors + trails).
+    static let curationVersion = 3
 
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
@@ -41,17 +42,29 @@ enum PlaceCuration {
     // curate. All cached, so it's a handful of billed calls per bucket per
     // refresh, not per user.
     //
+    // RADIUS is PER-GROUP because intent differs: a dinner/drinks/arts date is
+    // "near us tonight" (~10 km — rich in dense cities, covers suburban sprawl,
+    // and POPULARITY ranking + curation keep nearby spots on top), while a hike or
+    // park is "somewhere we'll drive to this weekend" (~30 km — trails sit well
+    // beyond the urban core, so a tight radius leaves that deck thin). Wider radius
+    // costs nothing extra: billed per bucket refresh, not per user.
+    //
     // NOTE: every string here MUST be a valid Places API (New) "Table A" type —
     // an unknown type 400s the whole call. This is a conservative, known-valid
     // set; widen it (wine_bar, tea_house, performing_arts_theater…) only after
     // confirming each against the current Table A.
-    static let searchGroups: [[String]] = [
-        ["restaurant", "cafe", "coffee_shop", "bakery", "ice_cream_shop"],   // food & drink
-        ["bar", "night_club"],                                               // nightlife
-        ["art_gallery", "museum", "movie_theater", "book_store"],            // arts
-        ["tourist_attraction", "plaza", "marina", "dog_park"],               // outdoors — open-air leisure
-        ["hiking_area", "national_park", "state_park", "park",               // hikes & trails — nature
-         "botanical_garden", "garden", "wildlife_park", "campground"]
+    struct SearchGroup {
+        let types: [String]
+        let radiusMeters: Double
+    }
+
+    static let searchGroups: [SearchGroup] = [
+        SearchGroup(types: ["restaurant", "cafe", "coffee_shop", "bakery", "ice_cream_shop"], radiusMeters: 10_000),  // food & drink
+        SearchGroup(types: ["bar", "night_club"], radiusMeters: 10_000),                                             // nightlife
+        SearchGroup(types: ["art_gallery", "museum", "movie_theater", "book_store"], radiusMeters: 10_000),          // arts
+        SearchGroup(types: ["tourist_attraction", "plaza", "marina", "dog_park"], radiusMeters: 30_000),             // outdoors — open-air leisure
+        SearchGroup(types: ["hiking_area", "national_park", "state_park", "park",                                    // hikes & trails — nature
+                            "botanical_garden", "garden", "wildlife_park", "campground"], radiusMeters: 30_000)
     ]
 
     // MARK: - Curate one venue
