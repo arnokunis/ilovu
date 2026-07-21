@@ -12,6 +12,10 @@
 //    → card_liked → match_created → mission_created → memory_completed
 //    → paywall_shown → paywall_dismissed → purchase_success / restore_success
 //
+//  Growth loop (viral acquisition): memory_shared — logged when the user opens
+//  the share sheet for a Memory's proof-photo card (MemoryDetailView). Measures
+//  how often couples share, the top of the organic-growth funnel.
+//
 //  North-star: memory_completed (a real date happened). The live diagnostic
 //  for the pairing funnel is invite_created → invite_redeemed conversion.
 //

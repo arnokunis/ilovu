@@ -11,10 +11,22 @@ struct MemoryDetailView: View {
     let memory: Memory
 
     @Environment(MemoryStore.self) private var memoryStore
+    @Environment(CoupleService.self) private var coupleService
     @Environment(\.dismiss) private var dismiss
 
     // Re-pick state for replacing the proof photo.
     @State private var pickerItem: PhotosPickerItem?
+
+    // Share-card state: the rendered PNG to hand the share sheet, plus a flag for
+    // the (brief) render so the button can show progress.
+    @State private var shareItem: ShareItem?
+    @State private var isPreparingShare = false
+
+    // Identifiable wrapper so the share sheet presents via `.sheet(item:)`.
+    private struct ShareItem: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
 
     // Bind display to the store's live entry (not the snapshot passed in) so a
     // photo replacement shows here immediately. Falls back to the snapshot if the
@@ -43,6 +55,8 @@ struct MemoryDetailView: View {
                             .overlay(ProgressView().tint(.white))
                     }
 
+                    shareButton
+
                     changePhotoButton
 
                     metadata
@@ -66,6 +80,103 @@ struct MemoryDetailView: View {
                 pickerItem = nil
             }
         }
+        // Native share sheet for the rendered memory card.
+        .sheet(item: $shareItem) { item in
+            ShareSheet(items: [item.url])
+        }
+    }
+
+    // The growth feature: renders this memory into a branded, Story-shaped card
+    // and opens the native share sheet. Reads the existing Vault only.
+    private var shareButton: some View {
+        Button {
+            Task { await prepareShare() }
+        } label: {
+            HStack(spacing: 6) {
+                if isPreparingShare {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                Text(isPreparingShare ? "Preparing…" : "Share this memory")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+            .background(LouvGradient.coral)
+            .clipShape(Capsule())
+            .louvShadow()
+        }
+        .disabled(isPreparingShare)
+    }
+
+    // MARK: - Share rendering
+
+    /// Loads the photo, renders the share card to a PNG, and presents the sheet.
+    /// Runs on the main actor (ImageRenderer requirement); the image load awaits
+    /// off the render.
+    @MainActor
+    private func prepareShare() async {
+        isPreparingShare = true
+        defer { isPreparingShare = false }
+
+        let photo = await loadImage(for: current)
+        let days = coupleService.couple?.daysTogether().map { "\($0) days together" }
+
+        let card = MemoryShareCard(
+            image: photo,
+            emoji: current.cardEmoji,
+            title: current.cardTitle,
+            dateText: current.dateCompleted.formatted(date: .abbreviated, time: .omitted),
+            ordinalText: ordinalText(for: current),
+            daysText: days
+        )
+
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 3   // ~1080×1920, Instagram-Story resolution
+        guard let uiImage = renderer.uiImage,
+              let data = uiImage.pngData() else { return }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ilovu-memory.png")
+        do {
+            try data.write(to: url, options: .atomic)
+            AppAnalytics.log("memory_shared")
+            shareItem = ShareItem(url: url)
+        } catch {
+            // Silent: a failed temp write just means no share sheet this tap.
+        }
+    }
+
+    /// The memory's proof photo: local bytes first (instant), else the
+    /// download-once ImageCache. nil → the card renders its coral fallback.
+    private func loadImage(for memory: Memory) async -> UIImage? {
+        if let data = memory.photoData, let image = UIImage(data: data) { return image }
+        guard let path = memory.storagePath else { return nil }
+        return await ImageCache.shared.image(forPath: path, version: String(memory.photoVersion))
+    }
+
+    /// "Our 14th date" from this memory's position in the vault (oldest = 1st).
+    /// nil if the memory isn't in the store (e.g. previews).
+    private func ordinalText(for memory: Memory) -> String? {
+        let ordered = memoryStore.memories.sorted { $0.dateCompleted < $1.dateCompleted }
+        guard let index = ordered.firstIndex(where: { $0.id == memory.id }) else { return nil }
+        return "Our \(Self.ordinal(index + 1)) date"
+    }
+
+    /// 1 → "1st", 2 → "2nd", 11 → "11th", 22 → "22nd", etc.
+    private static func ordinal(_ n: Int) -> String {
+        let suffix: String
+        switch (n % 100, n % 10) {
+        case (11...13, _): suffix = "th"
+        case (_, 1):       suffix = "st"
+        case (_, 2):       suffix = "nd"
+        case (_, 3):       suffix = "rd"
+        default:           suffix = "th"
+        }
+        return "\(n)\(suffix)"
     }
 
     // Lets the couple swap the proof photo on a completed memory anytime — the
