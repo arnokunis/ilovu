@@ -222,6 +222,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------- couples/{coupleId}/games/{dateKey} ----------
+    // One doc per day for the "Would You Rather" game. `choices` is a uid-keyed map
+    // (uid -> "A" | "B"); doc id is the local-date key. Exact same own-key-only
+    // shape as dailyAnswers — each member may only write/change THEIR OWN choice,
+    // so the "did we match" reveal can't be gamed by writing on the partner's
+    // behalf. Client-enforced trust posture as elsewhere (a member could still
+    // write a wrong promptIndex — trusted-partner, low risk).
+    match /couples/{coupleId}/games/{dateKey} {
+      allow read: if isCoupleMember(coupleId);
+      allow create: if isCoupleMember(coupleId)
+                    && request.resource.data.choices.keys().hasOnly([uid()]);
+      allow update: if isCoupleMember(coupleId)
+                    && request.resource.data.choices.diff(resource.data.choices).affectedKeys().hasOnly([uid()]);
+      allow delete: if false;
+    }
+
     // ---------- venues/{placeId} ----------
     // Cached Google Places data, keyed by the resolved place.id. Venues aren't
     // private, so reads are open to everyone (even unauthenticated).

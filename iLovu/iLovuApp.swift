@@ -105,6 +105,11 @@ struct iLovuApp: App {
     // safe-to-default shape as the services above.
     @State private var dailyQuestionService = DailyQuestionService()
 
+    // "Would You Rather" game sync (couples/{id}/games). Self-contained card owns
+    // its own listener, same as DailyQuestionCard — this just needs to exist in the
+    // environment. Same lazy-Firebase, safe-to-default shape as the services above.
+    @State private var wouldYouRatherService = WouldYouRatherService()
+
     // Tracks Firebase auth state so ContentView can route signed-in vs
     // signed-out. Built in init() — see below for why it isn't a default.
     @State private var authState: AuthState
@@ -167,6 +172,7 @@ struct iLovuApp: App {
                 .environment(subscriptionService)
                 .environment(coupleSetupPrompt)
                 .environment(dailyQuestionService)
+                .environment(wouldYouRatherService)
                 .environment(bucketListStore)
                 .environment(bucketListService)
                 // Keep the home-screen widgets fed. A cheap digest of the couple
