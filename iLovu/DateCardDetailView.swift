@@ -17,6 +17,11 @@ struct DateCardDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    // The 36-Questions / Closeness-Questions cards carry an actual guided exercise
+    // (Aron's set) — surfaced via a button + sheet so the card isn't a dead promise.
+    @State private var showQuestions = false
+    private var hasGuidedQuestions: Bool { ThirtySixQuestions.cardIds.contains(card.cardId) }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             ScrollView {
@@ -24,6 +29,7 @@ struct DateCardDetailView: View {
                     emojiBlock
                     titleBlock
                     descriptionBlock
+                    if hasGuidedQuestions { guidedQuestionsButton }
                     whyThisWorksSection
                     tipsSection
                 }
@@ -35,6 +41,33 @@ struct DateCardDetailView: View {
                 .padding(.trailing, 16)
         }
         .background(Color.blushCream.ignoresSafeArea())
+        .sheet(isPresented: $showQuestions) {
+            ThirtySixQuestionsView()
+        }
+    }
+
+    // MARK: - Guided questions entry
+
+    private var guidedQuestionsButton: some View {
+        Button { showQuestions = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "list.number")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("See the 36 questions")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 18)
+            .background(LouvGradient.coral)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
     }
 
     // MARK: - Emoji
