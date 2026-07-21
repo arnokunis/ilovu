@@ -2013,6 +2013,363 @@ enum SampleCards {
                 "Don't recreate exactly — let it evolve.",
                 "Talk about why it was the favourite in the first place."
             ]
+        ),
+
+        // MARK: - Science-backed additions (novelty · awe · vulnerability · play)
+        // Grounded in relationship psychology: novel/exciting shared activity
+        // (Aron's self-expansion + arousal research), awe (Keltner), mutual
+        // vulnerability, and prosocial acts — the levers that most reliably lift
+        // closeness. Chosen to NOT overlap the existing 140.
+
+        DateCard(
+            title: "The Awe Walk",
+            description: "Walk somewhere vast — old forest, a cliff, a wide sky — and hunt for the things that make you stop.",
+            emoji: "🌲",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .adventure,
+            whyItWorks: "Chasing wonder together shrinks the day's noise and makes room for each other.",
+            tips: [
+                "Pick somewhere with scale — trees, water, a long view.",
+                "Say the thing that stops you out loud.",
+                "No podcasts. Awe needs the quiet."
+            ]
+        ),
+        DateCard(
+            title: "Strangers at a Bar",
+            description: "Arrive separately, pretend you've never met, and chat each other up from scratch.",
+            emoji: "🥂",
+            difficulty: .quick,
+            estimatedCost: .medium,
+            category: .creative,
+            whyItWorks: "Meeting as strangers lets you flirt with the person you forgot you were still discovering.",
+            tips: [
+                "Invent a name and a fake job. Commit to it.",
+                "Let one of you 'approach' the other.",
+                "Stay in character until you leave."
+            ]
+        ),
+        DateCard(
+            title: "The Yes Day",
+            description: "For one afternoon, say yes to every reasonable thing the other suggests.",
+            emoji: "✅",
+            difficulty: .halfDay,
+            estimatedCost: .medium,
+            category: .adventure,
+            whyItWorks: "Handing over the wheel for a day is a small, freeing act of trust.",
+            tips: [
+                "Agree a budget and a time window first.",
+                "No vetoing — within reason, yes means yes.",
+                "Swap who leads halfway if you like."
+            ]
+        ),
+        DateCard(
+            title: "Silent Dinner",
+            description: "Cook and eat a whole meal communicating without a single word.",
+            emoji: "🤐",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .intimate,
+            whyItWorks: "Take words away and you start reading each other the way you used to.",
+            tips: [
+                "Set the table properly. It raises the stakes.",
+                "Gestures and notes allowed, speech isn't.",
+                "Talk about what you noticed once it's over."
+            ]
+        ),
+        DateCard(
+            title: "Escape Room Together",
+            description: "Book a room and try to break out before the clock beats you.",
+            emoji: "🔓",
+            difficulty: .quick,
+            estimatedCost: .medium,
+            category: .adventure,
+            whyItWorks: "A ticking clock is a low-stakes look at how you two actually solve things side by side.",
+            tips: [
+                "Pick a beginner room your first time.",
+                "Say every idea out loud, even the silly ones.",
+                "Debrief over a drink — who kept calm?"
+            ]
+        ),
+        DateCard(
+            title: "Geocaching Hunt",
+            description: "Use a free app to hunt for hidden caches near you like a real treasure map.",
+            emoji: "🧭",
+            difficulty: .halfDay,
+            estimatedCost: .free,
+            category: .adventure,
+            whyItWorks: "A shared goal turns an ordinary walk into a quest with a prize at the end.",
+            tips: [
+                "Download a geocaching app before you leave.",
+                "Bring a pen — you sign the log.",
+                "Leave a tiny trinket if you take one."
+            ]
+        ),
+        DateCard(
+            title: "The Kindness Spree",
+            description: "Do three small kind things for strangers together in one outing.",
+            emoji: "🤝",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .intimate,
+            whyItWorks: "Being generous side by side quietly bonds you more than being treated does.",
+            tips: [
+                "Pick the three before you go — pay it forward, leave a note, help someone.",
+                "Do them together, not solo.",
+                "Don't post about it. Keep it yours."
+            ]
+        ),
+        DateCard(
+            title: "Documentary Debate",
+            description: "Watch a documentary, then argue opposite sides of it over tea.",
+            emoji: "🎬",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .creative,
+            whyItWorks: "Play-fighting over ideas is a way to stay curious about how the other's mind moves.",
+            tips: [
+                "Assign sides before it ends.",
+                "No winning — just push each other's thinking.",
+                "Swap sides for the last five minutes."
+            ]
+        ),
+        DateCard(
+            title: "Kitchen Silent Disco",
+            description: "One playlist, two sets of headphones, dance around the kitchen in your own little world.",
+            emoji: "🎧",
+            difficulty: .micro,
+            estimatedCost: .free,
+            category: .creative,
+            whyItWorks: "Moving in sync to the same song is one of the oldest shortcuts to feeling close.",
+            tips: [
+                "Split one playlist to two pairs of headphones.",
+                "Lights low, inhibitions lower.",
+                "Three songs each. Take turns picking."
+            ]
+        ),
+        DateCard(
+            title: "Interview Each Other",
+            description: "Film a five-minute interview — real questions, honest answers. Keep it forever.",
+            emoji: "🎥",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .intimate,
+            whyItWorks: "Ten years from now the tape of your voices will be worth more than any photo.",
+            tips: [
+                "Prep three questions each — one silly, two real.",
+                "Look at each other, not the camera.",
+                "Never re-shoot. First take is the true one."
+            ]
+        ),
+        DateCard(
+            title: "The Fear Jar",
+            description: "Each write down a fear, fold it, and share one out loud.",
+            emoji: "🫙",
+            difficulty: .micro,
+            estimatedCost: .free,
+            category: .intimate,
+            whyItWorks: "Letting someone see what scares you is the fastest, oldest way to feel known.",
+            tips: [
+                "Write privately. No peeking.",
+                "Share one, not all.",
+                "Don't fix it — just receive it."
+            ]
+        ),
+        DateCard(
+            title: "Pick-Your-Own Farm",
+            description: "Find a pick-your-own farm, fill a basket together, then cook what you picked.",
+            emoji: "🍓",
+            difficulty: .halfDay,
+            estimatedCost: .low,
+            category: .foodie,
+            whyItWorks: "Picking your own dinner ties the meal to the afternoon in a way a shop never can.",
+            tips: [
+                "Go in season — check what's ripe first.",
+                "Taste one straight off the plant. Rule of the farm.",
+                "Cook something simple with the haul that night."
+            ]
+        ),
+        DateCard(
+            title: "Meteor Shower Night",
+            description: "Look up the next meteor shower, drive somewhere dark, and count shooting stars.",
+            emoji: "☄️",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .adventure,
+            whyItWorks: "Wishing on the same falling star is corny for a reason — it works.",
+            tips: [
+                "Check the date and peak time in advance.",
+                "Let your eyes adjust for ten minutes.",
+                "One blanket to lie on, one to share."
+            ]
+        ),
+        DateCard(
+            title: "Roller Rink Hand in Hand",
+            description: "Lace up at a roller or ice rink and hold on to each other for dear life.",
+            emoji: "🛼",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .adventure,
+            whyItWorks: "Nothing melts self-consciousness like needing the other person to stay upright.",
+            tips: [
+                "Rent, don't buy. First time is a trial.",
+                "Hold hands — falling together is the fun part.",
+                "One lap where you actually try to be graceful."
+            ]
+        ),
+        DateCard(
+            title: "Mini Golf Showdown",
+            description: "Nine holes, a made-up trophy, and the loser buys ice cream.",
+            emoji: "⛳",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .creative,
+            whyItWorks: "A silly bet gives an ordinary hour just enough stakes to remember it.",
+            tips: [
+                "Agree the prize before the first hole.",
+                "Invent a rule that's clearly unfair. Argue about it.",
+                "Ice cream regardless of who wins."
+            ]
+        ),
+        DateCard(
+            title: "Trampoline Park Bounce",
+            description: "An hour of bouncing like nobody's watching. Try not to laugh. Fail.",
+            emoji: "🤸",
+            difficulty: .quick,
+            estimatedCost: .medium,
+            category: .adventure,
+            whyItWorks: "It's hard to hold a bad mood mid-air, and impossible to look cool — which is the point.",
+            tips: [
+                "Grippy socks. They'll make you buy them anyway.",
+                "Race across the pit. Loser owes a smoothie.",
+                "Stop before you're wrecked. Save something for the walk home."
+            ]
+        ),
+        DateCard(
+            title: "The Scent Memory Test",
+            description: "Blindfold each other, sniff things from around the house, and share the memory each smell brings up.",
+            emoji: "👃",
+            difficulty: .micro,
+            estimatedCost: .low,
+            category: .creative,
+            whyItWorks: "Smell is wired straight to memory — one whiff can unlock a story you forgot you had.",
+            tips: [
+                "Raid the kitchen and bathroom for smells.",
+                "Guess first, then tell the memory it triggers.",
+                "Five each. Save the strongest for last."
+            ]
+        ),
+        DateCard(
+            title: "Read the Same Book",
+            description: "Both read the same short book this month and talk about it like your own tiny book club.",
+            emoji: "📖",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .cosy,
+            whyItWorks: "Living inside the same story for a week gives you a shared world to wander.",
+            tips: [
+                "Pick something short. Momentum beats ambition.",
+                "Read to the same chapter, then compare.",
+                "Argue about the ending. That's the good bit."
+            ]
+        ),
+        DateCard(
+            title: "Board Game Café",
+            description: "Find a board game café, order drinks, and let a stranger recommend a game you've never played.",
+            emoji: "🎲",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .creative,
+            whyItWorks: "Learning new rules together puts you both back at the start line, laughing at the manual.",
+            tips: [
+                "Ask staff for a 20-minute game to warm up.",
+                "Play the one that looks too complicated. Commit.",
+                "Cooperative games if you're feeling fragile that day."
+            ]
+        ),
+        DateCard(
+            title: "Karaoke Night Out",
+            description: "Book a private karaoke booth and sing your hearts out where nobody can judge.",
+            emoji: "🎤",
+            difficulty: .quick,
+            estimatedCost: .medium,
+            category: .creative,
+            whyItWorks: "Belting a duet you can't sing is a small, joyful act of not caring how you look.",
+            tips: [
+                "Private booth beats a public stage. Fewer nerves.",
+                "Pick one duet you both secretly know every word to.",
+                "One power ballad each. No mercy."
+            ]
+        ),
+        DateCard(
+            title: "Sunset Paddle",
+            description: "Rent a canoe or paddleboard and be on the water as the sun goes down.",
+            emoji: "🛶",
+            difficulty: .halfDay,
+            estimatedCost: .medium,
+            category: .adventure,
+            whyItWorks: "Being on the water at dusk makes an ordinary evening feel borrowed from a holiday.",
+            tips: [
+                "Book the last slot before sunset.",
+                "One boat if you can — teamwork beats racing.",
+                "Dry clothes waiting in the car. Always."
+            ]
+        ),
+        DateCard(
+            title: "The Rainy Drive",
+            description: "Wait for rain, drive somewhere with a view, and watch the storm from the warm car with music on.",
+            emoji: "🌧️",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .cosy,
+            whyItWorks: "A windscreen full of rain and the right song is a cinema you built yourselves.",
+            tips: [
+                "Park facing something — water, lights, hills.",
+                "Make a slow playlist first.",
+                "Flask of something hot. Stay till the song ends."
+            ]
+        ),
+        DateCard(
+            title: "Themed Movie Night",
+            description: "Pick a country or a decade, then match the film, the food, and the drinks to it.",
+            emoji: "🍿",
+            difficulty: .quick,
+            estimatedCost: .low,
+            category: .cosy,
+            whyItWorks: "A theme turns a night on the sofa into a night somewhere else entirely.",
+            tips: [
+                "Let one of you pick the theme in secret.",
+                "Food and drink must match the film.",
+                "Dress the part if you're brave."
+            ]
+        ),
+        DateCard(
+            title: "Sunrise Yoga Together",
+            description: "Roll out two mats at first light and move through a gentle beginner flow side by side.",
+            emoji: "🧘",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .intimate,
+            whyItWorks: "Breathing and moving in time, before the day starts, sets you both to the same rhythm.",
+            tips: [
+                "Follow one short beginner video. No pressure to be good.",
+                "Mats side by side, not facing.",
+                "End lying still for two minutes. Together."
+            ]
+        ),
+        DateCard(
+            title: "Learn a Dance Routine",
+            description: "Pick a 30-second dance off the internet and learn it together, badly, until you nail it.",
+            emoji: "🕺",
+            difficulty: .quick,
+            estimatedCost: .free,
+            category: .creative,
+            whyItWorks: "Failing the same eight-count over and over is teamwork disguised as embarrassment.",
+            tips: [
+                "Pick something with a clear, short routine.",
+                "Learn facing a mirror, side by side.",
+                "Film the final take. Keep it. Never delete."
+            ]
         )
     ]
 
