@@ -47,4 +47,11 @@ struct Memory: Identifiable, Codable, Equatable {
     // showing the stale cached image. Defaults to 1 so existing/legacy entries
     // (and remote docs predating the field) decode cleanly.
     var photoVersion: Int = 1
+
+    // Where the date happened — captured from the device location at completion,
+    // but ONLY when a real GPS fix exists (LocationManager.hasFix); nil otherwise.
+    // Powers the Memory Map. Optional so memories predating the field decode
+    // cleanly, and so a memory without a fix simply has no pin.
+    var latitude: Double? = nil
+    var longitude: Double? = nil
 }

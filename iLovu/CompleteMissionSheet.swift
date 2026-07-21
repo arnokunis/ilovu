@@ -42,6 +42,13 @@ struct CompleteMissionSheet: View {
     // Brief loading state while we decode + compress the picked photo.
     @State private var isProcessingPhoto: Bool = false
 
+    // Own LocationManager so we can stamp WHERE the date happened onto the memory
+    // (for the Memory Map). Its init auto-starts a fix ONLY if location permission
+    // was already granted (e.g. via Near You) — so no new prompt appears here. By
+    // the time the user picks a photo + writes a note, a fix has usually arrived;
+    // we store coordinates only when `hasFix` is true (never the London fallback).
+    @State private var locationManager = LocationManager()
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -294,6 +301,9 @@ struct CompleteMissionSheet: View {
     private func completeWithMemory() {
         guard let photoData else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Stamp the location only if we have a genuine fix — otherwise leave it
+        // nil (no pin) rather than storing the London fallback.
+        let coord = locationManager.hasFix ? locationManager.coordinate : nil
         let memory = Memory(
             id: UUID(),
             dateCompleted: Date(),
@@ -301,7 +311,9 @@ struct CompleteMissionSheet: View {
             cardEmoji: mission.card.emoji,
             photoData: photoData,
             rating: rating > 0 ? rating : nil,
-            note: trimmedNote.isEmpty ? nil : trimmedNote
+            note: trimmedNote.isEmpty ? nil : trimmedNote,
+            latitude: coord?.latitude,
+            longitude: coord?.longitude
         )
         onFinish(memory)
         dismiss()

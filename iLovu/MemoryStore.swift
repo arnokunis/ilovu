@@ -53,7 +53,8 @@ final class MemoryStore {
             cardTitle: m.cardTitle, cardEmoji: m.cardEmoji,
             photoData: nil, rating: m.rating, note: m.note,
             storagePath: storagePath, createdBy: m.createdBy,
-            photoVersion: m.photoVersion
+            photoVersion: m.photoVersion,
+            latitude: m.latitude, longitude: m.longitude
         )
         save()
     }
@@ -70,7 +71,8 @@ final class MemoryStore {
             cardTitle: m.cardTitle, cardEmoji: m.cardEmoji,
             photoData: data, rating: m.rating, note: m.note,
             storagePath: m.storagePath, createdBy: m.createdBy,
-            photoVersion: m.photoVersion + 1
+            photoVersion: m.photoVersion + 1,
+            latitude: m.latitude, longitude: m.longitude
         )
         memories[index] = updated
         save()
@@ -99,7 +101,9 @@ final class MemoryStore {
                 rating: memory.rating, note: memory.note,
                 storagePath: memory.storagePath ?? existing.storagePath,
                 createdBy: memory.createdBy ?? existing.createdBy,
-                photoVersion: max(memory.photoVersion, existing.photoVersion)
+                photoVersion: max(memory.photoVersion, existing.photoVersion),
+                latitude: memory.latitude ?? existing.latitude,
+                longitude: memory.longitude ?? existing.longitude
             )
         } else {
             memories.append(memory)

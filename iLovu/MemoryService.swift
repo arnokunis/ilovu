@@ -40,6 +40,11 @@ struct RemoteMemory: Codable, Identifiable {
     /// partner's image cache busts. Optional — docs predating the field decode as
     /// nil and are treated as version 1.
     var photoVersion: Int?
+
+    /// Where the date happened (for the Memory Map). Optional — nil when no GPS fix
+    /// existed at completion, or for docs predating the field.
+    var latitude: Double?
+    var longitude: Double?
 }
 
 @MainActor
@@ -93,6 +98,10 @@ final class MemoryService {
             data["rating"] = memory.rating ?? NSNull()
             let trimmedNote = memory.note?.trimmingCharacters(in: .whitespacesAndNewlines)
             data["note"] = (trimmedNote?.isEmpty == false) ? trimmedNote! : NSNull()
+            // Location: explicit null when unset so a coordinate-less memory is
+            // stored cleanly (and the partner reads nil, not a stale value).
+            data["latitude"]  = memory.latitude ?? NSNull()
+            data["longitude"] = memory.longitude ?? NSNull()
 
             try await db.collection("couples").document(coupleId)
                 .collection("memories").document(memoryId)

@@ -30,6 +30,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// dependent features.
     var hasPermission: Bool = false
 
+    /// True once a REAL GPS fix has arrived (i.e. `coordinate` is no longer the
+    /// London fallback). Callers that need genuine coordinates — like stamping a
+    /// Memory's location — must gate on this, never store `coordinate` blindly.
+    var hasFix: Bool = false
+
     private let manager = CLLocationManager()
 
     override init() {
@@ -79,6 +84,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last else { return }
         coordinate = latest.coordinate
+        hasFix = true
         // Stop updating after the first fix — we only need a rough
         // location for biasing Places searches, not live tracking.
         manager.stopUpdatingLocation()

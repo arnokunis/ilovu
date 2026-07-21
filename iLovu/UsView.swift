@@ -66,6 +66,10 @@ struct UsView: View {
     // Presents the shared date-wishlist sheet.
     @State private var showBucketList = false
 
+    // Presents the Memory Map and the Year-in-Review recap.
+    @State private var showMap = false
+    @State private var showYearInReview = false
+
     // Presents the edit-name / edit-photo sheet.
     @State private var showEditProfile = false
 
@@ -107,6 +111,12 @@ struct UsView: View {
         }
         .sheet(isPresented: $showBucketList) {
             BucketListView()
+        }
+        .sheet(isPresented: $showMap) {
+            MemoryMapView()
+        }
+        .sheet(isPresented: $showYearInReview) {
+            YearInReviewView()
         }
         // Account deletion confirmation (App Store 5.1.1(v)). Honest, couple-aware
         // copy; the destructive action actually deletes the Firebase account.
@@ -423,6 +433,8 @@ struct UsView: View {
             if memoryStore.memories.isEmpty {
                 emptyState
             } else {
+                mapRow
+                yearInReviewRow
                 ForEach(memoryStore.sortedByDate) { memory in
                     memoryCard(memory)
                 }
@@ -466,6 +478,44 @@ struct UsView: View {
         let active = bucketListStore.activeCount
         return active == 0 ? "All done — add more ideas ✨"
                            : "\(active) idea\(active == 1 ? "" : "s") to try"
+    }
+
+    // Memory Map — everywhere your dates happened, plotted.
+    private var mapRow: some View {
+        hubRow(emoji: "🗺️", title: "Our Date Map",
+               subtitle: "See everywhere you've been together") { showMap = true }
+    }
+
+    // Year-in-Review — a shareable recap card.
+    private var yearInReviewRow: some View {
+        hubRow(emoji: "✨", title: "Year in Review",
+               subtitle: "A shareable recap of your year") { showYearInReview = true }
+    }
+
+    // Shared styling for the tappable hub rows (map + year-in-review).
+    private func hubRow(emoji: String, title: String, subtitle: String,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(emoji).font(.system(size: 24))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.deepRose)
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.gray.opacity(0.4))
+            }
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Profile (name + photo)
