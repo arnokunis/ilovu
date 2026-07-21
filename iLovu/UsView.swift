@@ -417,13 +417,7 @@ struct UsView: View {
 
             subscriptionRow
 
-            // Orphaned → pass nil so answering falls back to local journaling (never
-            // the perpetual "waiting for your partner" lock), with a warm solo panel.
-            DailyQuestionCard(
-                coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
-                isOrphaned: coupleService.isOrphaned
-            )
-
+            // Daily Question moved to the Home dashboard (the daily-habit surface).
             bucketListRow
 
             if memoryStore.memories.isEmpty {

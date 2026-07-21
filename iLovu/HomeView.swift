@@ -114,6 +114,16 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     greetingSection
+
+                    // The daily habit loop lives on the dashboard now (moved from
+                    // the Us tab) — prime real estate, seen every launch. Orphaned →
+                    // pass nil so answering falls back to local journaling instead of
+                    // a perpetual "waiting for your partner" lock.
+                    DailyQuestionCard(
+                        coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
+                        isOrphaned: coupleService.isOrphaned
+                    )
+
                     sparkScoreCard
                     gentleReminder
                     thisWeeksSuggestionCard
