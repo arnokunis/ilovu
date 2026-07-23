@@ -1,0 +1,9 @@
+# Netlify continuous deployment config.
+# Static site — no build step; publish the pre-built site/ folder as-is.
+# The _redirects and _headers files inside site/ keep handling the AASA
+# rewrite, /invite/* routing, clean URLs, and JSON content-types.
+#
+# With Git-based deploy (unlike drag-and-drop), hidden folders ARE included,
+# so site/.well-known/apple-app-site-association now deploys natively too.
+[build]
+  publish = "site"
