@@ -1,0 +1,84 @@
+/* Shared styles for iLovu content pages (pillar + date-idea clusters).
+   Homepage + legal pages keep their own inline styles; this powers the
+   article/listicle pages so new ones are trivial to add. */
+
+:root {
+  --coral: #FF6B6B; --coral-warm: #FF8E53; --blush: #FFF5F3; --rose: #C44569;
+  --match-green: #34C759; --ink: #2B1B1E; --ink-soft: #6B5458;
+  --gradient: linear-gradient(120deg, #FF6B6B 0%, #FF8E53 100%);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  background: var(--blush); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+a { color: var(--rose); }
+.wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+
+nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 26px 24px; max-width: 1080px; margin: 0 auto;
+}
+.logo { font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; letter-spacing: -0.02em; color: var(--rose); text-decoration: none; }
+.logo span { color: var(--coral); }
+.nav-cta { font-weight: 600; font-size: 14px; color: #fff; background: var(--gradient); padding: 9px 18px; border-radius: 100px; text-decoration: none; }
+
+.article { padding: 24px 0 40px; }
+.eyebrow { font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--coral); margin-bottom: 12px; }
+h1 {
+  font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(32px, 6vw, 52px);
+  line-height: 1.08; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 20px;
+}
+h1 em, .feat-title em { font-style: italic; background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.lead { font-size: 19px; color: var(--ink-soft); margin-bottom: 28px; }
+.article p { font-size: 17px; color: var(--ink-soft); margin-bottom: 20px; }
+.article h2 {
+  font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 4vw, 32px);
+  color: var(--ink); margin: 44px 0 14px; letter-spacing: -0.01em;
+}
+.article h2 .num { color: var(--coral-warm); font-size: 0.7em; margin-right: 8px; }
+
+/* Idea list — each date idea is a card */
+.idea { background: #fff; border-radius: 16px; padding: 18px 20px; margin-bottom: 14px; box-shadow: 0 8px 24px -18px rgba(196,69,105,0.45); }
+.idea h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--ink); margin-bottom: 4px; }
+.idea h3 .em { margin-right: 8px; }
+.idea p { font-size: 16px; margin-bottom: 0; }
+.idea .tags { margin-top: 10px; display: flex; gap: 7px; flex-wrap: wrap; }
+.idea .tag { font-size: 11px; font-weight: 600; color: #fff; padding: 4px 11px; border-radius: 100px; background: var(--coral); }
+.idea .tag.orange { background: var(--coral-warm); }
+.idea .tag.rose { background: var(--rose); }
+
+/* Cluster grid on the pillar page */
+.cluster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 8px 0 20px; }
+.cluster-link { display: block; background: #fff; border-radius: 16px; padding: 18px 20px; text-decoration: none; box-shadow: 0 8px 24px -18px rgba(196,69,105,0.45); transition: transform .15s ease; }
+.cluster-link:hover { transform: translateY(-2px); }
+.cluster-link .ci { font-size: 26px; }
+.cluster-link strong { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--ink); margin: 8px 0 2px; }
+.cluster-link span { font-size: 13px; color: var(--ink-soft); }
+
+.cta-card {
+  background: var(--gradient); color: #fff; border-radius: 24px;
+  padding: 34px 28px; text-align: center; margin: 48px 0;
+  box-shadow: 0 30px 60px -24px rgba(196,69,105,0.5);
+}
+.cta-card h2 { font-family: 'Fraunces', serif; font-weight: 600; color: #fff; margin: 0 0 10px; font-size: clamp(22px, 4vw, 30px); }
+.cta-card p { color: rgba(255,255,255,0.92); margin-bottom: 22px; font-size: 16px; }
+.appstore-btn {
+  display: inline-flex; align-items: center; gap: 11px; background: var(--ink); color: #fff;
+  text-decoration: none; padding: 12px 24px; border-radius: 14px;
+  box-shadow: 0 16px 34px -14px rgba(43,27,30,0.5);
+}
+.appstore-btn .small { font-size: 11px; font-weight: 500; opacity: 0.85; display: block; line-height: 1.1; text-align: left; }
+.appstore-btn .big { font-size: 18px; font-weight: 700; font-family: 'Fraunces', serif; display: block; line-height: 1.1; text-align: left; }
+
+.faq h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--ink); margin: 26px 0 6px; }
+.faq p { margin-bottom: 8px; }
+
+.related { margin: 40px 0; }
+.related a { display: inline-block; margin: 0 14px 8px 0; font-weight: 600; }
+
+footer { text-align: center; padding: 40px 0 50px; color: var(--ink-soft); font-size: 14px; }
+footer a { color: var(--rose); text-decoration: none; }
+.footer-tag { font-family: 'Fraunces', serif; font-style: italic; font-size: 16px; color: var(--rose); margin-bottom: 10px; }
