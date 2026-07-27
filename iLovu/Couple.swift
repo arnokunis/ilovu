@@ -94,6 +94,16 @@ struct Couple: Codable, Identifiable {
     /// straddling a bucket boundary don't ping-pong it). nil until first claimed.
     var eventLocationUpdatedAt: Timestamp? = nil
 
+    /// True when the bucket was set MANUALLY (a "Search here" tap or a searched
+    /// town) rather than by auto-GPS. While true, auto re-anchoring is suppressed
+    /// so a deliberately-planned location doesn't get yanked back by travel — the
+    /// user clears it with "Use my location". nil/false = auto-follow GPS.
+    var eventLocationManual: Bool? = nil
+
+    /// Human-readable label for a manual pin (e.g. "Palanga"), shown to BOTH
+    /// partners so a planned trip location is legible. nil in auto mode.
+    var eventLocationLabel: String? = nil
+
     /// When either partner last fired the manual "come swipe with me" nudge.
     /// Written ONLY by the `nudgePartner` Cloud Function (server timestamp); the
     /// client just reads it to reflect the shared per-couple cooldown on the Nudge

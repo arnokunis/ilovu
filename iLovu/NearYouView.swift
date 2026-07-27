@@ -11,6 +11,7 @@
 // itself doesn't change.
 
 import SwiftUI
+import CoreLocation
 
 struct NearYouView: View {
 
@@ -56,10 +57,20 @@ struct NearYouView: View {
 
     @State private var selectedCategory: LocalEvent.Category? = nil
 
+    // Manual location search ("Search here" / plan a trip by typing a city).
+    @State private var townQuery = ""
+    @State private var isGeocoding = false
+    @State private var searchError: String? = nil
+
     /// A travel move only overrides an OLDER stored bucket than this, so two
     /// co-located partners straddling a ~1km bucket boundary don't ping-pong the
     /// shared deck back and forth on every open.
     private let reanchorDebounce: TimeInterval = 12 * 60 * 60
+
+    /// A move farther than this from the stored bucket is real travel, not
+    /// boundary jitter, so it re-anchors the shared deck IMMEDIATELY (ignoring the
+    /// 12h debounce) — the fix for "drove 60km, still seeing the old town".
+    private let travelReanchorKm: Double = 20
 
     // Same threshold as SwipeView — keeps the muscle memory identical.
     private let swipeThreshold: CGFloat = 120
@@ -78,6 +89,12 @@ struct NearYouView: View {
             VStack(spacing: 16) {
                 header
                     .padding(.top, 16)
+
+                // Trip planning + "search here" — a paired-only surface (a solo
+                // deck already follows live GPS, so there's nothing to override).
+                if coupleId != nil {
+                    locationBar
+                }
 
                 filterPills
 
@@ -112,7 +129,69 @@ struct NearYouView: View {
         // link completes mid-session, re-fetch — but only while the deck is still
         // untouched, so an active swipe session is never reset.
         .onChange(of: locationManager.hasPermission) { _, _ in reloadIfUntouched() }
+        // When the first real GPS fix lands after launch, re-fetch so we anchor to
+        // the true location (not the London fallback) instead of waiting a session.
+        .onChange(of: locationManager.hasFix) { _, _ in reloadIfUntouched() }
         .onChange(of: coupleId) { _, _ in reloadIfUntouched() }
+    }
+
+    // MARK: - Location search bar
+
+    /// Trip-planning row: a city search that pins BOTH partners' shared deck to a
+    /// destination, plus a chip that reflects/clears the current pin.
+    @ViewBuilder
+    private var locationBar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.gray)
+                TextField("Plan a trip — search a city", text: $townQuery)
+                    .font(.system(size: 15))
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .onSubmit(searchTown)
+                if isGeocoding {
+                    ProgressView().scaleEffect(0.7)
+                } else if !townQuery.isEmpty {
+                    Button(action: searchTown) {
+                        Text("Go")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.deepRose)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .background(Color.white, in: Capsule())
+
+            HStack(spacing: 10) {
+                if coupleService.eventLocationManual,
+                   let label = coupleService.eventLocationLabel {
+                    Label(label, systemImage: "mappin.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.deepRose)
+                    Button(action: searchHere) {
+                        Label("Use my location", systemImage: "location.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.blue)
+                    }
+                } else {
+                    Button(action: searchHere) {
+                        Label("Search here", systemImage: "location.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.gray)
+                    }
+                }
+                if let searchError {
+                    Text(searchError)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
     }
 
     // MARK: - Header
@@ -424,21 +503,95 @@ struct NearYouView: View {
 
         let stored = coupleService.eventLocationBucket
 
-        if locationManager.hasPermission {
-            if stored == nil {
+        // A deliberately-set location (a "Search here" tap or a planned town) stays
+        // put until the user clears it — auto-GPS never yanks it away.
+        if coupleService.eventLocationManual, let stored { return stored }
+
+        // Only ever persist a REAL fix, so the couple never anchors to the London
+        // fallback coordinate.
+        if locationManager.hasPermission, locationManager.hasFix {
+            guard let stored else {
                 await coupleService.setEventLocation(bucket: deviceBucket)   // bootstrap claim
                 return deviceBucket
             }
-            if deviceBucket != stored,
-               let updated = coupleService.eventLocationUpdatedAt,
-               Date().timeIntervalSince(updated) > reanchorDebounce {
-                await coupleService.setEventLocation(bucket: deviceBucket)   // travel re-anchor
-                return deviceBucket
+            if deviceBucket != stored {
+                let movedFar = LocationBucket.center(of: stored)
+                    .map { kmBetween(coord, lat: $0.lat, lng: $0.lng) > travelReanchorKm } ?? true
+                let debounced = coupleService.eventLocationUpdatedAt
+                    .map { Date().timeIntervalSince($0) > reanchorDebounce } ?? true
+                // Real travel re-anchors NOW; a small boundary hop waits out the
+                // 12h debounce so two co-located partners don't ping-pong it.
+                if movedFar || debounced {
+                    await coupleService.setEventLocation(bucket: deviceBucket)   // re-anchor
+                    return deviceBucket
+                }
             }
         }
         // No real fix yet, or nothing to change: prefer the shared bucket, else
         // the device (possibly London) bucket just for this load.
         return stored ?? deviceBucket
+    }
+
+    /// Kilometres between a live coordinate and a stored bucket's centre.
+    private func kmBetween(_ coord: CLLocationCoordinate2D, lat: Double, lng: Double) -> Double {
+        CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+            .distance(from: CLLocation(latitude: lat, longitude: lng)) / 1000
+    }
+
+    // MARK: - Location search actions
+
+    /// Force the shared anchor to the current GPS fix now, returning to auto-follow
+    /// (clears any manual pin). Powers both "Search here" and "Use my location".
+    private func searchHere() {
+        searchError = nil
+        guard locationManager.hasFix else {
+            locationManager.requestPermissionIfNeeded()
+            return
+        }
+        let coord = locationManager.coordinate
+        let bucket = LocationBucket.of(latitude: coord.latitude, longitude: coord.longitude)
+        Task {
+            await coupleService.setEventLocation(bucket: bucket, manual: false)
+            await reloadDeckForced()
+        }
+    }
+
+    /// Geocode a typed city (free, on-device via CLGeocoder) and pin the couple's
+    /// shared deck there so BOTH partners plan — and match — for a trip.
+    private func searchTown() {
+        let query = townQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        searchError = nil
+        isGeocoding = true
+        Task {
+            do {
+                let marks = try await CLGeocoder().geocodeAddressString(query)
+                guard let place = marks.first, let loc = place.location else {
+                    await MainActor.run { searchError = "Couldn't find that place"; isGeocoding = false }
+                    return
+                }
+                let bucket = LocationBucket.of(latitude: loc.coordinate.latitude,
+                                               longitude: loc.coordinate.longitude)
+                let label = place.locality ?? place.name ?? query
+                await coupleService.setEventLocation(bucket: bucket, manual: true, label: label)
+                await MainActor.run { townQuery = ""; isGeocoding = false }
+                await reloadDeckForced()
+            } catch {
+                await MainActor.run { searchError = "Couldn't find that place"; isGeocoding = false }
+            }
+        }
+    }
+
+    /// A location change swaps the whole deck, so reset the swipe session and
+    /// reload unconditionally (unlike reloadIfUntouched, which preserves an active
+    /// session — here the user explicitly asked for a new place).
+    @MainActor
+    private func reloadDeckForced() {
+        swipedCount = 0
+        deck = []
+        selectedCategory = nil
+        isLoading = true
+        Task { await loadDeck() }
     }
 
     // MARK: - Empty State

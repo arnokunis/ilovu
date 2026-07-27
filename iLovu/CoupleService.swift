@@ -92,6 +92,8 @@ final class CoupleService {
     /// When the shared event-location bucket was last set, or nil if never. Used
     /// by NearYouView's re-anchor debounce (only override an older stored bucket).
     var eventLocationUpdatedAt: Date? { couple?.eventLocationUpdatedAt?.dateValue() }
+    var eventLocationManual: Bool { couple?.eventLocationManual ?? false }
+    var eventLocationLabel: String? { couple?.eventLocationLabel }
 
     /// The signed-in user's birthday, or nil if unset / unpaired.
     var myBirthday: Date? {
@@ -640,13 +642,19 @@ final class CoupleService {
     /// re-anchor on travel — this just writes it. Same dot-path-update + local
     /// mirror shape as the setters above; rides observeCouple to the partner live,
     /// and the existing couples update rule already permits it (members frozen).
-    func setEventLocation(bucket: String) async {
+    func setEventLocation(bucket: String, manual: Bool = false, label: String? = nil) async {
+        // In auto mode the label is cleared (FieldValue.delete removes the field).
+        let labelValue: Any = label ?? FieldValue.delete()
         await updateCoupleField([
             "eventLocationBucket": bucket,
-            "eventLocationUpdatedAt": FieldValue.serverTimestamp()
+            "eventLocationUpdatedAt": FieldValue.serverTimestamp(),
+            "eventLocationManual": manual,
+            "eventLocationLabel": labelValue
         ]) {
             $0.eventLocationBucket = bucket
             $0.eventLocationUpdatedAt = Timestamp(date: Date())
+            $0.eventLocationManual = manual
+            $0.eventLocationLabel = label
         }
     }
 
