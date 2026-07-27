@@ -12,13 +12,16 @@
 // the PAYER only) mirrors the flag onto the shared couple doc so the partner
 // reads premium straight off the couple doc — no purchase of their own.
 //
-// PRE-LAUNCH HARDENING: revocation is client-mirror only for v1 — if the payer's
-// entitlement lapses while they never reopen the app, the couple-doc flag stays
-// set (a couple keeps premium slightly too long; it never wrongly drops). The
-// clean end-state is a RevenueCat webhook -> Cloud Function writing the couple
-// doc authoritatively (grant AND revoke), which also closes the "a member could
-// set isPremium=true without paying" hole. Same trajectory as the invite-
-// redemption / venue-cache hardening notes.
+// REVOCATION: the client mirror above is now BACKED by an authoritative server
+// path — the `revenueCatWebhook` Cloud Function writes the couple doc's isPremium
+// on RevenueCat's real grant/revoke events, so a lapsed sub no longer lingers as
+// premium when the payer never reopens the app. For that to resolve the couple,
+// RevenueCat's app_user_id must equal the Firebase uid — wired via
+// syncRevenueCatIdentity (Purchases.logIn/logOut) in iLovuApp. The client mirror +
+// the OPEN isPremium rule are kept deliberately (belt) so a webhook misconfig can't
+// regress purchase-unlock. REMAINING follow-up: lock isPremium to CF-only in
+// firestore.rules once the webhook is verified live (also closes the "a member
+// forges isPremium=true" hole). Same trajectory as the invite-redemption notes.
 
 import Foundation
 import RevenueCat

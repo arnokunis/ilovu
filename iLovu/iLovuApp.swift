@@ -157,6 +157,22 @@ struct iLovuApp: App {
         return "\(days)|\(mission)|\(memory)|\(partner)"
     }
 
+    /// Tie RevenueCat's identity to the Firebase uid, so the subscription webhook
+    /// (revenueCatWebhook Cloud Function) receives our uid as `app_user_id` and can
+    /// resolve the couple to grant/revoke premium authoritatively — even when the
+    /// payer never reopens the app. logIn aliases any anonymous pre-sign-in purchase
+    /// onto the uid; logOut resets to anonymous on sign-out.
+    private func syncRevenueCatIdentity(_ status: AuthState.Status) {
+        switch status {
+        case .signedIn(let uid):
+            Task { _ = try? await Purchases.shared.logIn(uid) }
+        case .signedOut:
+            Task { _ = try? await Purchases.shared.logOut() }
+        case .loading:
+            break
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -202,6 +218,9 @@ struct iLovuApp: App {
                         Task { await coupleService.syncPremiumEntitlement(active) }
                     }
                     subscriptionService.start()
+                    // Set the RevenueCat identity for whoever's already signed in at
+                    // launch; the .onChange below keeps it in step on later sign-in/out.
+                    syncRevenueCatIdentity(authState.status)
                     Task { await subscriptionService.loadOfferings() }
 
                     // Stage 5 push: AppDelegate publishes each FCM token onto
@@ -242,6 +261,10 @@ struct iLovuApp: App {
                         guard let coupleId = coupleService.coupleId else { return }
                         Task { await bucketListService.deleteItem(coupleId: coupleId, itemId: id.uuidString) }
                     }
+                }
+                // Keep RevenueCat's app_user_id == Firebase uid across sign-in/out.
+                .onChange(of: authState.status) { _, status in
+                    syncRevenueCatIdentity(status)
                 }
         }
     }

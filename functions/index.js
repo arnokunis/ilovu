@@ -21,10 +21,16 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+
+// Shared secret guarding the RevenueCat webhook. Set the SAME random string as the
+// webhook's Authorization header in the RevenueCat dashboard and here via:
+//   firebase functions:secrets:set REVENUECAT_WEBHOOK_SECRET
+const REVENUECAT_WEBHOOK_SECRET = defineSecret("REVENUECAT_WEBHOOK_SECRET");
 
 admin.initializeApp();
 
@@ -358,6 +364,127 @@ async function purgeCoupleStorage(coupleId) {
 //
 // BRAND (hard rule): copy is warm + partner-framed, NEVER time- or guilt-based.
 // No "you haven't…", no "it's been N days". Just "you two liked the same thing".
+// ---------------------------------------------------------------------------
+// revenueCatWebhook — authoritative subscription grant/revoke.
+//
+// RevenueCat POSTs a subscription lifecycle event here (server-to-server), so the
+// couple's shared `isPremium` flag stays correct even when the payer never reopens
+// the app — closing the client-mirror revocation gap (a lapsed sub used to linger
+// as premium until the payer next launched). Resolves the couple by `app_user_id`,
+// which equals the Firebase uid (see syncRevenueCatIdentity in iLovuApp).
+//
+// GRANT on purchase/renewal/uncancellation; REVOKE on expiration/pause. CANCELLATION
+// (auto-renew off but still entitled until period end) and BILLING_ISSUE (grace) are
+// deliberately NO-OPs — the sub is still active. Revoke only fires for the recorded
+// payer, so a stray event for the non-paying partner can't drop an active couple.
+//
+// SECURITY: guarded by a shared secret in the Authorization header (set the SAME
+// value in the RC dashboard webhook + as REVENUECAT_WEBHOOK_SECRET). Always 200s on
+// a handled event (even a no-op) so RevenueCat doesn't retry; only bad auth 401s.
+//
+// NOTE (deliberate, incremental): the client mirror (CoupleService.syncPremiumEntitlement)
+// and the OPEN isPremium rule are intentionally LEFT IN PLACE for now, so a webhook
+// misconfig can never regress purchase-unlock. Both writers agree on grant; the
+// webhook's unique job is the revoke. Locking `isPremium` to CF-only in firestore.rules
+// (which also closes the "a member forges isPremium=true" hole) is the follow-up once
+// this is verified live.
+const RC_GRANT_TYPES = new Set([
+  "INITIAL_PURCHASE",
+  "RENEWAL",
+  "PRODUCT_CHANGE",
+  "UNCANCELLATION",
+  "NON_RENEWING_PURCHASE",
+]);
+const RC_REVOKE_TYPES = new Set([
+  "EXPIRATION",
+  "SUBSCRIPTION_PAUSED",
+]);
+
+exports.revenueCatWebhook = onRequest(
+  { secrets: [REVENUECAT_WEBHOOK_SECRET] },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    const expected = REVENUECAT_WEBHOOK_SECRET.value();
+    if (!expected || req.get("authorization") !== expected) {
+      console.warn("revenueCatWebhook: bad or missing authorization");
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
+    const event = (req.body && req.body.event) || {};
+    const type = event.type;
+    const grant = RC_GRANT_TYPES.has(type);
+    const revoke = RC_REVOKE_TYPES.has(type);
+    if (!grant && !revoke) {
+      // TEST / CANCELLATION / BILLING_ISSUE / TRANSFER / etc. — nothing to write.
+      console.log(`revenueCatWebhook: ignoring type ${type}`);
+      res.status(200).send("ignored");
+      return;
+    }
+
+    // The payer's uid. After logIn, app_user_id IS the Firebase uid; also scan
+    // aliases / original id in case RevenueCat sends an alternate id on the event.
+    const candidates = [event.app_user_id, event.original_app_user_id]
+      .concat(Array.isArray(event.aliases) ? event.aliases : [])
+      .filter((v) => typeof v === "string" && v.length > 0);
+    if (candidates.length === 0) {
+      console.warn("revenueCatWebhook: event has no app_user_id");
+      res.status(200).send("no user");
+      return;
+    }
+
+    // Find the couple this user belongs to (members array-contains the uid).
+    const db = admin.firestore();
+    let coupleSnap = null;
+    let uid = null;
+    for (const candidate of candidates) {
+      const q = await db.collection("couples")
+        .where("members", "array-contains", candidate)
+        .limit(1).get();
+      if (!q.empty) { coupleSnap = q.docs[0]; uid = candidate; break; }
+    }
+    if (!coupleSnap) {
+      // Bought before pairing (no couple yet). The client mirror will set the flag
+      // when they pair; nothing authoritative to do here. 200 so RC doesn't retry.
+      console.log(`revenueCatWebhook: no couple for ${candidates.join(",")} (type ${type})`);
+      res.status(200).send("no couple");
+      return;
+    }
+
+    const couple = coupleSnap.data() || {};
+    const coupleRef = coupleSnap.ref;
+
+    if (grant) {
+      await coupleRef.update({
+        isPremium: true,
+        subscriptionOwner: uid,
+        subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`revenueCatWebhook: GRANT ${coupleSnap.id} (owner ${uid}, type ${type})`);
+      res.status(200).send("granted");
+      return;
+    }
+
+    // Revoke — only the recorded payer can drop the couple's premium, so an
+    // expiration event for the non-paying partner never revokes an active sub.
+    const owner = couple.subscriptionOwner;
+    if (owner && owner !== uid) {
+      console.log(`revenueCatWebhook: ${coupleSnap.id} expire for non-owner ${uid}, ignoring`);
+      res.status(200).send("not owner");
+      return;
+    }
+    await coupleRef.update({
+      isPremium: false,
+      subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`revenueCatWebhook: REVOKE ${coupleSnap.id} (was owner ${uid}, type ${type})`);
+    res.status(200).send("revoked");
+  },
+);
+
 exports.onMatchCreated = onDocumentCreated(
   "couples/{coupleId}/matches/{cardId}",
   async (event) => {
