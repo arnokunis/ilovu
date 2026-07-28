@@ -8,9 +8,14 @@
 //  with FirebaseAnalytics' own `Analytics` class.
 //
 //  Canonical funnel (log these names, don't invent variants):
-//    sign_in → onboarding_complete → invite_created → invite_redeemed
-//    → card_liked → match_created → mission_created → memory_completed
-//    → paywall_shown → paywall_dismissed → purchase_success / restore_success
+//    sign_in → onboarding_complete → reached_pairing_screen → invite_created
+//    → invite_redeemed → card_liked → match_created → mission_created
+//    → memory_completed → paywall_shown → paywall_dismissed
+//    → purchase_success / restore_success
+//
+//  reached_pairing_screen: an unpaired user reached the invite/redeem UI
+//  (PairingView). Splits the big "installed but never paired" leak into two
+//  measurable steps — reached pairing vs. created an invite once there.
 //
 //  Growth loop (viral acquisition): memory_shared — logged when the user opens
 //  the share sheet for a Memory's proof-photo card (MemoryDetailView). Measures

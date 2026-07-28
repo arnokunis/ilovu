@@ -35,6 +35,7 @@ struct PairingView: View {
     @State private var errorMessage: String?
     @State private var didCopy = false           // brief "Copied ✓" feedback on the copy button
     @State private var showPushAsk = false       // warm "know when they join" permission ask
+    @State private var didLogReached = false     // one-shot guard for reached_pairing_screen
 
     var body: some View {
         NavigationStack {
@@ -283,12 +284,26 @@ struct PairingView: View {
                 phase = .paired(couple)
             } else {
                 phase = .unpaired
+                logReachedPairingOnce()
             }
         } catch {
             // Couldn't check — let them act anyway; the rules are the real gate.
             phase = .unpaired
+            logReachedPairingOnce()
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Funnel step BETWEEN onboarding_complete and invite_created: an unpaired
+    /// user actually reached the invite/redeem UI. Makes the big "installed but
+    /// never tried to pair" leak measurable — is the drop before they get here
+    /// (never navigate to pairing) or after (here, but create no invite)? Fired
+    /// once per presentation, and only in the .unpaired state (an already-paired
+    /// user re-opening Connect isn't part of the acquisition funnel).
+    private func logReachedPairingOnce() {
+        guard !didLogReached else { return }
+        didLogReached = true
+        AppAnalytics.log("reached_pairing_screen")
     }
 
     private func createInvite() async {
