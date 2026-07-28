@@ -35,6 +35,13 @@ final class MissionStore {
     // so an incoming update never echoes back out as a write.
     var remoteUpsert: ((Mission) -> Void)?
 
+    // Sink for deleting a mission from Firestore (passes the cardId == doc id).
+    // Injected at the app root, same shape as BucketListStore.remoteDelete; nil in
+    // previews / unpaired / offline → a delete is then purely local. Remote-origin
+    // removals (removeFromRemote) DON'T fire this, so an incoming delete never
+    // echoes back out.
+    var remoteDelete: ((String) -> Void)?
+
     init() {
         load()
     }
@@ -58,6 +65,15 @@ final class MissionStore {
         missions[index] = mission
         save()
         remoteUpsert?(mission)
+    }
+
+    /// Removes a mission locally and (when paired) from Firestore, so it drops off
+    /// BOTH partners' dashboards. Keyed on cardId for the remote delete — the doc
+    /// id is the cardId. Unpaired/offline → local-only, same as add/update.
+    func delete(_ mission: Mission) {
+        missions.removeAll { $0.id == mission.id }
+        save()
+        remoteDelete?(mission.cardId)
     }
 
     // MARK: - Remote sync
@@ -86,8 +102,8 @@ final class MissionStore {
         save()
     }
 
-    /// Drops the local mission for `cardId` after a remote deletion. (We don't
-    /// delete missions from the client today, but this keeps the listener honest.)
+    /// Drops the local mission for `cardId` after a remote deletion (the partner
+    /// deleted it — see delete(_:)). Inbound half only; never fires remoteDelete.
     func removeFromRemote(cardId: String) {
         let before = missions.count
         missions.removeAll { $0.cardId == cardId }

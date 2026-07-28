@@ -448,6 +448,15 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Long-press for a quick delete without opening the mission (the full
+        // delete + confirm also lives in MissionDetailView).
+        .contextMenu {
+            Button(role: .destructive) {
+                missionStore.delete(mission)
+            } label: {
+                Label("Delete mission", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Nudge Partner

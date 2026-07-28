@@ -68,6 +68,9 @@ struct MissionDetailView: View {
     // Presents the full venue detail (EventDetailView) as a sheet — Route A.
     @State private var showVenueDetails = false
 
+    // Confirmation before removing the mission from both dashboards.
+    @State private var showDeleteConfirm = false
+
     init(mission: Mission) {
         _mission = State(initialValue: mission)
     }
@@ -83,6 +86,7 @@ struct MissionDetailView: View {
                     checklistCard
                     calendarButton
                     completeButton
+                    deleteButton
                 }
                 .padding(20)
             }
@@ -489,6 +493,37 @@ struct MissionDetailView: View {
         .buttonStyle(.plain)
         .disabled(mission.status == .completed)
         .opacity(mission.status == .completed ? 0.5 : 1)
+    }
+
+    // A quiet, destructive text button — deliberately understated so it never
+    // competes with "Date completed". Removing a planned date drops it off BOTH
+    // partners' dashboards (MissionStore.delete → remoteDelete). Confirmed first.
+    private var deleteButton: some View {
+        Button(role: .destructive) {
+            showDeleteConfirm = true
+        } label: {
+            Text("Delete mission")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.passRed)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(
+            "Delete this mission?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete mission", role: .destructive) { deleteMission() }
+            Button("Keep it", role: .cancel) { }
+        } message: {
+            Text("This removes the planned date for both of you. Your completed memories are never affected.")
+        }
+    }
+
+    private func deleteMission() {
+        missionStore.delete(mission)
+        dismiss()
     }
 
     // Tapping Mark Complete no longer completes immediately — it

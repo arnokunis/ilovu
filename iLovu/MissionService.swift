@@ -105,6 +105,26 @@ final class MissionService {
         }
     }
 
+    // MARK: - Delete
+
+    /// Deletes couples/{coupleId}/missions/{cardId}. The partner's snapshot
+    /// listener delivers this as a `.removed` change → removeFromRemote, so the
+    /// mission drops off both dashboards. Silent on failure (same spirit as save).
+    func deleteMission(coupleId: String, cardId: String) async {
+        guard Auth.auth().currentUser != nil else {
+            log("deleteMission skipped — not signed in")
+            return
+        }
+        let ref = db.collection("couples").document(coupleId)
+            .collection("missions").document(cardId)
+        do {
+            try await ref.delete()
+            log("deleted mission \(cardId)")
+        } catch {
+            log("ERROR deleteMission \(cardId): \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Observe (deliver remote missions to the caller)
 
     /// Attaches a snapshot listener on the couple's missions subcollection. Calls

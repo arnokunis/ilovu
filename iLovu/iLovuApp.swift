@@ -238,6 +238,10 @@ struct iLovuApp: App {
                         guard let coupleId = coupleService.coupleId else { return }
                         Task { await missionService.saveMission(coupleId: coupleId, mission: mission) }
                     }
+                    missionStore.remoteDelete = { [coupleService, missionService] cardId in
+                        guard let coupleId = coupleService.coupleId else { return }
+                        Task { await missionService.deleteMission(coupleId: coupleId, cardId: cardId) }
+                    }
                     // Memory sync sink: upload bytes + metadata, then mark the
                     // local memory synced (records storagePath, drops inline
                     // bytes). No-op when unpaired — memories stay local until

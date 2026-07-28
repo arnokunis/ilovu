@@ -159,10 +159,13 @@ service cloud.firestore {
     // arbitrary fields here. Field-shape validation (and, if ever needed, a
     // server-authored write path) is deferred, consistent with the matches /
     // invite-redemption / venue-cache notes above.
+    // Either member may DELETE a mission (remove a planned date off both
+    // dashboards) — same removable posture as the bucketList; unlike memories,
+    // which are precious and stay delete-locked. Scoped to the couple's members.
     match /couples/{coupleId}/missions/{cardId} {
       allow read:           if isCoupleMember(coupleId);
       allow create, update: if isCoupleMember(coupleId);
-      allow delete:         if false;
+      allow delete:         if isCoupleMember(coupleId);
     }
 
     // ---------- couples/{coupleId}/memories/{memoryId} ----------
