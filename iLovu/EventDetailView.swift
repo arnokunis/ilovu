@@ -439,9 +439,12 @@ extension LocalEvent {
         using service: PlacesService
     ) -> LocalEvent {
 
-        // Up to 4 photo URLs, rebuilt fresh from the cached key-free photoNames
+        // Up to 8 photo URLs, rebuilt fresh from the cached key-free photoNames
         // with the current API key — so a rotated key works without re-caching.
-        let photoURLs: [String] = cached.photoURLStrings(using: service)
+        // Google returns ~10 names per place and we cache them all; showing more
+        // is free of extra place fetches (each rendered photo is one Photo request,
+        // cached after first load — see BundledRemoteImage/ImageCache).
+        let photoURLs: [String] = cached.photoURLStrings(using: service, limit: 8)
 
         // Up to 3 brand-safe review snippets: 4★+ ONLY (we never surface a 1–3★
         // rant in an anti-pressure product), THEN take the top 3. Filtering on the
