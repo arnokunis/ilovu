@@ -121,6 +121,11 @@ struct NearYouView: View {
                     .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Don't let the keyboard shove the layout up when the city field is
+            // focused — with a tall venue card the auto-avoidance pushed the whole
+            // VStack (search box included) off the top. Pin the content; the
+            // keyboard just overlays the card/buttons while you type a city.
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         // Load the deck once on appear (real events via EventCache, or the
         // SampleEvents fallback). .task is cancelled automatically on disappear.
