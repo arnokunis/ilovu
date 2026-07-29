@@ -26,7 +26,8 @@ enum PlaceCuration {
     /// the next Near You open instead of waiting out the 7-day SWR window.
     /// v2 (2026-07-19): added the Hikes & Trails category.
     /// v3 (2026-07-21): per-category search radius (10 km going-out / 30 km outdoors + trails).
-    static let curationVersion = 3
+    /// v4 (2026-07-28): popularity boost — busier (more-reviewed) venues rank higher.
+    static let curationVersion = 4
 
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
@@ -97,9 +98,10 @@ enum PlaceCuration {
         guard let rating = place.rating, rating >= minRating,
               let count = place.userRatingCount, count >= minRatingCount(for: category) else { return nil }
 
-        // Score = type base + a rating boost + a "wine" nudge (catches wine bars
-        // that Google returns under the generic `bar` type).
-        var score = base + ratingBoost(rating)
+        // Score = type base + a rating boost + a POPULARITY boost (review volume,
+        // our proxy for "what everyone's raving about") + a "wine" nudge (catches
+        // wine bars that Google returns under the generic `bar` type).
+        var score = base + ratingBoost(rating) + popularityBoost(count)
         if name.contains("wine") || allTypes.contains(where: { $0.contains("wine") }) { score += 2 }
 
         return score > 0 ? Verdict(category: category, score: score) : nil
@@ -168,6 +170,17 @@ enum PlaceCuration {
         case 4.2...: return 1
         default:     return 0
         }
+    }
+
+    /// A modest, log-scaled boost for how BUSY a venue is (review volume) — the
+    /// closest proxy Google gives us for "what everyone's raving about right now"
+    /// (the buzzy / TikTok-famous feel your users chase). Log-scaled + capped so a
+    /// genuinely popular spot rises, but sheer tourist-trap volume can't bury a
+    /// quiet high-rated gem: e.g. a 4.0/20k place only TIES a 4.8/60 gem on score,
+    /// and rating breaks the tie (see rank()). Roughly: 30→1, 100→2, 1k→3, 10k+→4.
+    private static func popularityBoost(_ count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(4, Int(log10(Double(count))))
     }
 
     /// Quality gates — keep junk and unproven spots out of a romantic deck.
