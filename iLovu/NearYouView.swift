@@ -378,16 +378,24 @@ struct NearYouView: View {
     private var filterPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                filterPill(label: "All",          value: nil)
-                filterPill(label: "Music",        value: .music)
-                filterPill(label: "Food & Drink", value: .foodDrink)
-                filterPill(label: "Arts",         value: .arts)
-                filterPill(label: "Outdoors",       value: .outdoors)
-                filterPill(label: "Hikes & Trails", value: .trails)
-                filterPill(label: "Nightlife",      value: .nightlife)
+                filterPill(label: "All", value: nil)
+                ForEach(availableCategories, id: \.self) { category in
+                    filterPill(label: category.rawValue, value: category)
+                }
             }
             .padding(.horizontal, 24)
         }
+    }
+
+    /// Only the categories actually present in the loaded deck, in a stable display
+    /// order — so a filter that can't have results never shows a dead pill. The
+    /// Places deck never produces `.music` (that's an events-only category, and
+    /// events are dormant), so Music simply doesn't appear; ditto any category with
+    /// nothing nearby in the current bucket.
+    private var availableCategories: [LocalEvent.Category] {
+        let present = Set(deck.map(\.category))
+        let order: [LocalEvent.Category] = [.music, .foodDrink, .arts, .outdoors, .trails, .nightlife]
+        return order.filter(present.contains)
     }
 
     @ViewBuilder
@@ -447,6 +455,11 @@ struct NearYouView: View {
             // always is; a late reload is already guarded by reloadIfUntouched().
             if swipedCount == 0 {
                 deck = events.isEmpty ? SampleEvents.all : events
+                // Drop a filter the new deck can't satisfy (its pill is now hidden),
+                // so the user never lands on an empty, un-deselectable category.
+                if let selectedCategory, !deck.contains(where: { $0.category == selectedCategory }) {
+                    self.selectedCategory = nil
+                }
             }
             isLoading = false
         }
