@@ -61,6 +61,9 @@ struct NearYouView: View {
     @State private var townQuery = ""
     @State private var isGeocoding = false
     @State private var searchError: String? = nil
+    // City search runs in a native alert text field, NOT an inline one — an inline
+    // field's keyboard shoved the whole deck layout up and hid the search box.
+    @State private var showCitySearch = false
 
     /// A travel move only overrides an OLDER stored bucket than this, so two
     /// co-located partners straddling a ~1km bucket boundary don't ping-pong the
@@ -121,11 +124,18 @@ struct NearYouView: View {
                     .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Don't let the keyboard shove the layout up when the city field is
-            // focused — with a tall venue card the auto-avoidance pushed the whole
-            // VStack (search box included) off the top. Pin the content; the
-            // keyboard just overlays the card/buttons while you type a city.
-            .ignoresSafeArea(.keyboard, edges: .bottom)
+        }
+        // City search lives in a native alert so its keyboard can never push the
+        // deck layout around (the inline-field bug). Search geocodes + pins the
+        // shared anchor; Cancel clears the draft.
+        .alert("Search a city", isPresented: $showCitySearch) {
+            TextField("City (e.g. Palanga)", text: $townQuery)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+            Button("Search", action: searchTown)
+            Button("Cancel", role: .cancel) { townQuery = "" }
+        } message: {
+            Text("See date spots there and plan a trip together.")
         }
         // Load the deck once on appear (real events via EventCache, or the
         // SampleEvents fallback). .task is cancelled automatically on disappear.
@@ -147,29 +157,29 @@ struct NearYouView: View {
     @ViewBuilder
     private var locationBar: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.gray)
-                TextField("Plan a trip — search a city", text: $townQuery)
-                    .font(.system(size: 15))
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .onSubmit(searchTown)
-                if isGeocoding {
-                    ProgressView().scaleEffect(0.7)
-                } else if !townQuery.isEmpty {
-                    Button(action: searchTown) {
-                        Text("Go")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.deepRose)
-                    }
+            // Tapping opens a native alert text field (see the .alert in body) —
+            // deliberately NOT an inline TextField, whose keyboard pushed the deck
+            // layout up and hid this row.
+            Button {
+                townQuery = ""
+                searchError = nil
+                showCitySearch = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.gray)
+                    Text("Plan a trip — search a city")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.gray)
+                    Spacer()
+                    if isGeocoding { ProgressView().scaleEffect(0.7) }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+                .background(Color.white, in: Capsule())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(Color.white, in: Capsule())
+            .buttonStyle(.plain)
 
             HStack(spacing: 10) {
                 if coupleService.eventLocationManual,
