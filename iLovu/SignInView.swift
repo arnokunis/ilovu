@@ -257,6 +257,10 @@ private struct EmailAuthSheet: View {
                         .foregroundStyle(Color.louvCoral)
                 }
             }
+            // The sheet lives on an always-light background; force light appearance
+            // so system colours (field placeholders, the segmented toggle labels)
+            // don't render white-on-white in the device's dark mode.
+            .preferredColorScheme(.light)
         }
     }
 }
