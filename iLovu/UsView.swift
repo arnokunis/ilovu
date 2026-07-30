@@ -42,6 +42,10 @@ struct UsView: View {
     // action. Loaded on appear and refreshed on foreground.
     @State private var pushStatus: UNAuthorizationStatus = .notDetermined
 
+    // Brief confirmation shown after tapping the Notifications row, so an
+    // already-authorized re-register (otherwise silent) gives visible feedback.
+    @State private var notifNotice: String?
+
     // The couple-photo picker + its in-flight upload state.
     @State private var couplePhotoItem: PhotosPickerItem?
     @State private var isUploadingCouplePhoto = false
@@ -521,6 +525,14 @@ struct UsView: View {
                     Task { pushStatus = await PushAuthorization.status() }
                 }
             }
+            .alert("Notifications", isPresented: Binding(
+                get: { notifNotice != nil },
+                set: { if !$0 { notifNotice = nil } }
+            )) {
+                Button("OK", role: .cancel) { notifNotice = nil }
+            } message: {
+                Text(notifNotice ?? "")
+            }
     }
 
     private var notificationsSubtitle: String {
@@ -538,15 +550,21 @@ struct UsView: View {
         switch pushStatus {
         case .notDetermined:
             Task {
-                await PushAuthorization.request()
+                let granted = await PushAuthorization.request()
                 pushStatus = await PushAuthorization.status()
+                notifNotice = granted
+                    ? "You're all set — notifications are on 💛"
+                    : "No problem — you can turn them on anytime in Settings."
             }
         case .denied:
+            // The OS won't re-prompt once denied — send them to Settings.
             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
         default:
             // Already authorized — re-register so FCM re-mints and re-persists the
             // token onto the couple doc (the fix for a stuck token-less member).
+            // This is otherwise silent, so confirm it visibly.
             UIApplication.shared.registerForRemoteNotifications()
+            notifNotice = "You're all set — notifications are on 💛"
         }
     }
 

@@ -189,10 +189,11 @@ private struct EmailAuthSheet: View {
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            .modifier(EmailFieldStyle())
                         SecureField("Password", text: $password)
                             .textContentType(isCreating ? .newPassword : .password)
+                            .modifier(EmailFieldStyle())
                     }
-                    .textFieldStyle(.roundedBorder)
 
                     Button {
                         Task {
@@ -257,6 +258,26 @@ private struct EmailAuthSheet: View {
                 }
             }
         }
+    }
+}
+
+// Explicit field styling: white background + dark text, so the fields are
+// readable regardless of light/dark mode. The default label colour goes white
+// (invisible) on our always-light blushCream sheet in dark mode — the same fix
+// PairingView's redeem field uses.
+private struct EmailFieldStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 16))
+            .foregroundStyle(Color.deepRose)
+            .tint(Color.louvCoral)
+            .padding(.vertical, 13)
+            .padding(.horizontal, 14)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
     }
 }
 
