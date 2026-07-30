@@ -65,11 +65,14 @@ struct PairingView: View {
             // Warm, partner-framed permission ask (anti-pressure: "Not now"
             // defers without burning the one-shot iOS prompt — that only fires
             // on "Sounds good", mirroring the first-match ask).
-            .alert("Know the moment they join 💕", isPresented: $showPushAsk) {
+            .alert("Stay in the loop 💕", isPresented: $showPushAsk) {
                 Button("Sounds good") { Task { await PushAuthorization.request() } }
                 Button("Not now", role: .cancel) { }
             } message: {
-                Text("Want a heads-up when your partner connects with you?")
+                // Works for BOTH sides: the creator (heads-up when their partner
+                // joins) and the redeemer (heads-up when they match / their partner
+                // plans a date). Warm + partner-framed, never guilt-based.
+                Text("Want a heads-up when you connect, match, or your partner plans a date?")
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -355,6 +358,14 @@ struct PairingView: View {
         do {
             _ = try await couples.redeem(token: code)
             await loadCouple()   // re-fetch so the screen flips to the paired state
+            // Ask the REDEEMER for notification permission too. Previously only the
+            // invite CREATOR was asked (at invite creation) — so a partner who
+            // joined by redeeming never registered for push, had no FCM token on the
+            // couple doc, and silently received nothing (and nudges to them reported
+            // "didn't send"). Same warm one-shot ask; "Not now" doesn't burn it.
+            if await PushAuthorization.status() == .notDetermined {
+                showPushAsk = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

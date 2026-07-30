@@ -43,7 +43,7 @@ struct SignInView: View {
                             withAnimation(LouvAnimation.spring) { showDemoLogin = true }
                         }
 
-                    Text("Sign in to save your sparks and pick up right where you left off.")
+                    Text("Sign in to save your dates and pick up right where you left off.")
                         .font(.system(size: 16))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.center)
@@ -63,6 +63,14 @@ struct SignInView: View {
                     .clipShape(Capsule())
                     .louvShadow()
                     .disabled(viewModel.isSigningIn)
+
+                    // Reassurance: signing in is free. A real tester (the founder's
+                    // partner) hesitated to tap Sign in with Apple, fearing it would
+                    // charge — the likely cause of the big drop at this screen.
+                    Text("Free to start — signing in never charges you 💛")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.gray)
+                        .multilineTextAlignment(.center)
 
                     // Friendly inline error — only present when something failed.
                     if let message = viewModel.errorMessage {
