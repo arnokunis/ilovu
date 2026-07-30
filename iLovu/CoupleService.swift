@@ -559,6 +559,16 @@ final class CoupleService {
         UserDefaults.standard.removeObject(forKey: pendingDisplayNameKey)
     }
 
+    /// Drops all in-memory state this service holds about the current couple, so a
+    /// DIFFERENT account signing in on the same device never sees the previous
+    /// user's couple (name, photo, days-together). Used by the account-switch reset
+    /// at the app root — the persisted UserDefaults side is wiped there.
+    func clearLocalState() {
+        couple = nil
+        pendingFCMToken = nil
+        UserDefaults.standard.removeObject(forKey: pendingDisplayNameKey)
+    }
+
     // MARK: - Couple photo
     //
     // PRE-LAUNCH HARDENING: this is a client-authed write to Cloud Storage,

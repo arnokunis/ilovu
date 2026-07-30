@@ -173,6 +173,42 @@ struct iLovuApp: App {
         }
     }
 
+    /// Runs on every auth change. Besides the RevenueCat identity, it detects when a
+    /// DIFFERENT account signs in on this device and wipes the previous account's
+    /// device-local data — otherwise account B would inherit account A's name,
+    /// missions, memories and couple (all stored device-local, not per-account). Sign-out
+    /// deliberately does NOT wipe (so signing back in as yourself keeps your data);
+    /// the wipe fires only when the signed-in uid differs from the last one.
+    private func handleAuthChange(_ status: AuthState.Status) {
+        if case .signedIn(let uid) = status {
+            let key = "lastSignedInUid"
+            let last = UserDefaults.standard.string(forKey: key)
+            if let last, last != uid {
+                resetLocalDataForAccountSwitch()
+            }
+            // Set AFTER any wipe (removePersistentDomain would clear this key).
+            UserDefaults.standard.set(uid, forKey: key)
+            // Resolve the NEW account's couple (if any) so a paired B loads its own.
+            Task { _ = try? await coupleService.currentCouple() }
+        }
+        syncRevenueCatIdentity(status)
+    }
+
+    /// Clears everything device-local so a new account starts clean: the in-memory
+    /// @Observable stores (clearing UserDefaults alone won't reset already-loaded
+    /// arrays this session), then the persisted UserDefaults domain (missions,
+    /// memories, wishlist, userName, onboarding flag, paywall + celebrated state).
+    private func resetLocalDataForAccountSwitch() {
+        missionStore.missions = []
+        memoryStore.memories = []
+        bucketListStore.items = []
+        profileStore.setPhoto(nil)
+        coupleService.clearLocalState()
+        if let bundleId = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleId)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -218,9 +254,10 @@ struct iLovuApp: App {
                         Task { await coupleService.syncPremiumEntitlement(active) }
                     }
                     subscriptionService.start()
-                    // Set the RevenueCat identity for whoever's already signed in at
-                    // launch; the .onChange below keeps it in step on later sign-in/out.
-                    syncRevenueCatIdentity(authState.status)
+                    // Handle whoever's already signed in at launch (RevenueCat
+                    // identity + account-switch reset); the .onChange keeps it in
+                    // step on later sign-in/out.
+                    handleAuthChange(authState.status)
                     Task { await subscriptionService.loadOfferings() }
 
                     // Stage 5 push: AppDelegate publishes each FCM token onto
@@ -266,9 +303,10 @@ struct iLovuApp: App {
                         Task { await bucketListService.deleteItem(coupleId: coupleId, itemId: id.uuidString) }
                     }
                 }
-                // Keep RevenueCat's app_user_id == Firebase uid across sign-in/out.
+                // Keep RevenueCat's identity in step AND wipe local data if a
+                // DIFFERENT account signs in on this device (see handleAuthChange).
                 .onChange(of: authState.status) { _, status in
-                    syncRevenueCatIdentity(status)
+                    handleAuthChange(status)
                 }
         }
     }
