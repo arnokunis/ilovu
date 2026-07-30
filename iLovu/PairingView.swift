@@ -71,8 +71,9 @@ struct PairingView: View {
             } message: {
                 // Works for BOTH sides: the creator (heads-up when their partner
                 // joins) and the redeemer (heads-up when they match / their partner
-                // plans a date). Warm + partner-framed, never guilt-based.
-                Text("Want a heads-up when you connect, match, or your partner plans a date?")
+                // plans a date). Names the special-date reminders too, so the value
+                // is concrete. Warm + partner-framed, never guilt-based.
+                Text("Get a heads-up when you match, your partner plans a date, or a special day — your anniversary, engagement, birthdays — is coming up.")
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

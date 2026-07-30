@@ -538,11 +538,11 @@ struct UsView: View {
     private var notificationsSubtitle: String {
         switch pushStatus {
         case .authorized, .provisional, .ephemeral:
-            return "On — nudges when you match or plan a date"
+            return "On — matches, date plans & anniversary reminders"
         case .denied:
             return "Off — tap to turn on in Settings"
         default:
-            return "Turn on nudges for matches & date plans"
+            return "Matches, date plans & anniversary/birthday reminders"
         }
     }
 
