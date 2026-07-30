@@ -105,6 +105,9 @@ struct HomeView: View {
     @State private var showPaywall: Bool = false
     @State private var missionAfterPaywall: Mission?
 
+    // Presents the pairing sheet from the unpaired-only connect card.
+    @State private var showPairing: Bool = false
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -114,6 +117,15 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     greetingSection
+
+                    // The primary action for a couples app, made impossible to miss:
+                    // an unpaired user (never connected — orphaned survivors keep a
+                    // coupleId) sees a prominent invite card right on the dashboard,
+                    // not buried in the Us tab. Disappears the moment they pair.
+                    if coupleService.coupleId == nil {
+                        connectPartnerCard
+                    }
+
                     sparkScoreCard
 
                     // Daily couple rituals, on the dashboard where daily attention
@@ -162,6 +174,11 @@ struct HomeView: View {
         // the sheet dismisses.
         .sheet(item: $missionToOpen) { mission in
             MissionDetailView(mission: mission)
+        }
+        // Pairing sheet opened from the connect card — reuses the same PairingView
+        // as the Us tab, so there's no duplicate pairing logic.
+        .sheet(isPresented: $showPairing) {
+            PairingView()
         }
         // Paywall presented in place of opening the mission when the gate is
         // armed. In SOFT mode (paywallGate.hardMode == false) dismissing the
@@ -227,6 +244,38 @@ struct HomeView: View {
     }
 
     // MARK: - Greeting
+
+    // Prominent, unpaired-only invite CTA on the dashboard — the coral gradient
+    // makes it the clear primary action. Opens the same PairingView the Us tab
+    // uses; vanishes once the couple pairs (coupleId != nil).
+    private var connectPartnerCard: some View {
+        Button {
+            showPairing = true
+        } label: {
+            HStack(spacing: 14) {
+                Text("💕").font(.system(size: 30))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Better with your partner")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("Invite them to swipe date ideas and plan together")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.right.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(LouvGradient.coral, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .louvShadow()
+        }
+        .buttonStyle(.plain)
+    }
 
     private var greetingSection: some View {
         HStack(alignment: .top, spacing: 12) {
