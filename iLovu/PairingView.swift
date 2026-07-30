@@ -69,11 +69,10 @@ struct PairingView: View {
                 Button("Sounds good") { Task { await PushAuthorization.request() } }
                 Button("Not now", role: .cancel) { }
             } message: {
-                // Works for BOTH sides: the creator (heads-up when their partner
-                // joins) and the redeemer (heads-up when they match / their partner
-                // plans a date). Names the special-date reminders too, so the value
-                // is concrete. Warm + partner-framed, never guilt-based.
-                Text("Get a heads-up when you match, your partner plans a date, or a special day — your anniversary, engagement, birthdays — is coming up.")
+                // ONE grant turns on every push type (match / plan / daily-question
+                // nudges + all special-date reminders) — there's no per-type toggle,
+                // so the copy says "all". Warm + partner-framed, never guilt-based.
+                Text("Turn on all of iLovu's reminders in one tap — matches, when your partner plans a date, and special days like your anniversary, engagement and birthdays.")
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
