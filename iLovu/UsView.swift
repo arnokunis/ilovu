@@ -7,6 +7,7 @@
 import SwiftUI
 import PhotosUI
 import StoreKit
+import UserNotifications
 
 struct UsView: View {
 
@@ -32,6 +33,14 @@ struct UsView: View {
     // Fallback for the Manage button when the native StoreKit sheet can't present
     // (no window scene / it throws): opens Apple's subscriptions web page.
     @Environment(\.openURL) private var openURL
+
+    // Re-checks the notification permission when the app returns to foreground
+    // (e.g. after the user toggled it in iOS Settings).
+    @Environment(\.scenePhase) private var scenePhase
+
+    // Current OS notification permission, driving the "Notifications" row's copy +
+    // action. Loaded on appear and refreshed on foreground.
+    @State private var pushStatus: UNAuthorizationStatus = .notDetermined
 
     // The couple-photo picker + its in-flight upload state.
     @State private var couplePhotoItem: PhotosPickerItem?
@@ -427,6 +436,8 @@ struct UsView: View {
 
             subscriptionRow
 
+            notificationsRow
+
             // Daily Question moved to the Home dashboard (the daily-habit surface).
             bucketListRow
 
@@ -490,6 +501,53 @@ struct UsView: View {
     private var yearInReviewRow: some View {
         hubRow(emoji: "✨", title: "Year in Review",
                subtitle: "A shareable recap of your year") { showYearInReview = true }
+    }
+
+    // Enable / status row for notifications. Closes the "I don't get notified" gap
+    // for anyone who never granted or whose token never registered — notably invite
+    // REDEEMERS, who historically weren't asked (see PairingView). Tapping:
+    //   • not determined → fire the OS permission prompt (registers + mints a token)
+    //   • authorized     → re-register to (re)persist the FCM token (unsticks a
+    //                       paired user who has permission but no token on the doc)
+    //   • denied         → deep-link to iOS Settings (the OS won't re-prompt)
+    private var notificationsRow: some View {
+        hubRow(emoji: pushStatus == .denied ? "🔕" : "🔔",
+               title: "Notifications",
+               subtitle: notificationsSubtitle,
+               action: handleNotificationsTap)
+            .task { pushStatus = await PushAuthorization.status() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { pushStatus = await PushAuthorization.status() }
+                }
+            }
+    }
+
+    private var notificationsSubtitle: String {
+        switch pushStatus {
+        case .authorized, .provisional, .ephemeral:
+            return "On — nudges when you match or plan a date"
+        case .denied:
+            return "Off — tap to turn on in Settings"
+        default:
+            return "Turn on nudges for matches & date plans"
+        }
+    }
+
+    private func handleNotificationsTap() {
+        switch pushStatus {
+        case .notDetermined:
+            Task {
+                await PushAuthorization.request()
+                pushStatus = await PushAuthorization.status()
+            }
+        case .denied:
+            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+        default:
+            // Already authorized — re-register so FCM re-mints and re-persists the
+            // token onto the couple doc (the fix for a stuck token-less member).
+            UIApplication.shared.registerForRemoteNotifications()
+        }
     }
 
     // Shared styling for the tappable hub rows (map + year-in-review).
