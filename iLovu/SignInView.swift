@@ -26,6 +26,9 @@ struct SignInView: View {
     @State private var demoEmail = ""
     @State private var demoPassword = ""
 
+    // Public email sign-up / sign-in sheet — the low-friction alternative to Apple.
+    @State private var showEmailAuth = false
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -71,6 +74,29 @@ struct SignInView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.center)
+
+                    Text("or")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.gray.opacity(0.7))
+                        .padding(.vertical, 2)
+
+                    // Email is the low-friction alternative for anyone wary of Apple
+                    // sign-in (a real, observed hesitation). Opens a sign-up / sign-in
+                    // sheet; both flow through the same AuthState routing as Apple.
+                    Button {
+                        viewModel.errorMessage = nil
+                        viewModel.noticeMessage = nil
+                        showEmailAuth = true
+                    } label: {
+                        Text("Continue with Email")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.deepRose)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(Color.white, in: Capsule())
+                            .louvShadow()
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isSigningIn)
 
                     // Friendly inline error — only present when something failed.
                     if let message = viewModel.errorMessage {
@@ -118,6 +144,117 @@ struct SignInView: View {
                 ProgressView()
                     .controlSize(.large)
                     .tint(Color.louvCoral)
+            }
+        }
+        .sheet(isPresented: $showEmailAuth) {
+            EmailAuthSheet(viewModel: viewModel)
+        }
+    }
+}
+
+// MARK: - Email sign-up / sign-in sheet
+//
+// Presented from "Continue with Email". Segmented toggle between creating an
+// account and signing in; a forgot-password link in sign-in mode. On success,
+// AuthState flips and ContentView routes the whole app away — this sheet unmounts
+// with SignInView, so there's no explicit success dismissal to manage.
+private struct EmailAuthSheet: View {
+    let viewModel: AppleSignInViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    // Default to "Create account" — sign-up is the point of this screen.
+    @State private var isCreating = true
+    @State private var email = ""
+    @State private var password = ""
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.blushCream.ignoresSafeArea()
+
+                VStack(spacing: 18) {
+                    Picker("", selection: $isCreating) {
+                        Text("Create account").tag(true)
+                        Text("Sign in").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: isCreating) { _, _ in
+                        viewModel.errorMessage = nil
+                        viewModel.noticeMessage = nil
+                    }
+
+                    VStack(spacing: 12) {
+                        TextField("Email", text: $email)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        SecureField("Password", text: $password)
+                            .textContentType(isCreating ? .newPassword : .password)
+                    }
+                    .textFieldStyle(.roundedBorder)
+
+                    Button {
+                        Task {
+                            if isCreating {
+                                await viewModel.createAccount(email: email, password: password)
+                            } else {
+                                await viewModel.signInEmail(email: email, password: password)
+                            }
+                        }
+                    } label: {
+                        Text(isCreating ? "Create account" : "Sign in")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(Color.louvCoral, in: Capsule())
+                            .opacity(viewModel.isSigningIn ? 0.6 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isSigningIn || email.isEmpty || password.isEmpty)
+
+                    if !isCreating {
+                        Button("Forgot password?") {
+                            Task { await viewModel.sendPasswordReset(email: email) }
+                        }
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.deepRose)
+                    }
+
+                    if let message = viewModel.errorMessage {
+                        Text(message)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.passRed)
+                            .multilineTextAlignment(.center)
+                    } else if let notice = viewModel.noticeMessage {
+                        Text(notice)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.deepRose)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Text("Free to start — you'll never be charged for an account 💛")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+
+                    Spacer()
+                }
+                .padding(24)
+
+                if viewModel.isSigningIn {
+                    Color.black.opacity(0.05).ignoresSafeArea()
+                    ProgressView().controlSize(.large).tint(Color.louvCoral)
+                }
+            }
+            .navigationTitle(isCreating ? "Create account" : "Sign in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Color.louvCoral)
+                }
             }
         }
     }

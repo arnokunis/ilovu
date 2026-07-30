@@ -29,6 +29,10 @@ final class AppleSignInViewModel {
     // nil on purpose — backing out isn't a failure worth nagging about.
     var errorMessage: String?
 
+    // A positive, non-error notice (e.g. "password reset email sent"), shown in a
+    // friendly colour distinct from errorMessage. nil means nothing to show.
+    var noticeMessage: String?
+
     // True while Firebase is exchanging the credential, so the UI can show a
     // spinner and disable interaction.
     var isSigningIn = false
@@ -141,6 +145,87 @@ final class AppleSignInViewModel {
         } catch {
             print("⚠️ Firebase email sign-in error: \(error.localizedDescription)")
             show("We couldn't sign you in. Check the email and password and try again.")
+        }
+    }
+
+    // MARK: - Public email sign-up / sign-in
+    //
+    // Apple is offered first (privacy-forward + Guideline 4.8-friendly), but a real
+    // tester feared "Sign in with Apple" would charge her — a likely driver of the
+    // big drop at the sign-in screen. Email is the low-friction alternative. Both
+    // flow through the SAME AuthState listener → ContentView routing as Apple, so
+    // nothing downstream changes. Firebase's Email/Password provider must be enabled
+    // in the console (it already is — the reviewer login below uses it).
+
+    /// Creates a brand-new email/password account. A NEW user then routes into
+    /// onboarding normally (we don't force-skip it, unlike the reviewer path).
+    func createAccount(email: String, password: String) async {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard validate(email: email, password: password, requireStrong: true) else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+        do {
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            errorMessage = nil; noticeMessage = nil
+            print("✅ Email account created — uid: \(result.user.uid)")
+            AppAnalytics.log("sign_in", ["method": "email"])
+        } catch {
+            show(friendlyAuthMessage(error))
+        }
+    }
+
+    /// Signs in to an existing email/password account (public flow — does NOT
+    /// force-skip onboarding, unlike the reviewer `signIn` below).
+    func signInEmail(email: String, password: String) async {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard validate(email: email, password: password, requireStrong: false) else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+        do {
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            errorMessage = nil; noticeMessage = nil
+            print("✅ Email sign-in — uid: \(result.user.uid)")
+            AppAnalytics.log("sign_in", ["method": "email"])
+        } catch {
+            show(friendlyAuthMessage(error))
+        }
+    }
+
+    /// Sends a Firebase password-reset email. Surfaces success via noticeMessage.
+    func sendPasswordReset(email: String) async {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else { show("Enter your email first."); return }
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: email)
+            errorMessage = nil
+            noticeMessage = "Password reset email sent — check your inbox."
+        } catch {
+            show(friendlyAuthMessage(error))
+        }
+    }
+
+    private func validate(email: String, password: String, requireStrong: Bool) -> Bool {
+        guard !email.isEmpty else { show("Enter your email."); return false }
+        guard email.contains("@"), email.contains(".") else { show("That doesn't look like a valid email."); return false }
+        guard !password.isEmpty else { show("Enter a password."); return false }
+        if requireStrong, password.count < 6 { show("Password must be at least 6 characters."); return false }
+        return true
+    }
+
+    /// Maps Firebase Auth errors to friendly copy. Uses the STABLE public numeric
+    /// error codes (FIRAuthErrorCode) so it's independent of the typed-enum API,
+    /// which has changed shape across Firebase major versions.
+    private func friendlyAuthMessage(_ error: Error) -> String {
+        let ns = error as NSError
+        switch ns.code {
+        case 17007: return "That email already has an account — try signing in instead."
+        case 17008: return "That doesn't look like a valid email."
+        case 17026: return "Password must be at least 6 characters."
+        case 17009, 17004: return "Wrong email or password. Try again."
+        case 17011: return "No account with that email — create one above."
+        case 17020: return "No connection. Please try again."
+        case 17999: return "Something went wrong. Please try again."
+        default:    return "Something went wrong. Please try again."
         }
     }
 
