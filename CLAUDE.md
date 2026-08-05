@@ -8,6 +8,7 @@ Project context for Claude Code sessions. Read this first.
 
 **iLovu is LIVE on the App Store** as of ~July 11 2026: https://apps.apple.com/app/id6781237573 — **post-launch phase, NOT pre-launch.** Any "pre-launch" framing below is historical (the hardening sprint etc. happened before launch); read it as done-before-launch, not still-pending-for-launch.
 
+- **⬅ BEFORE THE NEXT SHIP: read "Solo-first funnel fix (PROPOSED)" near the bottom.** A structural alternative to patching the sign-in and pairing leaks one at a time — it attacks the reason both leaks exist (a signed-in user has nowhere to store anything until pairing). Not locked; decide deliberately.
 - **1.0.6 SUBMITTED (build 11, 2026-07-30) — LATEST; a funnel-fix batch driven by an all-time GA4 read (see ALL-TIME FUNNEL ANALYSIS below).** Attacks the two biggest leaks the data exposed. **Sign-in leak (~45% of installs never sign in):** a "Free to start — signing in never charges you" reassurance line (a real tester feared Apple sign-in would CHARGE her) + a public **Email sign-up/sign-in** alongside Apple (`AppleSignInViewModel.createAccount` / `signInEmail` / `sendPasswordReset`; stable numeric FIRAuthErrorCode mapping; the email sheet forces `.preferredColorScheme(.light)` so placeholders + the segmented toggle aren't white-on-white in dark mode). **Pairing leak (~70% never invite):** a prominent **unpaired-only "invite your partner" card on the Home dashboard** (was buried in the Us tab) — opens the same `PairingView`, vanishes once paired. **Notifications:** the invite REDEEMER is now asked for permission at redeem (only the creator was → redeemers had NO FCM token → zero pushes + the "nudge didn't send" bug); a **Notifications enable/status row in the Us tab** (request / re-register token / open Settings + a confirmation alert); copy now names the special-date reminders and says ONE grant activates ALL push types. **Data-isolation fix:** signing in as a DIFFERENT account (now possible via email) had account B inheriting A's name/missions/memories/couple, because sign-out never cleared the device-local stores — `handleAuthChange` at the app root now resets the in-memory stores + `removePersistentDomain` on a uid change (sign-out itself doesn't wipe, so signing back in as yourself keeps your data). **Fix 1 (explore-before-sign-in) DEFERRED until 1.0.6 stats land** — the structural 45%-leak fix; touches the locked auth-upfront decision, so decide with data, not blind.
 - **1.0.5 SHIPPED (build 10, submitted 2026-07-28) — prior release.** The post-1.0.4 Near You polish batch (all found via on-device testing of 1.0.4's new search): **city-search keyboard fix** (the inline `TextField` keyboard shoved the deck layout up and hid the search box → moved to a native `.alert` text field), **popularity ranking** (`curationVersion 3→4` — busier/more-reviewed venues rank higher via a log-scaled capped `popularityBoost`), **all cached venue photos** shown (was 4 of ~10), and **dynamic filter pills** (the always-empty Music pill is gone — pills now derive from categories actually in the deck). App Store "What's New" framed as Near You improvements. Details in the "Near You polish batch" decision. **1.0.4 is live**, so this shipped as a new version (not a build-9 replacement).
 - **1.0.4 RELEASED (build 9, 2026-07-28) — prior live version.** Contents: **Near You travel fix** (distance-gated re-anchor >20km, ignores the 12h debounce — fixes "drove 60km, still loading the old town"; `hasFix`-gated so it never anchors to the London fallback), **"Search here" + plan-a-trip city search** (free on-device `CLGeocoder` → shared couple anchor `eventLocationManual`/`eventLocationLabel`, so both partners plan+match a trip destination), **delete a mission** (drops the planned date off both dashboards; `missions` delete opened to couple members in rules — memories stay delete-locked), the **`reached_pairing_screen` analytics event** (splits the download→invite_created leak into "reached pairing" vs "created invite once there"), and the **RevenueCat identity fix** (`Purchases.logIn(uid)` so the `revenueCatWebhook` — deployed 2026-07-27 — can resolve the couple for authoritative grant/revoke). App Store description updated (added the plan-a-trip/city-search lines). **Two-phone test of the Near You search + a sandbox buy/revoke webhook test are the outstanding on-device checks.** Details in the Near You / RevenueCat / Analytics decisions below.
@@ -241,7 +242,7 @@ Locked down the client-authed surfaces flagged in the old `// PRE-LAUNCH HARDENI
 - **Claude Code** (this tool): multi-file coordinated edits, builds, repo-wide changes.
 - **Claude chat** (the project): architecture, strategy, planning.
 - Real-device testing requires cable install (deep link won't bootstrap an install). Two-phone tests need two **different Apple IDs**.
-- **Analytics go through `AppAnalytics` (`AnalyticsService.swift`) — the single Firebase Analytics choke point.** Named `AppAnalytics` (not `Analytics`) to avoid clashing with FirebaseAnalytics' own type. Log ONLY the canonical funnel names — don't invent variants: `sign_in → onboarding_complete → reached_pairing_screen → invite_created → invite_redeemed → card_liked → match_created → mission_created → memory_completed → paywall_shown → paywall_dismissed → purchase_success / restore_success`, plus `memory_shared` (viral loop). North-star event: `memory_completed`; live pairing diagnostic: `invite_created → invite_redeemed`. `reached_pairing_screen` (added 2026-07-28, `PairingView`, fired once when an UNPAIRED user lands on the invite/redeem UI) decomposes the biggest funnel leak — `download → invite_created` (~70% never try to pair) — into `onboarding_complete → reached_pairing_screen` (never navigate to pairing) vs `reached_pairing_screen → invite_created` (there, but create no invite). Names are ≤40 chars, snake_case (Firebase rule).
+- **Analytics go through `AppAnalytics` (`AnalyticsService.swift`) — the single Firebase Analytics choke point.** Named `AppAnalytics` (not `Analytics`) to avoid clashing with FirebaseAnalytics' own type. Log ONLY the canonical funnel names — don't invent variants: `sign_in → onboarding_complete → reached_pairing_screen → invite_created → invite_redeemed → card_liked → match_created → mission_created → memory_completed → paywall_shown → paywall_dismissed → purchase_success / restore_success`, plus `memory_shared` (viral loop). North-star event: `memory_completed`; live pairing diagnostic: `invite_created → invite_redeemed`. **Engagement events (added 2026-07-31 — measure what couples DO inside, beyond the acquisition funnel; the funnel alone couldn't answer "what do couples do most" because screens aren't tracked + features fired nothing):** `near_you_opened` (the plan-a-date surface — directly tests the matching-vs-planning strategic question), `daily_question_answered`, `would_you_rather_answered`, `bucket_list_added`, `memory_viewed`. On `main`, NOT in the submitted 1.0.6 build 11 — ship in the next build. `reached_pairing_screen` (added 2026-07-28, `PairingView`, fired once when an UNPAIRED user lands on the invite/redeem UI) decomposes the biggest funnel leak — `download → invite_created` (~70% never try to pair) — into `onboarding_complete → reached_pairing_screen` (never navigate to pairing) vs `reached_pairing_screen → invite_created` (there, but create no invite). Names are ≤40 chars, snake_case (Firebase rule).
 - **Website source lives in `site/`** (ilovu.io — landing, privacy, terms, support; imported from the live Netlify deploy 2026-07-18). **Deploys via Netlify GIT continuous deploy (2026-07-23): push to `main` → auto-deploy of `site/` in ~60s.** `netlify.toml` at repo root sets `publish = "site"` (no build step). The old drag-and-drop flow is retired — **edit `site/`, commit, push, done.** Because Git deploy INCLUDES hidden folders (unlike drag-and-drop), `site/.well-known/apple-app-site-association` now serves natively too — the `aasa.json` + `_redirects` rewrite still coexists as a second path (belt-and-suspenders; both verified 200 live). Also holds the Universal Links web side (committed + LIVE 2026-07-19): `invite.html` landing page, `aasa.json` (+ `.well-known/` copy), `_headers`, `_redirects` — see the Invite link decision. See the **SEO/GEO content cluster** decision below for the 25 content pages.
 - **Web analytics — GA4 LIVE on all site pages (2026-07-23):** GA4 web stream `G-BY93CRYSZK` (property = the SAME Firebase-linked GA4 property the iOS app reports to; it's a second data stream, NOT a new property). The gtag snippet sits right after `<head>` on every site page AND is baked into `scripts/gen_pages.py` (braces doubled for the f-string) so regenerated cluster pages keep it — any NEW hand-authored page must add the snippet manually (as `love-counter` does). Enhanced Measurement auto-captures **outbound App Store CTA clicks** (`click` event) — the key web conversion to mark as a key event + later import into Google Ads. **GDPR note:** no consent banner yet (low risk at current traffic; revisit with a banner or Consent Mode v2 before scaling EU paid). When building a web-only report, filter to **Stream name = ilovu.io** so app events don't muddy it.
 
@@ -254,6 +255,96 @@ Web growth channel: rank for "date ideas" (+ long-tail) and get cited by AI answ
 - **Search Console + Bing verified** (domain property, DNS TXT via Netlify), sitemap submitted. After adding pages: resubmit sitemap + Request-Indexing the highest-intent new URLs (`/couple-games`, `/love-counter`). **Honest status (unchanged): content is a compounding long-game — it won't rank at zero domain authority without backlinks** (Product Hunt launch + "best couples apps" listicles + Reddit are the highest-ROI moves). Better keyword targeting raises the ceiling; it does NOT remove the authority requirement. Watch GSC impressions before scaling to per-card pages (phase 2, in batches — do NOT bulk-dump; new-domain crawl/spam risk).
 - **Two-phone re-test reset:** deleting `couples` + `invites` in Firestore (and `couples/` photos in Storage) is NOT enough — local `@AppStorage` keeps a zombie half-paired state. You MUST **delete + reinstall the app on BOTH phones**. Keep the shared caches (`venues`, `venueQueries`, `eventQueries`, `placeDeckQueries`); only couple data needs clearing.
 - Security is day-one, not retrofitted: Firestore rules, single-use invite tokens (7-day server-side expiry + rate-limited redemption since 2026-07-18), photo/Vault access control all built in. Proof photos now live in Cloud Storage (not UserDefaults). **Pre-launch hardening sprint (2026-07-01) ✓** landed cache-write gating, atomic invite redemption, and Storage couple-membership via a `coupleId` auth claim (see the decision section). Remaining: App Check enforcement (#4b, blocked on a parked debug-token 403) + the RevenueCat grant/revoke webhook.
+
+---
+
+## Solo-first funnel fix (PROPOSED — NOT locked; decide before the next ship)
+
+Raised 2026-08-03. **Nothing here is implemented.** This is a structural alternative to
+patching the sign-in and pairing leaks individually — it attacks the reason both exist.
+
+### The root cause
+
+**The couple doc is born at redemption.** `functions/index.js:191` — `db.collection("couples").doc()` inside the `redeemInvite` transaction. Every subcollection lives under `couples/{id}/`: swipes, matches, missions, memories, bucketList. **So before pairing, a signed-in user has nowhere to put anything.** That is not a UX gap; the data model has no concept of one person.
+
+Three consequences, all visible in the all-time funnel:
+- **27 users onboarded into an app with no storage for them.** The 67% invite leak is partly this — there is nothing to do first, so the invite is a cold ask with no motivation behind it.
+- **The swipe→match loop requires coincidence.** Mutual `likedBy` means both partners must be active on the same card. 3 users have ever swiped, 1 match ever. It is not a UI problem — it is a synchronisation requirement.
+- **Monetization is structurally unreachable.** `PaywallGate` is entirely per-couple and its 14-day backstop counts from PAIRING, so a solo user never sees it at any duration. 2 users have seen the paywall, ever. **Revenue is not underperforming, it is unmeasured.**
+
+Also worth noting: **"love counter" is the #1 converting Apple Search Ads keyword, and Days Together needs no partner at all.** The best-converting promise is currently gated behind a step 96% never complete.
+
+### The proposal — a couple of one
+
+**Create the couple doc at sign-in with `members: [uid]`.** Pairing stops creating and starts appending.
+
+**This is cheaper than it sounds because `isCoupleMember(coupleId)` is just `uid() in members` (`firestore.rules:21`) — a one-member couple already satisfies every existing rule.** Missions, memories, bucketList, Daily Question all work unchanged. `firestore.rules` needs no rewrite for the happy path.
+
+Three real changes:
+1. **Create-on-sign-in** instead of create-on-redeem. Note the couple doc is currently Cloud-Function-only by rule (`allow create: if false` for clients) — so this stays server-side, called at first sign-in.
+2. **A like becomes a mission directly** when `members.count == 1`, instead of waiting for mutual `likedBy`.
+3. **`redeemInvite` merges instead of creates.**
+
+**The merge is the only genuinely hard part.** Two users who both explored solo have two couple docs — pick a survivor (inviter's) and copy the redeemer's subcollections inside the transaction. In practice most redeemers install FROM the invite and have nothing to merge; the collision is the rare case, not the common one. Do not ship this without deciding the merge rule explicitly — silently dropping a redeemer's missions is the kind of bug that surfaces as a 1-star review.
+
+### The swipe survives — it stops being a gate
+
+Keep the mechanic, change its job: **swiping builds YOUR shortlist.** When a partner joins, cards both liked light up as matches. The match moment — which the SpyTok briefing ranks as the #1 marketing angle — survives as a bonus on top of something already working, rather than the toll gate in front of it.
+
+This also resolves the parked Fix 4 question ("is the real product plan-a-date, not card-matching?") without having to answer it: both work, and the data says which one people use.
+
+### Invite from the mission, carrying the plan
+
+**Send the invite from the mission window, not from a generic pairing screen.** Today the invite is "install my app" — abstract, no urgency, which is plausibly why 67% of onboarded users never send one. From a mission it is "I want to take you to this on Saturday." Specific, warm, and the recipient sees a date plan rather than a product pitch.
+
+**Then make `site/invite.html` render the actual mission.** It currently shows a generic "You're invited" headline and an App Store button. If it showed the real plan — venue, date, who planned it — the partner sees something concrete before installing.
+
+**This also attacks a separate problem: GA4 records ZERO App Store click key events from ilovu.io, ever.** `invite.html` is the one page on the site with genuine intent behind it. Making it the conversion page is likely worth more than the whole SEO cluster in the short run.
+
+Sequence after this change: plan alone → partner opens a link and sees a date someone made for them → installs → the plan is already there. **The app has delivered before the second person did anything.**
+
+### Paywall — sequence matters more than the setting
+
+**Do NOT ship solo access and a hard 14-day wall in the same release.** At ~50 lifetime installs there is no resolution to untangle which one moved the number, and this file already says repeatedly that n<100/step is noise. Make the paywall REACHABLE first — that alone takes it from 2 users ever to everyone — read the rate, then decide hard vs soft.
+
+**And reconsider what it gates.** A hard wall at day 14 from sign-in lands on the ~96% who never paired — people who have not seen what they would be paying for. The engagement gulf says the paid US cohort is gone in 33s and the people who DO reach value stay ~16 min, so the wall mostly blocks the engaged minority, which is exactly who you least want to block. **Gate depth, not access** — N active missions, or Near You past the free radius. Keep the hard 14-day wall for PAIRED couples, where the current backstop already applies and value has been reached.
+
+### Honest limits
+
+- **Solo value buys time and a better invite; it does not remove the need to pair.** A user planning dates for a partner who never joins has a to-do list, and retention dies there regardless.
+- **This does not fix revenue this quarter.** See `~/ilovu-content/NINETY-DAYS.md` — it makes revenue *measurable*, which is the actual blocker.
+- **Not decided here:** the merge rule, whether solo users get Near You at full radius, and whether "invite several people so one redeems" is worth building (cheap, sensible) versus multi-person plans (a couples app becoming a group app — `members` is a pair and the paywall is per-couple; much bigger, separate question).
+
+---
+
+### Paywall trigger — tie it to usage, not to pairing (PROPOSED, 2026-08-03)
+
+The core of it: **stop gating the paywall behind a milestone and gate it behind use.** Whatever lever is chosen, that is the change that makes monetization reachable at all.
+
+**A swipe cap, Tinder-style, is the obvious candidate — and it has a hard prerequisite.** Swipes live at `couples/{coupleId}/swipes/{cardId}` and the rules scope them with `isCoupleMember`. **A solo user cannot swipe at all today**, so a swipe cap would apply to paired couples only, of which there are two. **This cannot ship before the couple-of-one change above.** The order is forced, not a preference.
+
+**If it does ship, the cap number is the whole design.** Set it above casual use and below engaged use; the funnel gives both bounds:
+
+- median user: **0 swipes**
+- the Peterborough/Bradwell pair, 2026-07-31: **25 and 21** in one session, 46 together
+
+So **30-40/day** is never seen by a casual user and would have caught that couple on night one — asking exactly the people who have experienced the product, while adding no friction to a funnel already losing 45% at sign-in and 67% at invite. **A cap of 10 hits everyone and makes a nearly-dead loop deader.** Tinder's cap works because swiping IS the product with infinite supply; here swiping is a means to a plan, so capping it caps value delivery rather than a vanity metric.
+
+**The alternative — cap active missions instead — is probably the better long-run lever.** For a date planner the plan is the value, not the swipe. "Two active missions free" maps to what someone actually received, converts later but warmer, and composes naturally with solo-first. The tradeoff is speed: swipes produce paywall exposure in a week, missions in a month. Given that **2 users have seen the paywall ever**, speed is worth a lot right now.
+
+**Do both eventually; swipes first, because the data gap is the binding constraint.**
+
+### Sequencing — the thing most likely to go wrong
+
+Three changes are now on the table: solo-first, the 14-day trial, and a usage cap. **Shipping any two together at ~50 installs means learning nothing about either.** This file already says n<100/step is noise; that applies to our own releases, not just to the funnel.
+
+    1.0.7   solo-first — makes the paywall REACHABLE (2 users have seen it, ever)
+    1.0.8   usage cap  — makes it FIRE on engagement
+    1.0.9   hard/soft, trial length — tune, once there is a rate to tune
+
+**Whether to wait for 1.0.6 numbers before starting depends on a fact we do not have yet: is Apple Search Ads still spending?** Installs fell from ~7/day (Jul 28-29) to ~1.75/day (Jul 31-Aug 3), and 1.0.6 has **4 users total, 3 of them new installs**. If spend resumed, ~50-60 installs by early September makes the sign-in leak readable and it is worth waiting. If spend stopped, waiting buys nothing and the wait is pure delay.
+
+**Either way, start building now** — solo-first is 3-4 weeks of careful work (server-side couple creation, like→mission, and a `redeemInvite` that merges rather than creates). The ASA answer changes when it ships, not whether to begin.
 
 ---
 
