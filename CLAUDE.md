@@ -317,6 +317,29 @@ Sequence after this change: plan alone → partner opens a link and sees a date 
 
 ---
 
+### Fix 1 build plan — explore-before-sign-in + solo-first (READY to execute IF 1.0.6 leaves install→sign_in still ~45%)
+
+Concrete execution plan for the 45%-leak fix (drafted 2026-08-06). **Reverses the locked "auth upfront / durable accounts from the start" decision — deliberate, decide with 1.0.6 data.** Two halves: PHASE A (explore before auth — the leak fix) + PHASE B (solo-first storage — so there's somewhere to save). Ships as **1.0.7**. Effort ~2–3 weeks.
+
+**PHASE A — explore before sign-in (the leak fix):**
+1. **Routing (`ContentView`):** signed-out no longer forces `SignInView`. Route signed-out → a GUEST swipe deck (`SampleCards` — static/local, no backend, no auth). `SignInView` becomes a gated full-screen cover, not the front door.
+2. **Local pre-auth swipes:** guest likes/shortlist store LOCALLY only (UserDefaults) — no `MatchService`/Firestore (those need auth). Reuse the existing unpaired-local pattern (`MissionStore`/`MemoryStore` already persist locally when unpaired).
+3. **Sign-in prompt at first VALUE-CAPTURE, not upfront:** present `SignInView` when the guest taps "Save these / Plan this date / Invite your partner." Value-framed copy ("Sign in to save + plan together — free, never charges you" — the fiancée-fear fix, now at a motivated moment).
+4. **Migrate on sign-in:** guest's local likes → missions on the couple-of-one doc (Phase B). Reuse the resync-on-pair migration pattern.
+5. **Analytics:** add the pre-auth funnel — `guest_swipe` + `signin_prompt_shown` → existing `sign_in`, so guest→sign_in becomes the new measurable top. Also add an **`is_paired` user property** so solo-vs-paired engagement is finally segmentable.
+
+**PHASE B — solo-first storage (couple-of-one):**
+6. **Create `couples/{id}` with `members:[uid]` at first sign-in** (server-side — couple-create is CF-only by rule). `isCoupleMember` already = `uid in members`, so a one-member couple satisfies EVERY existing rule — missions/memories/bucketList/dailyAnswers work unchanged.
+7. **Like→mission direct when `members.count == 1`** (skip the mutual-match requirement). Swipe mechanic stays; it just stops being a two-person gate.
+8. **`redeemInvite` MERGES two solo docs** instead of creating (survivor = inviter's; copy the redeemer's subcollections in the transaction). **THE HARD PART — decide the merge rule explicitly** (never silently drop the redeemer's missions). Most redeemers install FROM the invite and have nothing to merge; collision is the rare case, not the common one.
+9. **Invite FROM the mission carrying the plan;** make `site/invite.html` render the actual mission (venue/date/who planned) — the partner sees a real date before installing.
+
+**STAYS gated (sign-in required):** Near You "Plan This Date", memories/Vault, pairing, subscription.
+
+**GOTCHAS:** (a) App Store review is fine with delayed auth (a memories app that lets you try first is common). (b) The MERGE is the only genuinely hard bit — ship an explicit rule + test the collision case. (c) **Do NOT add a hard paywall in this release** — make it reachable, read the rate, gate on usage in 1.0.8 (see below). (d) One lever per release — don't ship this WITH the usage-cap paywall.
+
+**EVIDENCE it's worth building (2026-08-06 GA4):** ~28 of 34 signed-in users are solo; `mission_created` (9 users) >> `match_created` (3 users) means ~6 users planned a date solo/independently — solo users DO engage with planning before solo-first even exists. Encouraging, not conclusive (GA4 can't cleanly segment solo vs paired yet — hence the `is_paired` property above).
+
 ### Paywall trigger — tie it to usage, not to pairing (PROPOSED, 2026-08-03)
 
 The core of it: **stop gating the paywall behind a milestone and gate it behind use.** Whatever lever is chosen, that is the change that makes monetization reachable at all.
