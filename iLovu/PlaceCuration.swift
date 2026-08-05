@@ -28,7 +28,8 @@ enum PlaceCuration {
     /// v3 (2026-07-21): per-category search radius (10 km going-out / 30 km outdoors + trails).
     /// v4 (2026-07-28): popularity boost — busier (more-reviewed) venues rank higher.
     /// v5 (2026-07-31): 10 split cuisine food searches (was 1) + review floor 30→15 — many more cards.
-    static let curationVersion = 5
+    /// v6 (2026-08-06): split nightlife/arts/trails too (each was 1 search capped at 20) — more cards per category.
+    static let curationVersion = 6
 
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
@@ -76,15 +77,18 @@ enum PlaceCuration {
         SearchGroup(types: ["french_restaurant", "spanish_restaurant", "brazilian_restaurant"], radiusMeters: 10_000),
         SearchGroup(types: ["mexican_restaurant", "hamburger_restaurant", "american_restaurant", "sandwich_shop"], radiusMeters: 10_000),
         SearchGroup(types: ["vegan_restaurant", "vegetarian_restaurant", "brunch_restaurant", "breakfast_restaurant"], radiusMeters: 10_000),
-        // NIGHTLIFE
-        SearchGroup(types: ["bar", "wine_bar", "night_club"], radiusMeters: 10_000),
-        // ARTS
-        SearchGroup(types: ["art_gallery", "museum", "movie_theater", "book_store"], radiusMeters: 10_000),
+        // NIGHTLIFE — split so each returns its own ~20 (bars are plentiful).
+        SearchGroup(types: ["bar"], radiusMeters: 10_000),
+        SearchGroup(types: ["wine_bar", "night_club"], radiusMeters: 10_000),
+        // ARTS — split into two searches.
+        SearchGroup(types: ["art_gallery", "museum"], radiusMeters: 10_000),
+        SearchGroup(types: ["movie_theater", "book_store"], radiusMeters: 10_000),
         // OUTDOORS — open-air leisure
         SearchGroup(types: ["tourist_attraction", "plaza", "marina", "dog_park"], radiusMeters: 30_000),
-        // HIKES & TRAILS — nature
-        SearchGroup(types: ["hiking_area", "national_park", "state_park", "park",
-                            "botanical_garden", "garden", "wildlife_park", "campground"], radiusMeters: 30_000)
+        // HIKES & TRAILS — split: true wilderness vs parks/gardens, so each
+        // returns its own ~20 (nature is thinner, but this doubles the ceiling).
+        SearchGroup(types: ["hiking_area", "national_park", "state_park", "campground", "wildlife_park"], radiusMeters: 30_000),
+        SearchGroup(types: ["park", "botanical_garden", "garden"], radiusMeters: 30_000)
     ]
 
     // MARK: - Curate one venue
