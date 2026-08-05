@@ -155,6 +155,10 @@ struct HomeView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 32)
             }
+            // Dismiss the keyboard when the dashboard is scrolled — so tapping the
+            // Daily Question field and then scrolling away (without typing) closes
+            // it, instead of leaving the keyboard stuck up.
+            .scrollDismissesKeyboard(.immediately)
 
             // Toast overlay — sits on top of the ScrollView, drops in
             // from the top edge, fades out on its own. allowsHitTesting
