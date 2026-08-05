@@ -27,7 +27,8 @@ enum PlaceCuration {
     /// v2 (2026-07-19): added the Hikes & Trails category.
     /// v3 (2026-07-21): per-category search radius (10 km going-out / 30 km outdoors + trails).
     /// v4 (2026-07-28): popularity boost — busier (more-reviewed) venues rank higher.
-    static let curationVersion = 4
+    /// v5 (2026-07-31): 10 split cuisine food searches (was 1) + review floor 30→15 — many more cards.
+    static let curationVersion = 5
 
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
@@ -60,11 +61,29 @@ enum PlaceCuration {
     }
 
     static let searchGroups: [SearchGroup] = [
-        SearchGroup(types: ["restaurant", "cafe", "coffee_shop", "bakery", "ice_cream_shop"], radiusMeters: 10_000),  // food & drink
-        SearchGroup(types: ["bar", "night_club"], radiusMeters: 10_000),                                             // nightlife
-        SearchGroup(types: ["art_gallery", "museum", "movie_theater", "book_store"], radiusMeters: 10_000),          // arts
-        SearchGroup(types: ["tourist_attraction", "plaza", "marina", "dog_park"], radiusMeters: 30_000),             // outdoors — open-air leisure
-        SearchGroup(types: ["hiking_area", "national_park", "state_park", "park",                                    // hikes & trails — nature
+        // FOOD & DRINK — split into many NARROW searches so each returns its own
+        // ~20 (one broad search caps at Google's 20-result max). This multiplies
+        // the deck AND sets up per-cuisine filtering. Overlap across groups is
+        // deduped by placeId in rank(). Every type below is a confirmed Table A
+        // includedType — a bad type 400s only its own group.
+        SearchGroup(types: ["restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["cafe", "coffee_shop", "bakery", "ice_cream_shop"], radiusMeters: 10_000),
+        SearchGroup(types: ["pizza_restaurant", "italian_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["sushi_restaurant", "japanese_restaurant", "ramen_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["steak_house", "seafood_restaurant", "barbecue_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["thai_restaurant", "indian_restaurant", "chinese_restaurant", "korean_restaurant", "vietnamese_restaurant", "indonesian_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["turkish_restaurant", "middle_eastern_restaurant", "mediterranean_restaurant", "greek_restaurant", "lebanese_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["french_restaurant", "spanish_restaurant", "brazilian_restaurant"], radiusMeters: 10_000),
+        SearchGroup(types: ["mexican_restaurant", "hamburger_restaurant", "american_restaurant", "sandwich_shop"], radiusMeters: 10_000),
+        SearchGroup(types: ["vegan_restaurant", "vegetarian_restaurant", "brunch_restaurant", "breakfast_restaurant"], radiusMeters: 10_000),
+        // NIGHTLIFE
+        SearchGroup(types: ["bar", "wine_bar", "night_club"], radiusMeters: 10_000),
+        // ARTS
+        SearchGroup(types: ["art_gallery", "museum", "movie_theater", "book_store"], radiusMeters: 10_000),
+        // OUTDOORS — open-air leisure
+        SearchGroup(types: ["tourist_attraction", "plaza", "marina", "dog_park"], radiusMeters: 30_000),
+        // HIKES & TRAILS — nature
+        SearchGroup(types: ["hiking_area", "national_park", "state_park", "park",
                             "botanical_garden", "garden", "wildlife_park", "campground"], radiusMeters: 30_000)
     ]
 
@@ -135,7 +154,41 @@ enum PlaceCuration {
         "coffee_shop":        (.foodDrink, 6),
         "bakery":             (.foodDrink, 5),
         "ice_cream_shop":     (.foodDrink, 4),
+        // Cuisine-specific restaurant types (from the split food searches). Most
+        // also carry the generic `restaurant` type, but mapping them explicitly
+        // guarantees a match + a sensible score for date-appropriateness.
+        "pizza_restaurant":         (.foodDrink, 7),
+        "italian_restaurant":       (.foodDrink, 8),
+        "sushi_restaurant":         (.foodDrink, 8),
+        "japanese_restaurant":      (.foodDrink, 8),
+        "ramen_restaurant":         (.foodDrink, 6),
+        "steak_house":              (.foodDrink, 8),
+        "seafood_restaurant":       (.foodDrink, 8),
+        "barbecue_restaurant":      (.foodDrink, 6),
+        "thai_restaurant":          (.foodDrink, 7),
+        "indian_restaurant":        (.foodDrink, 7),
+        "chinese_restaurant":       (.foodDrink, 6),
+        "korean_restaurant":        (.foodDrink, 7),
+        "vietnamese_restaurant":    (.foodDrink, 6),
+        "indonesian_restaurant":    (.foodDrink, 6),
+        "turkish_restaurant":       (.foodDrink, 7),
+        "middle_eastern_restaurant":(.foodDrink, 6),
+        "mediterranean_restaurant": (.foodDrink, 8),
+        "greek_restaurant":         (.foodDrink, 7),
+        "lebanese_restaurant":      (.foodDrink, 6),
+        "french_restaurant":        (.foodDrink, 8),
+        "spanish_restaurant":       (.foodDrink, 7),
+        "brazilian_restaurant":     (.foodDrink, 6),
+        "mexican_restaurant":       (.foodDrink, 7),
+        "hamburger_restaurant":     (.foodDrink, 5),
+        "american_restaurant":      (.foodDrink, 6),
+        "sandwich_shop":            (.foodDrink, 4),
+        "vegan_restaurant":         (.foodDrink, 6),
+        "vegetarian_restaurant":    (.foodDrink, 6),
+        "brunch_restaurant":        (.foodDrink, 7),
+        "breakfast_restaurant":     (.foodDrink, 6),
         "bar":                (.nightlife, 7),
+        "wine_bar":           (.nightlife, 8),
         "night_club":         (.nightlife, 5),
         "art_gallery":        (.arts, 7),
         "museum":             (.arts, 6),
@@ -195,7 +248,7 @@ enum PlaceCuration {
     private static func minRatingCount(for category: LocalEvent.Category) -> Int {
         switch category {
         case .trails: return 10
-        default:      return 30
+        default:      return 15   // lowered from 30 to surface MORE cards (rating floor 4.0 still applies)
         }
     }
 
