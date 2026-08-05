@@ -29,7 +29,8 @@ enum PlaceCuration {
     /// v4 (2026-07-28): popularity boost — busier (more-reviewed) venues rank higher.
     /// v5 (2026-07-31): 10 split cuisine food searches (was 1) + review floor 30→15 — many more cards.
     /// v6 (2026-08-06): split nightlife/arts/trails too (each was 1 search capped at 20) — more cards per category.
-    static let curationVersion = 6
+    /// v7 (2026-08-06): Nightlife = PURE bars/clubs — food-serving bars re-filed to Food & Drink.
+    static let curationVersion = 7
 
     /// The outcome of curating one venue: its mapped deck category + a
     /// date-appropriateness score. `score <= 0` => exclude.
@@ -115,7 +116,17 @@ enum PlaceCuration {
         for type in allTypes {
             if let hit = typeScores[type] { mapped = hit; break }
         }
-        guard let (category, base) = mapped else { return nil }
+        guard let mapped else { return nil }
+        var (category, base) = mapped
+
+        // Keep NIGHTLIFE pure — bars, wine bars, cocktail bars & clubs only. Google
+        // tags gastropubs / food-serving bars as `bar`, which would otherwise put
+        // restaurant-y spots in Nightlife; but food already has its own category,
+        // so re-file anything carrying a food type into Food & Drink instead.
+        if category == .nightlife,
+           let foodType = allTypes.first(where: { typeScores[$0]?.0 == .foodDrink }) {
+            (category, base) = typeScores[foodType]!
+        }
 
         // 4. Quality gate — enough rating signal to trust, floor per category.
         guard let rating = place.rating, rating >= minRating,
