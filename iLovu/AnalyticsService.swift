@@ -39,4 +39,13 @@ enum AppAnalytics {
     static func log(_ event: String, _ parameters: [String: Any]? = nil) {
         Analytics.logEvent(event, parameters: parameters)
     }
+
+    /// User property recording whether this user is currently paired (in a couple
+    /// with a partner). Lets GA4 segment engagement by solo vs paired — the clean
+    /// answer to "do solo users engage?", which drives the solo-first decision.
+    /// MUST be registered in GA4 Admin → Custom definitions as a USER-scoped custom
+    /// dimension named `is_paired` to appear in reports (same as event params).
+    static func setPaired(_ paired: Bool) {
+        Analytics.setUserProperty(paired ? "true" : "false", forName: "is_paired")
+    }
 }

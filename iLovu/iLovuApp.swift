@@ -192,6 +192,9 @@ struct iLovuApp: App {
             Task { _ = try? await coupleService.currentCouple() }
         }
         syncRevenueCatIdentity(status)
+        // Seed the is_paired analytics property for the current state; the
+        // coupleId onChange below corrects it once the couple resolves async.
+        AppAnalytics.setPaired(coupleService.coupleId != nil && !coupleService.isOrphaned)
     }
 
     /// Clears everything device-local so a new account starts clean: the in-memory
@@ -307,6 +310,11 @@ struct iLovuApp: App {
                 // DIFFERENT account signs in on this device (see handleAuthChange).
                 .onChange(of: authState.status) { _, status in
                     handleAuthChange(status)
+                }
+                // Keep the is_paired user property in step as the couple resolves,
+                // pairs, or clears — so GA4 can segment solo vs paired engagement.
+                .onChange(of: coupleService.coupleId) { _, _ in
+                    AppAnalytics.setPaired(coupleService.coupleId != nil && !coupleService.isOrphaned)
                 }
         }
     }
