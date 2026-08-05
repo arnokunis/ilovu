@@ -167,7 +167,10 @@ extension CachedVenue {
     /// exactly like CachedEvent.asLocalEvent(). `cardId == placeId` (the stable
     /// cross-device match key). The description is a brand-SAFE positive review
     /// snippet, or a curated category tagline when none qualifies (PlaceCuration).
-    func asLocalEvent() -> LocalEvent {
+    /// `firstPhotoURL` (built by the caller from `photoURLStrings`, since URL
+    /// assembly needs the PlacesService) is surfaced on the swipe card as its
+    /// hero image. Pure model otherwise — no key/service dependency here.
+    func asLocalEvent(firstPhotoURL: String? = nil) -> LocalEvent {
         let cat = LocalEvent.Category(rawValue: category ?? "") ?? .foodDrink
         let blurb = PlaceCuration.brandSafeSnippet(from: reviews) ?? PlaceCuration.tagline(for: cat)
         return LocalEvent(
@@ -183,6 +186,7 @@ extension CachedVenue {
             reviewCount:   userRatingCount,
             address:       formattedAddress,
             openingHours:  openingHoursWeekday?.first,
+            photos:        firstPhotoURL.map { [$0] } ?? [],   // hero image for the card
             bookingURL:    googleMapsUri ?? websiteUri,   // "Book Now" -> Maps/site (never Ticketmaster-wrapped)
             sourceDeck:    .places
         )

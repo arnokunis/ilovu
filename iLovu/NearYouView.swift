@@ -650,18 +650,36 @@ private struct EventCardContent: View {
     let event: LocalEvent
 
     var body: some View {
-        VStack(spacing: 14) {
-            Spacer()
+        VStack(spacing: 0) {
+            // Hero: the venue's real first photo when we have one — rendered via
+            // BundledRemoteImage (the bundle-key loader; NEVER AsyncImage, per the
+            // Places 403 rule). Falls back to the big category emoji while loading
+            // or when the venue has no photo (and for date-idea cards, which have none).
+            Group {
+                if let photo = event.photos.first {
+                    BundledRemoteImage(urlString: photo) {
+                        ZStack {
+                            Color.blushCream
+                            Text(event.emoji).font(.system(size: 56))
+                        }
+                    }
+                } else {
+                    ZStack {
+                        Color.blushCream
+                        Text(event.emoji).font(.system(size: 72))
+                    }
+                }
+            }
+            .frame(height: 230)
+            .frame(maxWidth: .infinity)
+            .clipped()
 
-            Text(event.emoji)
-                .font(.system(size: 64))
-
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 Text(event.title)
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(Color.deepRose)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+                    .lineLimit(2)
 
                 // Join non-empty parts: events show "Venue · Fri 8pm"; venues have
                 // no date, so they show just the type label (e.g. "Wine Bar").
@@ -669,44 +687,43 @@ private struct EventCardContent: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-            }
 
-            // Rating row — only shown when we have review data.
-            // String(format:) gives "4.7" not "4.70" or "4.7000...".
-            if let rating = event.rating, let reviewCount = event.reviewCount {
-                HStack(spacing: 6) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 13))
-                    Text(String(format: "%.1f", rating))
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("·")
-                        .foregroundStyle(.gray)
-                    Text("\(reviewCount.formatted()) reviews")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.gray)
+                // Rating row — only shown when we have review data.
+                if let rating = event.rating, let reviewCount = event.reviewCount {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 13))
+                        Text(String(format: "%.1f", rating))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("·")
+                            .foregroundStyle(.gray)
+                        Text("\(reviewCount.formatted()) reviews")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.gray)
+                    }
+                    .foregroundStyle(Color.louvCoral)
                 }
-                .foregroundStyle(Color.louvCoral)
-            }
 
-            Text(event.description)
-                .font(.system(size: 14))
-                .foregroundStyle(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .lineLimit(3)
+                Text(event.description)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.gray)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
 
-            Spacer()
+                Spacer(minLength: 4)
 
-            HStack(spacing: 8) {
-                pill(text: event.category.rawValue, background: .louvCoral)
-                // Venues without a published price level omit the price pill
-                // rather than show a blank one.
-                if !event.price.isEmpty {
-                    pill(text: event.price, background: .louvOrange)
+                HStack(spacing: 8) {
+                    pill(text: event.category.rawValue, background: .louvCoral)
+                    // Venues without a published price level omit the price pill.
+                    if !event.price.isEmpty {
+                        pill(text: event.price, background: .louvOrange)
+                    }
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
             .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

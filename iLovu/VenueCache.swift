@@ -227,7 +227,7 @@ struct VenueCache {
                 } else {
                     log("DECK HIT (fresh) \(bucket) — 0 Places calls")
                 }
-                return venues.map { $0.asLocalEvent() }
+                return venues.map { $0.asLocalEvent(firstPhotoURL: $0.photoURLStrings(using: places, limit: 1).first) }
             }
             // A FRESH but empty pointer is a recorded "nothing curated near here" —
             // respect it instead of re-searching every open. Only a STALE empty
@@ -241,7 +241,7 @@ struct VenueCache {
         }
 
         let resolved = await resolveDeckAndCache(bucket: bucket, center: center)
-        return resolved.map { $0.asLocalEvent() }
+        return resolved.map { $0.asLocalEvent(firstPhotoURL: $0.photoURLStrings(using: places, limit: 1).first) }
     }
 
     /// Fan out grouped Nearby searches (for category variety), curate + rank,
