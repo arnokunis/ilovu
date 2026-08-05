@@ -41,6 +41,7 @@ final class BucketListStore {
         items.append(item)
         save()
         remoteUpsert?(item)
+        AppAnalytics.log("bucket_list_added")
     }
 
     func toggle(id: UUID) {

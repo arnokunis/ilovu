@@ -75,6 +75,7 @@ final class DailyQuestionService {
                 "answers":   [uid: trimmed],            // deep-merged: sets only MY key
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
+            AppAnalytics.log("daily_question_answered")
             log("saved answer \(dateKey) for \(uid)")
         } catch {
             log("ERROR saveAnswer \(dateKey): \(error.localizedDescription)")

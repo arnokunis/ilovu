@@ -139,7 +139,10 @@ struct NearYouView: View {
         }
         // Load the deck once on appear (real events via EventCache, or the
         // SampleEvents fallback). .task is cancelled automatically on disappear.
-        .task { await loadDeck() }
+        .task {
+            AppAnalytics.log("near_you_opened")
+            await loadDeck()
+        }
         // If location permission is granted AFTER the first load, or the couple
         // link completes mid-session, re-fetch — but only while the deck is still
         // untouched, so an active swipe session is never reset.

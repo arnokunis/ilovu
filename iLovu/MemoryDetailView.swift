@@ -84,6 +84,7 @@ struct MemoryDetailView: View {
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url])
         }
+        .onAppear { AppAnalytics.log("memory_viewed") }
     }
 
     // The growth feature: renders this memory into a branded, Story-shaped card

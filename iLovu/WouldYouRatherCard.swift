@@ -171,6 +171,7 @@ struct WouldYouRatherCard: View {
     private func choose(_ key: String) {
         guard !hasChosen else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        AppAnalytics.log("would_you_rather_answered")
 
         if let coupleId {
             withAnimation(LouvAnimation.spring) { mineChoice = key }

@@ -21,6 +21,11 @@
 //  the share sheet for a Memory's proof-photo card (MemoryDetailView). Measures
 //  how often couples share, the top of the organic-growth funnel.
 //
+//  Engagement events (added 2026-07-31 — what couples DO inside, beyond the
+//  acquisition funnel; the funnel alone couldn't answer "what do couples do most"):
+//    near_you_opened · daily_question_answered · would_you_rather_answered
+//    · bucket_list_added · memory_viewed
+//
 //  North-star: memory_completed (a real date happened). The live diagnostic
 //  for the pairing funnel is invite_created → invite_redeemed conversion.
 //
