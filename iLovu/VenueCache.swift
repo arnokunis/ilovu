@@ -38,6 +38,16 @@ struct VenueCache {
     /// background (stale-while-revalidate). ~7 days.
     private static let maxAge: TimeInterval = 7 * 24 * 60 * 60
 
+    /// How many document ids fit in one `whereField(FieldPath.documentID(), in:)`
+    /// query — Firestore's hard limit for an `in` filter. Raising it past 30 makes
+    /// the query throw, so chunk to it rather than tuning it.
+    private static let idQueryChunkSize = 30
+
+    /// Ceiling on simultaneous cacheWrite Cloud Function calls when caching a
+    /// freshly-resolved deck. The functions run with `maxInstances: 10`, so pushing
+    /// much beyond this just queues server-side while burning client sockets.
+    private static let maxConcurrentWrites = 8
+
     /// The places DECK pointer is served stale-while-revalidate after this long.
     /// Unlike events there's no date-TTL — venues don't expire by date; a deck
     /// just goes mildly stale as places open/close, so ~7 days is plenty.
@@ -182,6 +192,20 @@ struct VenueCache {
                                     serverTimestampFields: ["fetchedAt"])
     }
 
+    /// writeVenue with the deck's error policy folded in: returns the placeId on
+    /// success, nil on failure (logged). Lets the bounded write group collect
+    /// successes without a throwing task, keeping "one bad venue doesn't sink the
+    /// deck" exactly as it behaved when the writes ran in a serial loop.
+    private func tryWriteVenue(_ venue: CachedVenue, placeId: String) async -> String? {
+        do {
+            try await writeVenue(venue, placeId: placeId)   // reuse the venues/{placeId} truth layer
+            return placeId
+        } catch {
+            log("DECK write venue \(placeId): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func writeQuery(key: String, placeId: String, rawQuery: String) async throws {
         let pointer = VenueQuery(id: nil, placeId: placeId, rawQuery: rawQuery, resolvedAt: nil)
         try await cacheWriter.write(pointer, to: "venueQueries", docId: key,
@@ -249,17 +273,32 @@ struct VenueCache {
     /// and return the cached deck. [] on no curated results / error.
     @discardableResult
     private func resolveDeckAndCache(bucket: String, center: (lat: Double, lng: Double)) async -> [CachedVenue] {
+        // CONCURRENT, not one search after another. There are now seventeen search
+        // groups (food alone is split ten ways), so running them in sequence cost
+        // seventeen stacked network round trips on a cold bucket. Fanning them out
+        // makes the whole search phase cost about as long as its slowest single
+        // group. Billing is unchanged — same seventeen calls, just not queued.
+        //
+        // Order of arrival doesn't matter: rank() dedupes by placeId and sorts, and
+        // the resulting order is written ONCE to placeDeckQueries and then read by
+        // BOTH partners, so the shared deck sequence comes from the stored pointer
+        // rather than from whichever search happened to return first.
         var raw: [Place] = []
-        for group in PlaceCuration.searchGroups {
-            do {
-                log("BILLED Nearby search \(bucket) \(group.types) r=\(Int(group.radiusMeters))m")
-                let found = try await places.searchNearby(latitude: center.lat, longitude: center.lng,
-                                                          includedTypes: group.types, radiusMeters: group.radiusMeters)
-                raw.append(contentsOf: found)
-            } catch {
-                // One group failing (e.g. an unknown type) shouldn't sink the deck.
-                log("DECK group error \(group.types): \(error.localizedDescription)")
+        await withTaskGroup(of: [Place].self) { taskGroup in
+            for group in PlaceCuration.searchGroups {
+                taskGroup.addTask {
+                    do {
+                        self.log("BILLED Nearby search \(bucket) \(group.types) r=\(Int(group.radiusMeters))m")
+                        return try await self.places.searchNearby(latitude: center.lat, longitude: center.lng,
+                                                                  includedTypes: group.types, radiusMeters: group.radiusMeters)
+                    } catch {
+                        // One group failing (e.g. an unknown type) shouldn't sink the deck.
+                        self.log("DECK group error \(group.types): \(error.localizedDescription)")
+                        return []
+                    }
+                }
             }
+            for await found in taskGroup { raw.append(contentsOf: found) }
         }
 
         let ranked = PlaceCuration.rank(raw)
@@ -269,16 +308,36 @@ struct VenueCache {
             return []
         }
 
-        var ordered: [CachedVenue] = []
-        for item in ranked {
-            let venue = CachedVenue.from(item.place, category: item.verdict.category)
-            do {
-                try await writeVenue(venue, placeId: item.place.id)   // reuse the venues/{placeId} truth layer
-                ordered.append(venue)
-            } catch {
-                log("DECK write venue \(item.place.id): \(error.localizedDescription)")
+        // Write the venues concurrently but BOUNDED. Each write is a cacheWrite
+        // Cloud Function round trip (cache writes are CF-only), and a curated deck
+        // is now well over a hundred venues — serially that was minutes of cold
+        // load. Bounded rather than unbounded so a big deck doesn't fire a hundred
+        // simultaneous CF invocations, which would fight `maxInstances: 10` and
+        // just queue anyway.
+        let pending = ranked.map { (venue: CachedVenue.from($0.place, category: $0.verdict.category), id: $0.place.id) }
+        var writtenIds = Set<String>()
+
+        await withTaskGroup(of: String?.self) { group in
+            var next = 0
+            while next < min(Self.maxConcurrentWrites, pending.count) {
+                let item = pending[next]
+                group.addTask { await self.tryWriteVenue(item.venue, placeId: item.id) }
+                next += 1
+            }
+            // Keep the window full: each completion starts the next write.
+            while let finished = await group.next() {
+                if let id = finished { writtenIds.insert(id) }
+                if next < pending.count {
+                    let item = pending[next]
+                    group.addTask { await self.tryWriteVenue(item.venue, placeId: item.id) }
+                    next += 1
+                }
             }
         }
+
+        // Rebuild in RANKED order — writes finish out of order, and this ordering is
+        // what both partners then swipe (see loadVenuesInOrder).
+        let ordered = pending.filter { writtenIds.contains($0.id) }.map(\.venue)
         do { try await writePlaceDeck(key: bucket, placeIds: ordered.map(\.placeId)) }
         catch { log("DECK write pointer \(bucket): \(error.localizedDescription)") }
         log("DECK WROTE \(bucket) — \(ordered.count) venues")
@@ -292,12 +351,60 @@ struct VenueCache {
     /// Load the pointer's venues IN ORDER, dropping any missing or old-schema doc
     /// (loadVenue already treats an out-of-date schema as a miss — those re-resolve
     /// on the next deck refresh).
+    ///
+    /// BATCHED, not one id at a time. This is the WARM path — it runs on every
+    /// Near You open that hits a cached deck — and a deck is now well past a
+    /// hundred placeIds (ten split food searches). One getDocument() per id meant
+    /// that many SEQUENTIAL round trips before the first card could render, which
+    /// is what made a cached open take ~30s. Firestore takes 30 ids per
+    /// documentID() `in` query and the chunks run concurrently, so the same load
+    /// costs roughly ONE round trip. Identical billing (Firestore charges per
+    /// document read either way) — this is pure latency.
     private func loadVenuesInOrder(_ placeIds: [String]) async -> [CachedVenue] {
-        var result: [CachedVenue] = []
-        for id in placeIds {
-            if let venue = await loadVenue(id) { result.append(venue) }
+        guard !placeIds.isEmpty else { return [] }
+
+        let chunks = stride(from: 0, to: placeIds.count, by: Self.idQueryChunkSize).map {
+            Array(placeIds[$0 ..< min($0 + Self.idQueryChunkSize, placeIds.count)])
         }
-        return result
+
+        var byId: [String: CachedVenue] = [:]
+        await withTaskGroup(of: [(String, CachedVenue)].self) { group in
+            for chunk in chunks {
+                group.addTask { await self.loadVenues(ids: chunk) }
+            }
+            for await pairs in group {
+                for (id, venue) in pairs { byId[id] = venue }
+            }
+        }
+
+        // Reorder to the pointer's sequence. An `in` query returns documents in
+        // arbitrary order, and deck ORDER is precisely what keeps both partners
+        // swiping the same cards in the same places so their cardIds line up for
+        // matching — so this reorder is load-bearing, not cosmetic.
+        return placeIds.compactMap { byId[$0] }
+    }
+
+    /// One chunk of up to `idQueryChunkSize` ids in a single query, returned keyed
+    /// by document id. Same per-document semantics as loadVenue: a missing doc, an
+    /// undecodable doc, or one on an out-of-date schema is simply absent from the
+    /// result (and so re-resolves on the next deck refresh).
+    private func loadVenues(ids: [String]) async -> [(String, CachedVenue)] {
+        do {
+            let snap = try await db.collection("venues")
+                .whereField(FieldPath.documentID(), in: ids)
+                .getDocuments()
+            return snap.documents.compactMap { doc in
+                guard let venue = try? doc.data(as: CachedVenue.self) else { return nil }
+                guard venue.schemaVersion >= CachedVenue.currentSchemaVersion else {
+                    log("STALE SCHEMA \(doc.documentID) (v\(venue.schemaVersion)) — treating as miss")
+                    return nil
+                }
+                return (doc.documentID, venue)
+            }
+        } catch {
+            log("ERROR batch-reading \(ids.count) venues: \(error.localizedDescription)")
+            return []
+        }
     }
 
     private func loadPlaceDeck(_ key: String) async -> PlaceDeckQuery? {
