@@ -62,6 +62,23 @@ struct NearYouView: View {
     /// so it can never silently narrow a deck whose pill row isn't even showing.
     @State private var selectedCuisine: PlaceCuration.Cuisine? = nil
 
+    /// The filter pills for THIS deck, snapshotted when it loads.
+    ///
+    /// Deliberately NOT derived from `deck` on every render: completeSwipe REMOVES
+    /// each swiped card from `deck`, so a live-derived list made pills disappear
+    /// mid-session. Swipe the last steakhouse and the "Steak & Seafood" pill
+    /// vanished from under the user's finger, reflowing the row — and when the last
+    /// cuisine went, the whole second row collapsed and shifted the card stack up
+    /// into the tap, which is how tapping a pill could end up opening a card.
+    /// Small buckets (steak, burgers) hit this first, which is exactly where it was
+    /// reported.
+    ///
+    /// Snapshotting keeps the row stable for the session. A pill whose cards have
+    /// all been swiped simply shows the existing "that's everything" empty state —
+    /// the honest outcome, and one the user can tap straight back out of.
+    @State private var deckCategories: [LocalEvent.Category] = []
+    @State private var deckCuisines: [PlaceCuration.Cuisine] = []
+
     // Manual location search ("Search here" / plan a trip by typing a city).
     @State private var townQuery = ""
     @State private var isGeocoding = false
@@ -280,24 +297,38 @@ struct NearYouView: View {
             .scaleEffect(isTop ? 1.0 : 0.95)
             .rotationEffect(isTop ? .degrees(Double(dragOffset.width / 20)) : .degrees(-3))
             .offset(isTop ? dragOffset : .zero)
-            .gesture(dragGesture)
-            // Tap (with no significant drag) opens the event detail.
-            // DragGesture's default minimumDistance (10pt) means a real
-            // tap doesn't accidentally trigger the drag, and vice versa.
-            .onTapGesture {
-                eventToShow = event
-            }
+            // ONE gesture decides tap-vs-swipe, rather than a DragGesture and an
+            // .onTapGesture racing. As two independent recognizers they could both
+            // claim the same touch, so a quick flick sometimes swiped the card AND
+            // opened its detail sheet ("I swipe left and the image opens"). Deciding
+            // once in onEnded makes the two outcomes mutually exclusive.
+            .gesture(dragGesture(for: event))
             .allowsHitTesting(isTop)
     }
 
     // MARK: - Drag Gesture
 
-    private var dragGesture: some Gesture {
-        DragGesture()
+    /// Movement below this reads as a TAP (open the detail) rather than a drag.
+    /// Same 10pt as DragGesture's default minimumDistance, which is what used to
+    /// separate the two recognizers before they were merged into one.
+    private let tapSlop: CGFloat = 10
+
+    private func dragGesture(for event: LocalEvent) -> some Gesture {
+        // minimumDistance 0 so this gesture sees the whole touch — including one
+        // that turns out to be a tap. The card still doesn't MOVE until the touch
+        // passes tapSlop, so a tap looks exactly like a tap.
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
+                guard max(abs(value.translation.width), abs(value.translation.height)) > tapSlop else { return }
                 dragOffset = value.translation
             }
             .onEnded { value in
+                guard max(abs(value.translation.width), abs(value.translation.height)) > tapSlop else {
+                    // Never moved: a tap. Open the detail and swipe nothing.
+                    dragOffset = .zero
+                    eventToShow = event
+                    return
+                }
                 if value.translation.width > swipeThreshold {
                     completeSwipe(direction: .right)
                 } else if value.translation.width < -swipeThreshold {
@@ -394,7 +425,7 @@ struct NearYouView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     filterPill(label: "All", value: nil)
-                    ForEach(availableCategories, id: \.self) { category in
+                    ForEach(deckCategories, id: \.self) { category in
                         filterPill(label: category.rawValue, value: category)
                     }
                 }
@@ -404,11 +435,11 @@ struct NearYouView: View {
             // Cuisine sub-row — only under Food & Drink, which is the one category
             // big enough (ten split searches) that a single pill isn't enough to
             // navigate it. Other categories stay a single, uncluttered row.
-            if selectedCategory == .foodDrink, !availableCuisines.isEmpty {
+            if selectedCategory == .foodDrink, !deckCuisines.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         cuisinePill(label: "Any food", value: nil)
-                        ForEach(availableCuisines, id: \.self) { cuisine in
+                        ForEach(deckCuisines, id: \.self) { cuisine in
                             cuisinePill(label: cuisine.rawValue, value: cuisine)
                         }
                     }
@@ -419,21 +450,25 @@ struct NearYouView: View {
         }
     }
 
-    /// Only the categories actually present in the loaded deck, in a stable display
-    /// order — so a filter that can't have results never shows a dead pill. The
-    /// Places deck never produces `.music` (that's an events-only category, and
+    /// Only the categories actually present in a freshly-loaded deck, in a stable
+    /// display order — so a filter that can't have results never shows a dead pill.
+    /// The Places deck never produces `.music` (that's an events-only category, and
     /// events are dormant), so Music simply doesn't appear; ditto any category with
     /// nothing nearby in the current bucket.
-    private var availableCategories: [LocalEvent.Category] {
+    ///
+    /// Called ONCE per load, not per render — see deckCategories for why.
+    private static func categories(in deck: [LocalEvent]) -> [LocalEvent.Category] {
         let present = Set(deck.map(\.category))
         let order: [LocalEvent.Category] = [.music, .foodDrink, .arts, .outdoors, .trails, .nightlife]
         return order.filter(present.contains)
     }
 
-    /// Only the cuisines actually present among the deck's Food & Drink cards —
-    /// same "never show a dead pill" rule as availableCategories. Venues with a
+    /// Only the cuisines actually present among a freshly-loaded deck's Food & Drink
+    /// cards — same "never show a dead pill" rule as categories(in:). Venues with a
     /// generic or unmapped primaryType contribute no bucket (see PlaceCuration.Cuisine).
-    private var availableCuisines: [PlaceCuration.Cuisine] {
+    ///
+    /// Called ONCE per load, not per render — see deckCuisines for why.
+    private static func cuisines(in deck: [LocalEvent]) -> [PlaceCuration.Cuisine] {
         let present = Set(
             deck.lazy
                 .filter { $0.category == .foodDrink }
@@ -531,16 +566,20 @@ struct NearYouView: View {
             // always is; a late reload is already guarded by reloadIfUntouched().
             if swipedCount == 0 {
                 deck = events.isEmpty ? SampleEvents.all : events
+                // Snapshot the pills for this deck. From here they stay put for the
+                // session even as swiping empties `deck` — see deckCategories.
+                deckCategories = Self.categories(in: deck)
+                deckCuisines = Self.cuisines(in: deck)
                 // Drop a filter the new deck can't satisfy (its pill is now hidden),
                 // so the user never lands on an empty, un-deselectable category.
-                if let selectedCategory, !deck.contains(where: { $0.category == selectedCategory }) {
+                if let selectedCategory, !deckCategories.contains(selectedCategory) {
                     self.selectedCategory = nil
                     self.selectedCuisine = nil
                 }
                 // Same rule one level down: a new deck (new city) may have no
                 // Italian at all, and its pill is now gone — don't strand the user
                 // on an empty, un-deselectable cuisine.
-                if let selectedCuisine, !availableCuisines.contains(selectedCuisine) {
+                if let selectedCuisine, !deckCuisines.contains(selectedCuisine) {
                     self.selectedCuisine = nil
                 }
             }
@@ -700,6 +739,8 @@ struct NearYouView: View {
     private func reloadDeckForced() {
         swipedCount = 0
         deck = []
+        deckCategories = []
+        deckCuisines = []
         selectedCategory = nil
         selectedCuisine = nil
         isLoading = true

@@ -138,6 +138,12 @@ CORE_LINKS = [
     ("/fun-date-ideas", "Fun"),
 ]
 
+# Pages that have outgrown the listicle template and are now hand-authored in
+# site/ (they carry interactive tools, extra JSON-LD, or bespoke layout).
+# Their entries are kept below for reference, but regenerating them would
+# overwrite the hand-authored file — so build() skips these slugs.
+HAND_AUTHORED = {"couple-games"}
+
 DEFAULT_CTA_H2 = "Stop scrolling. Actually go."
 DEFAULT_CTA_P = ('iLovu turns "we should do something sometime" into your next real date &mdash; swipe date '
                  'ideas together, match on what you both love, and go. 190+ ideas and local spots for two.')
@@ -593,7 +599,11 @@ PAGES = [
 
 def build():
     written = []
+    skipped = []
     for p in PAGES:
+        if p["slug"] in HAND_AUTHORED:
+            skipped.append(p["slug"])
+            continue
         # Fill derived fields.
         p.setdefault("cta_h2", DEFAULT_CTA_H2)
         p.setdefault("cta_p", DEFAULT_CTA_P)
@@ -612,6 +622,10 @@ def build():
     print(f"Generated {len(written)} pages:")
     for s in written:
         print(f"  /{s}")
+    if skipped:
+        print(f"Skipped {len(skipped)} hand-authored page(s):")
+        for s in skipped:
+            print(f"  /{s} (edit site/{s}.html directly)")
 
 if __name__ == "__main__":
     build()
