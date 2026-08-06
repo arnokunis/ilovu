@@ -57,6 +57,11 @@ struct NearYouView: View {
 
     @State private var selectedCategory: LocalEvent.Category? = nil
 
+    /// Food & Drink sub-filter. Only reachable while Food & Drink is the selected
+    /// category, and cleared whenever the category changes or the deck reloads —
+    /// so it can never silently narrow a deck whose pill row isn't even showing.
+    @State private var selectedCuisine: PlaceCuration.Cuisine? = nil
+
     // Manual location search ("Search here" / plan a trip by typing a city).
     @State private var townQuery = ""
     @State private var isGeocoding = false
@@ -79,8 +84,14 @@ struct NearYouView: View {
     private let swipeThreshold: CGFloat = 120
 
     private var visibleDeck: [LocalEvent] {
-        guard let selectedCategory else { return deck }
-        return deck.filter { $0.category == selectedCategory }
+        var result = deck
+        if let selectedCategory {
+            result = result.filter { $0.category == selectedCategory }
+        }
+        if let selectedCuisine {
+            result = result.filter { PlaceCuration.cuisine(forPrimaryType: $0.primaryType) == selectedCuisine }
+        }
+        return result
     }
 
     // MARK: - Body
@@ -379,14 +390,32 @@ struct NearYouView: View {
     // MARK: - Filter Pills
 
     private var filterPills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                filterPill(label: "All", value: nil)
-                ForEach(availableCategories, id: \.self) { category in
-                    filterPill(label: category.rawValue, value: category)
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    filterPill(label: "All", value: nil)
+                    ForEach(availableCategories, id: \.self) { category in
+                        filterPill(label: category.rawValue, value: category)
+                    }
                 }
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
+
+            // Cuisine sub-row — only under Food & Drink, which is the one category
+            // big enough (ten split searches) that a single pill isn't enough to
+            // navigate it. Other categories stay a single, uncluttered row.
+            if selectedCategory == .foodDrink, !availableCuisines.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        cuisinePill(label: "Any food", value: nil)
+                        ForEach(availableCuisines, id: \.self) { cuisine in
+                            cuisinePill(label: cuisine.rawValue, value: cuisine)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
@@ -401,6 +430,18 @@ struct NearYouView: View {
         return order.filter(present.contains)
     }
 
+    /// Only the cuisines actually present among the deck's Food & Drink cards —
+    /// same "never show a dead pill" rule as availableCategories. Venues with a
+    /// generic or unmapped primaryType contribute no bucket (see PlaceCuration.Cuisine).
+    private var availableCuisines: [PlaceCuration.Cuisine] {
+        let present = Set(
+            deck.lazy
+                .filter { $0.category == .foodDrink }
+                .compactMap { PlaceCuration.cuisine(forPrimaryType: $0.primaryType) }
+        )
+        return PlaceCuration.cuisineDisplayOrder.filter(present.contains)
+    }
+
     @ViewBuilder
     private func filterPill(label: String, value: LocalEvent.Category?) -> some View {
         let isSelected = selectedCategory == value
@@ -408,6 +449,9 @@ struct NearYouView: View {
         Button {
             withAnimation(LouvAnimation.spring) {
                 selectedCategory = value
+                // Leaving Food & Drink hides the cuisine row, so drop any cuisine
+                // with it — otherwise an invisible filter keeps narrowing the deck.
+                if value != .foodDrink { selectedCuisine = nil }
             }
         } label: {
             Text(label)
@@ -420,6 +464,35 @@ struct NearYouView: View {
                         LouvGradient.coral
                     } else {
                         Color(white: 0.92)
+                    }
+                }
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The cuisine pill is deliberately a size down from the category pill (13pt,
+    /// tighter padding, flat coral instead of the gradient) so the two rows read as
+    /// filter → sub-filter rather than as two competing choices.
+    @ViewBuilder
+    private func cuisinePill(label: String, value: PlaceCuration.Cuisine?) -> some View {
+        let isSelected = selectedCuisine == value
+
+        Button {
+            withAnimation(LouvAnimation.spring) {
+                selectedCuisine = value
+            }
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isSelected ? .white : .gray)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 6)
+                .background {
+                    if isSelected {
+                        Color.louvCoral
+                    } else {
+                        Color(white: 0.95)
                     }
                 }
                 .clipShape(Capsule())
@@ -462,6 +535,13 @@ struct NearYouView: View {
                 // so the user never lands on an empty, un-deselectable category.
                 if let selectedCategory, !deck.contains(where: { $0.category == selectedCategory }) {
                     self.selectedCategory = nil
+                    self.selectedCuisine = nil
+                }
+                // Same rule one level down: a new deck (new city) may have no
+                // Italian at all, and its pill is now gone — don't strand the user
+                // on an empty, un-deselectable cuisine.
+                if let selectedCuisine, !availableCuisines.contains(selectedCuisine) {
+                    self.selectedCuisine = nil
                 }
             }
             isLoading = false
@@ -621,6 +701,7 @@ struct NearYouView: View {
         swipedCount = 0
         deck = []
         selectedCategory = nil
+        selectedCuisine = nil
         isLoading = true
         Task { await loadDeck() }
     }

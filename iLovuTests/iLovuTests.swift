@@ -131,3 +131,40 @@ struct CouplePartnerNameTests {
         #expect(c.partnerName(currentUid: "uidA") == nil)
     }
 }
+
+// The Food & Drink cuisine sub-filter. Pure type→bucket mapping, so it's testable
+// without Places, Firestore or a deck. The contract that matters for the UI: a
+// generic/unknown type maps to NO bucket (nil), which is a normal outcome — those
+// venues still show under All / Food & Drink, they just never claim a cuisine pill.
+struct PlaceCuisineTests {
+
+    @Test func mapsSpecificRestaurantTypesToBuckets() {
+        #expect(PlaceCuration.cuisine(forPrimaryType: "italian_restaurant") == .italian)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "pizza_restaurant") == .italian)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "sushi_restaurant") == .japanese)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "thai_restaurant") == .asian)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "greek_restaurant") == .mediterranean)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "steak_house") == .grill)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "coffee_shop") == .cafe)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "vegan_restaurant") == .veggie)
+    }
+
+    @Test func genericOrUnknownTypeClaimsNoBucket() {
+        // `restaurant` is deliberately unmapped — it says nothing about cuisine.
+        #expect(PlaceCuration.cuisine(forPrimaryType: "restaurant") == nil)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "some_future_google_type") == nil)
+        #expect(PlaceCuration.cuisine(forPrimaryType: "") == nil)
+        #expect(PlaceCuration.cuisine(forPrimaryType: nil) == nil)
+    }
+
+    @Test func matchesCaseInsensitively() {
+        #expect(PlaceCuration.cuisine(forPrimaryType: "Italian_Restaurant") == .italian)
+    }
+
+    @Test func displayOrderCoversEveryCuisine() {
+        // Pills render from cuisineDisplayOrder, so a case missing from it would be
+        // silently unreachable in the UI even when the deck contains it.
+        #expect(Set(PlaceCuration.cuisineDisplayOrder) == Set(PlaceCuration.Cuisine.allCases))
+        #expect(PlaceCuration.cuisineDisplayOrder.count == PlaceCuration.Cuisine.allCases.count)
+    }
+}

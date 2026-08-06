@@ -66,6 +66,13 @@ struct LocalEvent: Identifiable, Equatable {
     // mixed (.both) deck is correct per-card with no extra plumbing.
     let sourceDeck: Deck?
 
+    // The raw Google primary type ("italian_restaurant", "coffee_shop") for a
+    // .places card — the signal behind the Food & Drink cuisine sub-filter.
+    // Kept RAW rather than pre-bucketed so this stays a plain model with no
+    // dependency on PlaceCuration; callers map it via PlaceCuration.cuisine(...).
+    // nil for sample cards and Ticketmaster events, which have no Places type.
+    let primaryType: String?
+
     // MARK: - Init
 
     init(
@@ -88,7 +95,8 @@ struct LocalEvent: Identifiable, Equatable {
         bookingURL: String? = nil,
         startDate: Date? = nil,
         ticketURLBase: String? = nil,
-        sourceDeck: Deck? = nil
+        sourceDeck: Deck? = nil,
+        primaryType: String? = nil
     ) {
         self.id              = id
         self.cardId          = cardId ?? Self.slug(title)
@@ -110,6 +118,7 @@ struct LocalEvent: Identifiable, Equatable {
         self.startDate       = startDate
         self.ticketURLBase   = ticketURLBase
         self.sourceDeck      = sourceDeck
+        self.primaryType     = primaryType
     }
 
     /// Deterministic lowercase, hyphenated slug of a title — identical on both

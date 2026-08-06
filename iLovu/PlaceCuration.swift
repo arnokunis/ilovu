@@ -157,6 +157,90 @@ enum PlaceCuration {
         }
     }
 
+    // MARK: - Cuisine (the Food & Drink sub-filter)
+
+    /// A coarse cuisine bucket for the Food & Drink deck. Derived from the raw
+    /// Google primary type we ALREADY cache on every venue
+    /// (`CachedVenue.primaryType`), so the whole sub-filter is free: no new
+    /// Places field, no re-fetch, no schema/curation version bump, no extra bill.
+    ///
+    /// Buckets GROUP the ten split food searches in `searchGroups` rather than
+    /// mirroring them 1:1 — a row of ten single-cuisine pills is unusable on a
+    /// phone, and several searches (french/spanish, mexican/brazilian) return too
+    /// few venues per city to deserve a pill of their own.
+    ///
+    /// A venue whose primaryType is generic (`restaurant`) or unmapped belongs to
+    /// NO bucket: it still shows under All / Food & Drink, it just never claims a
+    /// cuisine pill. Deliberate — an "Other" pill would be a junk drawer, and
+    /// since pills are derived from what's actually in the deck, an empty bucket
+    /// never renders at all.
+    enum Cuisine: String, CaseIterable, Identifiable {
+        case italian       = "Italian & Pizza"
+        case japanese      = "Sushi & Japanese"
+        case asian         = "Asian"
+        case mediterranean = "Mediterranean"
+        case frenchSpanish = "French & Spanish"
+        case grill         = "Steak & Seafood"
+        case latin         = "Latin"
+        case american      = "Burgers & American"
+        case cafe          = "Cafés & Bakeries"
+        case veggie        = "Veggie & Brunch"
+
+        var id: String { rawValue }
+    }
+
+    /// The cuisine bucket for a venue's raw Google primary type, or nil when the
+    /// type is generic/unmapped (see the Cuisine doc — nil is a normal outcome,
+    /// not a failure).
+    static func cuisine(forPrimaryType type: String?) -> Cuisine? {
+        guard let type, !type.isEmpty else { return nil }
+        return cuisineByType[type.lowercased()]
+    }
+
+    /// Display order for the cuisine pills — most date-shaped first, so the pills
+    /// a couple most likely wants are reachable without scrolling the row.
+    static let cuisineDisplayOrder: [Cuisine] = [
+        .italian, .japanese, .asian, .mediterranean, .frenchSpanish,
+        .grill, .latin, .american, .cafe, .veggie
+    ]
+
+    private static let cuisineByType: [String: Cuisine] = [
+        "pizza_restaurant":         .italian,
+        "italian_restaurant":       .italian,
+        "sushi_restaurant":         .japanese,
+        "japanese_restaurant":      .japanese,
+        "ramen_restaurant":         .japanese,
+        "thai_restaurant":          .asian,
+        "indian_restaurant":        .asian,
+        "chinese_restaurant":       .asian,
+        "korean_restaurant":        .asian,
+        "vietnamese_restaurant":    .asian,
+        "indonesian_restaurant":    .asian,
+        "turkish_restaurant":       .mediterranean,
+        "middle_eastern_restaurant":.mediterranean,
+        "mediterranean_restaurant": .mediterranean,
+        "greek_restaurant":         .mediterranean,
+        "lebanese_restaurant":      .mediterranean,
+        "french_restaurant":        .frenchSpanish,
+        "spanish_restaurant":       .frenchSpanish,
+        "steak_house":              .grill,
+        "seafood_restaurant":       .grill,
+        "barbecue_restaurant":      .grill,
+        "mexican_restaurant":       .latin,
+        "brazilian_restaurant":     .latin,
+        "hamburger_restaurant":     .american,
+        "american_restaurant":      .american,
+        "sandwich_shop":            .american,
+        "cafe":                     .cafe,
+        "coffee_shop":              .cafe,
+        "bakery":                   .cafe,
+        "ice_cream_shop":           .cafe,
+        "vegan_restaurant":         .veggie,
+        "vegetarian_restaurant":    .veggie,
+        "brunch_restaurant":        .veggie,
+        "breakfast_restaurant":     .veggie
+    ]
+
     // MARK: - Category + scoring tables
 
     /// type -> (deck category, base score). Higher base = more inherently

@@ -188,7 +188,8 @@ extension CachedVenue {
             openingHours:  openingHoursWeekday?.first,
             photos:        firstPhotoURL.map { [$0] } ?? [],   // hero image for the card
             bookingURL:    googleMapsUri ?? websiteUri,   // "Book Now" -> Maps/site (never Ticketmaster-wrapped)
-            sourceDeck:    .places
+            sourceDeck:    .places,
+            primaryType:   primaryType                    // feeds the cuisine sub-filter
         )
     }
 
