@@ -264,15 +264,18 @@ struct VenueCache {
             log("DECK MISS \(bucket) — no pointer")
         }
 
-        let resolved = await resolveDeckAndCache(bucket: bucket, center: center)
+        // Cards come back as soon as the SEARCHES finish. Persisting them is a
+        // separate, unawaited phase — see persistDeck for why that's safe.
+        let resolved = await searchAndRank(bucket: bucket, center: center)
+        persistInBackground(bucket: bucket, venues: resolved)
         return resolved.map { $0.asLocalEvent(firstPhotoURL: $0.photoURLStrings(using: places, limit: 1).first) }
     }
 
-    /// Fan out grouped Nearby searches (for category variety), curate + rank,
-    /// write each venues/{placeId} + the ordered placeDeckQueries/{bucket} pointer,
-    /// and return the cached deck. [] on no curated results / error.
-    @discardableResult
-    private func resolveDeckAndCache(bucket: String, center: (lat: Double, lng: Double)) async -> [CachedVenue] {
+    /// Fan out grouped Nearby searches (for category variety), then curate + rank
+    /// into the deck order. Pure network + in-memory work: NOTHING here touches
+    /// Firestore, so it's everything the UI needs to draw a card and nothing it
+    /// doesn't. [] on no curated results / error.
+    private func searchAndRank(bucket: String, center: (lat: Double, lng: Double)) async -> [CachedVenue] {
         // CONCURRENT, not one search after another. There are now seventeen search
         // groups (food alone is split ten ways), so running them in sequence cost
         // seventeen stacked network round trips on a cold bucket. Fanning them out
@@ -302,19 +305,37 @@ struct VenueCache {
         }
 
         let ranked = PlaceCuration.rank(raw)
-        guard !ranked.isEmpty else {
+        log("DECK resolved \(bucket) — \(ranked.count) curated venues")
+        return ranked.map { CachedVenue.from($0.place, category: $0.verdict.category) }
+    }
+
+    /// Cache a freshly-resolved deck WITHOUT making anyone wait for it: each venue
+    /// doc, then the ordered pointer.
+    ///
+    /// Unawaited on the read path on purpose. By the time this is called the cards
+    /// are already in memory and on screen — these writes exist only to make the
+    /// NEXT open (and the partner's first open) a cache hit. Blocking the deck on
+    /// them meant staring at a spinner through a hundred-plus Cloud Function round
+    /// trips for zero visible benefit.
+    ///
+    /// The pointer is written LAST, and that ordering is what makes an interrupted
+    /// run safe: no pointer means the next open is a clean MISS and re-resolves. If
+    /// the pointer were written first, an interruption would leave it referencing
+    /// venue docs that were never written, and loadVenuesInOrder would then serve a
+    /// silently truncated deck as a HIT.
+    private func persistDeck(bucket: String, venues: [CachedVenue]) async {
+        guard !venues.isEmpty else {
             log("DECK no curated venues for \(bucket)")
             try? await writePlaceDeck(key: bucket, placeIds: [])   // record empty so we don't re-search every open
-            return []
+            return
         }
 
         // Write the venues concurrently but BOUNDED. Each write is a cacheWrite
         // Cloud Function round trip (cache writes are CF-only), and a curated deck
-        // is now well over a hundred venues — serially that was minutes of cold
-        // load. Bounded rather than unbounded so a big deck doesn't fire a hundred
-        // simultaneous CF invocations, which would fight `maxInstances: 10` and
-        // just queue anyway.
-        let pending = ranked.map { (venue: CachedVenue.from($0.place, category: $0.verdict.category), id: $0.place.id) }
+        // is now well over a hundred venues. Bounded rather than unbounded so a big
+        // deck doesn't fire a hundred simultaneous CF invocations, which would
+        // fight `maxInstances: 10` and just queue anyway.
+        let pending = venues.map { (venue: $0, id: $0.placeId) }
         var writtenIds = Set<String>()
 
         await withTaskGroup(of: String?.self) { group in
@@ -337,15 +358,25 @@ struct VenueCache {
 
         // Rebuild in RANKED order — writes finish out of order, and this ordering is
         // what both partners then swipe (see loadVenuesInOrder).
-        let ordered = pending.filter { writtenIds.contains($0.id) }.map(\.venue)
-        do { try await writePlaceDeck(key: bucket, placeIds: ordered.map(\.placeId)) }
+        let orderedIds = pending.filter { writtenIds.contains($0.id) }.map(\.id)
+        do { try await writePlaceDeck(key: bucket, placeIds: orderedIds) }
         catch { log("DECK write pointer \(bucket): \(error.localizedDescription)") }
-        log("DECK WROTE \(bucket) — \(ordered.count) venues")
-        return ordered
+        log("DECK WROTE \(bucket) — \(orderedIds.count) venues")
+    }
+
+    /// Kick off persistence without joining it to the caller's lifetime. Deliberately
+    /// an unstructured Task: the caller is a view load that finishes the moment the
+    /// cards are handed over, and cancelling the cache write along with it would
+    /// leave the bucket uncached and re-search on every single open.
+    private func persistInBackground(bucket: String, venues: [CachedVenue]) {
+        Task { await persistDeck(bucket: bucket, venues: venues) }
     }
 
     private func revalidateDeck(bucket: String, center: (lat: Double, lng: Double)) {
-        Task { _ = await resolveDeckAndCache(bucket: bucket, center: center) }
+        Task {
+            let venues = await searchAndRank(bucket: bucket, center: center)
+            await persistDeck(bucket: bucket, venues: venues)
+        }
     }
 
     /// Load the pointer's venues IN ORDER, dropping any missing or old-schema doc
