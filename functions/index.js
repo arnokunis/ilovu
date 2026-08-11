@@ -144,7 +144,14 @@ exports.redeemInvite = onCall(async (request) => {
   // tries/hour, brute-forcing 33.5M combos takes centuries per account.
   const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
   const RATE_LIMIT_MAX_FAILED = 10;
-  const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  // 7 -> 30 days (2026-08-11). The expiry was never what made 5-char codes safe:
+  // the RATE LIMIT is. At 10 failed tries/hour a 30-day window allows ~7,200
+  // attempts against 32^5 (~33.5M) combinations — a 0.02% chance of landing one,
+  // so the security posture is essentially unchanged. What 7 days DID do was kill
+  // invites for partners who were simply busy for a week, silently, with the
+  // creator never told. See sendInviteNudges below, which now nudges at day 7
+  // instead — the same signal, as a reminder rather than a death.
+  const INVITE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   // redeemAttempts/{uid} — server-only bookkeeping (no rules grant client
   // access): { count, windowStart }. Best-effort, not transactional — a racing
@@ -970,4 +977,94 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
 exports.sendDateReminders = onSchedule(
   { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
   async () => { await runDateReminders(); },
+);
+
+// ---------------------------------------------------------------------------
+// sendInviteNudges — tell the CREATOR their invitation is still unopened.
+//
+// Why this exists: invite_redeemed has sat at 3 all-time while invites kept
+// being created (21 invites from 15 users, with visible retry behaviour). The
+// redeemer always got a clear error, but the CREATOR — the only person who can
+// actually do something, i.e. resend — was never told anything at all. They sent
+// a link, nobody joined, and they could not tell "ignored" from "expired".
+//
+// Pairs with the expiry change above: invites now live 30 days instead of 7, and
+// day 7 became this nudge. Same signal, as a reminder rather than a silent death.
+//
+// Brand rule (see CLAUDE.md): warm, never guilt- or time-pressure-framed. This
+// nudges the SENDER about their own invite; it never implies the partner is
+// ignoring them.
+const INVITE_NUDGE_AFTER_DAYS = 7;
+
+async function runInviteNudges() {
+  // Every function in this file takes its own handle — there is no module-level
+  // `db`, and referencing one would only fail at runtime (node --check passes).
+  const db = admin.firestore();
+  const cutoff = admin.firestore.Timestamp.fromMillis(
+      Date.now() - INVITE_NUDGE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+
+  // Pending invites older than the nudge threshold. Admin SDK bypasses the
+  // creator-only read rule, which is why this can only live server-side.
+  const snap = await db.collection("invites")
+      .where("status", "==", "pending")
+      .where("createdAt", "<=", cutoff)
+      .get();
+
+  const summary = { pendingStale: snap.size, nudged: 0, noToken: 0, alreadyPaired: 0, skipped: 0 };
+
+  for (const doc of snap.docs) {
+    const invite = doc.data();
+    if (invite.creatorNudgedAt) { summary.skipped++; continue; }   // once only
+
+    // Never nudge someone who has since paired — they may have created several
+    // invites and only needed one to land.
+    const couples = await db.collection("couples")
+        .where("members", "array-contains", invite.creatorId)
+        .limit(1)
+        .get();
+    if (!couples.empty) { summary.alreadyPaired++; continue; }
+
+    const token = invite.creatorFcmToken;
+    if (!token) { summary.noToken++; continue; }   // never granted push
+
+    try {
+      await admin.messaging().send({
+        token,
+        notification: {
+          title: "Your invitation is still waiting 💌",
+          body: "It hasn't been opened yet. Want to send it again?",
+        },
+      });
+      await doc.ref.update({ creatorNudgedAt: admin.firestore.FieldValue.serverTimestamp() });
+      summary.nudged++;
+    } catch (e) {
+      // Stale/unregistered token: drop it so we stop retrying this invite, and
+      // stamp it so the invite isn't re-picked every day. Same policy as
+      // onMatchCreated's stale-token cleanup.
+      const code = e && e.errorInfo && e.errorInfo.code;
+      if (code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-argument") {
+        await doc.ref.update({
+          creatorFcmToken: admin.firestore.FieldValue.delete(),
+          creatorNudgedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      summary.noToken++;
+    }
+  }
+
+  // Logged deliberately: this line is also the ONLY visibility we have into how
+  // many invites sit unredeemed, since Firestore is not readable from the dev
+  // machine (the ADC collision documented in CLAUDE.md).
+  console.log(`runInviteNudges: ${JSON.stringify(summary)}`);
+  return summary;
+}
+
+// NOTE: single-zone schedule, same caveat as sendDateReminders — REMINDER_TZ is
+// Europe/Vilnius, so a creator abroad gets this at an odd local hour. Far less
+// harmful than a date reminder (it is not time-critical), but it goes away with
+// the per-couple timezone fix.
+exports.sendInviteNudges = onSchedule(
+  { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
+  async () => { await runInviteNudges(); },
 );

@@ -208,8 +208,12 @@ final class CoupleService {
     /// document ID) to share. The token IS the secret — the rules let any signed-in
     /// user read an invite *if they know its id* — so never log it or expose it
     /// anywhere public; hand it straight to a share sheet / deep link.
+    /// `source` splits the funnel by WHERE the invite was created — the pairing
+    /// screen versus a planned mission. The two asks are very different ("install
+    /// my app" vs "come to this on Saturday"), and `invite_redeemed` has been
+    /// stuck at 3 all-time, so which one converts is the question worth answering.
     @discardableResult
-    func createInvite() async throws -> String {
+    func createInvite(source: String = "pairing_screen") async throws -> String {
         guard let uid = Auth.auth().currentUser?.uid else { throw InviteError.notSignedIn }
 
         let token = Self.makeToken()
@@ -225,7 +229,7 @@ final class CoupleService {
         if let fcm = pendingFCMToken { data["creatorFcmToken"] = fcm }
         try await db.collection("invites").document(token).setData(data)
         activeInviteToken = token
-        AppAnalytics.log("invite_created")
+        AppAnalytics.log("invite_created", ["source": source])
         return token
     }
 
@@ -255,9 +259,12 @@ final class CoupleService {
             coupleId = id
             members = mems
         } catch let error as InviteError {
+            Self.logRedeemFailure(error)
             throw error
         } catch {
-            throw Self.mapRedeemError(error)
+            let mapped = Self.mapRedeemError(error)
+            Self.logRedeemFailure(mapped)
+            throw mapped
         }
 
         // Publish the new couple locally right away — this lets the redeemer's app
@@ -282,6 +289,27 @@ final class CoupleService {
     /// distinguishes "already used" from "your own invite" (the HttpsError code
     /// alone can't). Unknown / transport errors are returned unchanged so a network
     /// blip doesn't masquerade as "invalid invite".
+    /// Records WHY a redemption failed.
+    ///
+    /// Until now `invite_redeemed` fired only on success and nothing fired on any
+    /// failure path — so "the partner never tried" and "the partner tried and it
+    /// broke" looked identical in GA4: a created invite with no redemption. Those
+    /// have opposite fixes (persuasion vs mechanics), and with `invite_redeemed`
+    /// stuck at 3 all-time we could only guess which we had.
+    private static func logRedeemFailure(_ error: Error) {
+        let reason: String
+        switch error {
+        case InviteError.inviteExpired:         reason = "expired"
+        case InviteError.alreadyConsumed:       reason = "already_consumed"
+        case InviteError.inviteNotFound:        reason = "not_found"
+        case InviteError.cannotRedeemOwnInvite: reason = "own_invite"
+        case InviteError.tooManyAttempts:       reason = "rate_limited"
+        case InviteError.notSignedIn:           reason = "not_signed_in"
+        default:                                reason = "other"
+        }
+        AppAnalytics.log("invite_redeem_failed", ["reason": reason])
+    }
+
     private static func mapRedeemError(_ error: Error) -> Error {
         let ns = error as NSError
         guard ns.domain == FunctionsErrorDomain else { return error }
@@ -862,6 +890,69 @@ final class CoupleService {
     /// for everyone (opens the app if installed, the landing page if not).
     nonisolated static func inviteWebURL(token: String) -> URL {
         URL(string: "https://\(universalLinkHost)/\(inviteURLHost)/\(token)")!
+    }
+
+    /// The same invite link, carrying the PLAN so the landing page can show the
+    /// date someone actually made rather than a generic "You're invited".
+    ///
+    /// The plan travels in the URL because `invite.html` is a static page and
+    /// cannot read Firestore without auth. Params are deliberately optional and
+    /// ignored by the app's own link parser (`inviteToken(from:)` reads only the
+    /// path), so an older build and the plain link both keep working.
+    ///
+    /// Kept short — `p` plan, `w` when (ISO day), `n` sender's first name, `e`
+    /// emoji — because the whole thing appears inside a text message. Nothing
+    /// sensitive should ever be added here: links get forwarded, logged and
+    /// previewed by messaging apps.
+    nonisolated static func missionInviteWebURL(token: String,
+                                                planTitle: String,
+                                                emoji: String?,
+                                                when: Date?,
+                                                senderName: String?) -> URL {
+        var components = URLComponents(url: inviteWebURL(token: token),
+                                       resolvingAgainstBaseURL: false)!
+        var items = [URLQueryItem(name: "p", value: planTitle)]
+        if let emoji, !emoji.isEmpty { items.append(URLQueryItem(name: "e", value: emoji)) }
+        if let when {
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            fmt.dateFormat = "yyyy-MM-dd"
+            items.append(URLQueryItem(name: "w", value: fmt.string(from: when)))
+        }
+        if let senderName, !senderName.isEmpty {
+            items.append(URLQueryItem(name: "n", value: senderName))
+        }
+        components.queryItems = items
+        return components.url ?? inviteWebURL(token: token)
+    }
+
+    /// Invite text sent FROM a planned mission. The generic invite is "install my
+    /// app" — abstract, no urgency, and plausibly why so few onboarded users ever
+    /// send one. This one is "I want to take you to this on Saturday": the
+    /// recipient reads a real plan in their messages before tapping anything.
+    nonisolated static func missionInviteShareMessage(token: String,
+                                                      planTitle: String,
+                                                      emoji: String?,
+                                                      when: Date?,
+                                                      senderName: String?) -> String {
+        let url = missionInviteWebURL(token: token,
+                                      planTitle: planTitle,
+                                      emoji: emoji,
+                                      when: when,
+                                      senderName: senderName)
+        let opener: String
+        if let when {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "EEEE"          // "Saturday"
+            opener = "I've planned \(planTitle) for \(fmt.string(from: when)) 💕"
+        } else {
+            opener = "I've planned \(planTitle) for us 💕"
+        }
+        return """
+        \(opener)
+        Open your invitation: \(url.absoluteString)
+        Your code: \(formatInviteCode(token))
+        """
     }
 
     /// Extracts the token from an incoming invite link, or nil if `url` isn't

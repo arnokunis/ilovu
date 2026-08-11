@@ -43,6 +43,14 @@ struct MissionDetailView: View {
     // The home-screen Spark Score. Marking a mission complete bumps it.
     @AppStorage("sparkScore") private var sparkScore: Int = 2
 
+    // The user's own name, so the invitation can say who planned it.
+    @AppStorage("userName") private var userName: String = ""
+
+    // Invite-from-mission state. The token is minted lazily on first tap.
+    @State private var missionInviteToken: String? = nil
+    @State private var isCreatingInvite = false
+    @State private var inviteError: String? = nil
+
     // Local editable copy of the mission. We mutate this in-memory and
     // mirror changes back to the store via .onChange — that keeps the
     // store the single source of truth without needing a Binding here.
@@ -84,6 +92,7 @@ struct MissionDetailView: View {
                     scheduleCard
                     budgetCard
                     checklistCard
+                    invitePartnerCard
                     calendarButton
                     completeButton
                     deleteButton
@@ -498,6 +507,91 @@ struct MissionDetailView: View {
     // A quiet, destructive text button — deliberately understated so it never
     // competes with "Date completed". Removing a planned date drops it off BOTH
     // partners' dashboards (MissionStore.delete → remoteDelete). Confirmed first.
+    /// Unpaired-only: invite the partner FROM the plan, carrying it.
+    ///
+    /// The generic invite is "install my app" — abstract, no urgency. From here
+    /// it is "I've planned this for Saturday", and the recipient reads that in
+    /// their messages before tapping anything. `invite_redeemed` has sat at 3
+    /// all-time while invites kept being created, so the ASK is the suspect.
+    /// Vanishes once paired — there is nobody left to invite.
+    @ViewBuilder
+    private var invitePartnerCard: some View {
+        if coupleService.coupleId == nil {
+            VStack(spacing: 10) {
+                Text("Going with someone?")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.deepRose)
+
+                Text("Send them this plan — they'll see the date you made before they even install.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .multilineTextAlignment(.center)
+
+                if let token = missionInviteToken {
+                    ShareLink(
+                        item: CoupleService.missionInviteShareMessage(
+                            token: token,
+                            planTitle: mission.card.title,
+                            emoji: mission.card.emoji,
+                            when: mission.scheduledDate,
+                            senderName: userName.isEmpty ? nil : userName
+                        ),
+                        subject: Text("I've planned something for us 💕")
+                    ) {
+                        inviteLabel("Send the invitation", systemImage: "square.and.arrow.up")
+                    }
+                } else {
+                    Button {
+                        Task { await createMissionInvite() }
+                    } label: {
+                        inviteLabel(isCreatingInvite ? "Preparing…" : "Invite them to this",
+                                    systemImage: "envelope")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isCreatingInvite)
+                }
+
+                if let inviteError {
+                    Text(inviteError)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.passRed)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .louvShadow()
+        }
+    }
+
+    private func inviteLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+            Text(title).font(.system(size: 15, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(LouvGradient.coral)
+        .clipShape(Capsule())
+    }
+
+    /// Creates the invite lazily — only when they actually ask to invite, so we
+    /// never mint tokens for every mission opened. Tagged `mission` so the funnel
+    /// can compare this ask against the pairing screen's.
+    private func createMissionInvite() async {
+        isCreatingInvite = true
+        inviteError = nil
+        do {
+            missionInviteToken = try await coupleService.createInvite(source: "mission")
+        } catch {
+            inviteError = "Couldn't create the invitation just now — try again."
+        }
+        isCreatingInvite = false
+    }
+
     private var deleteButton: some View {
         Button(role: .destructive) {
             showDeleteConfirm = true
