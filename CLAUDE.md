@@ -9,6 +9,11 @@ Project context for Claude Code sessions. Read this first.
 **iLovu is LIVE on the App Store** as of ~July 11 2026: https://apps.apple.com/app/id6781237573 — **post-launch phase, NOT pre-launch.** Any "pre-launch" framing below is historical (the hardening sprint etc. happened before launch); read it as done-before-launch, not still-pending-for-launch.
 
 - **⬅ BEFORE THE NEXT SHIP: read "Solo-first funnel fix (PROPOSED)" near the bottom.** A structural alternative to patching the sign-in and pairing leaks one at a time — it attacks the reason both leaks exist (a signed-in user has nowhere to store anything until pairing). Not locked; decide deliberately.
+- **⬅ START HERE BEFORE ANYTHING: read "ASA WORLDWIDE + 1.1.0 PLAN (2026-08-11)" near the bottom.** ASA went worldwide 2026-08-08 and blended CPI is now ~€0.50 (the ~€2.6 figure below is OBSOLETE). It carries the worldwide-cohort funnel (sign-in leak 45% → 15%), **four measurement bugs that make current numbers partly fog**, the **`Bool.random()` fake match shipping to production**, proof that **solo users already plan Missions**, the €0.50 unit economics (break-even = 1.3% install→paid, blocked ONLY by the per-couple paywall), and the build plan. **1.0.8 (branch `solo-paywall-1.0.8`) is BUILT**: the paywall is now
+reachable solo via two triggers (2nd Mission, and a remotely tunable 20/day swipe cap),
+and the `Bool.random()` fake match is deleted. The payments stack was audited end-to-end
+and is GREEN — €0 was never a payments bug. It supersedes the sequencing plan below.
+- **⬅ ALSO BEFORE THE NEXT BUILD: read "Retention playbook — Flame audit (2026-08-08)" near the bottom.** The daily-question TRIGGER (carrot/stick push) is now a decided build item, plus three iLovu-native retention mechanics and a fresh paired-couple count (3: AU/LT/UK).
 - **1.0.6 SUBMITTED (build 11, 2026-07-30) — LATEST; a funnel-fix batch driven by an all-time GA4 read (see ALL-TIME FUNNEL ANALYSIS below).** Attacks the two biggest leaks the data exposed. **Sign-in leak (~45% of installs never sign in):** a "Free to start — signing in never charges you" reassurance line (a real tester feared Apple sign-in would CHARGE her) + a public **Email sign-up/sign-in** alongside Apple (`AppleSignInViewModel.createAccount` / `signInEmail` / `sendPasswordReset`; stable numeric FIRAuthErrorCode mapping; the email sheet forces `.preferredColorScheme(.light)` so placeholders + the segmented toggle aren't white-on-white in dark mode). **Pairing leak (~70% never invite):** a prominent **unpaired-only "invite your partner" card on the Home dashboard** (was buried in the Us tab) — opens the same `PairingView`, vanishes once paired. **Notifications:** the invite REDEEMER is now asked for permission at redeem (only the creator was → redeemers had NO FCM token → zero pushes + the "nudge didn't send" bug); a **Notifications enable/status row in the Us tab** (request / re-register token / open Settings + a confirmation alert); copy now names the special-date reminders and says ONE grant activates ALL push types. **Data-isolation fix:** signing in as a DIFFERENT account (now possible via email) had account B inheriting A's name/missions/memories/couple, because sign-out never cleared the device-local stores — `handleAuthChange` at the app root now resets the in-memory stores + `removePersistentDomain` on a uid change (sign-out itself doesn't wipe, so signing back in as yourself keeps your data). **Fix 1 (explore-before-sign-in) DEFERRED until 1.0.6 stats land** — the structural 45%-leak fix; touches the locked auth-upfront decision, so decide with data, not blind.
 - **1.0.5 SHIPPED (build 10, submitted 2026-07-28) — prior release.** The post-1.0.4 Near You polish batch (all found via on-device testing of 1.0.4's new search): **city-search keyboard fix** (the inline `TextField` keyboard shoved the deck layout up and hid the search box → moved to a native `.alert` text field), **popularity ranking** (`curationVersion 3→4` — busier/more-reviewed venues rank higher via a log-scaled capped `popularityBoost`), **all cached venue photos** shown (was 4 of ~10), and **dynamic filter pills** (the always-empty Music pill is gone — pills now derive from categories actually in the deck). App Store "What's New" framed as Near You improvements. Details in the "Near You polish batch" decision. **1.0.4 is live**, so this shipped as a new version (not a build-9 replacement).
 - **1.0.4 RELEASED (build 9, 2026-07-28) — prior live version.** Contents: **Near You travel fix** (distance-gated re-anchor >20km, ignores the 12h debounce — fixes "drove 60km, still loading the old town"; `hasFix`-gated so it never anchors to the London fallback), **"Search here" + plan-a-trip city search** (free on-device `CLGeocoder` → shared couple anchor `eventLocationManual`/`eventLocationLabel`, so both partners plan+match a trip destination), **delete a mission** (drops the planned date off both dashboards; `missions` delete opened to couple members in rules — memories stay delete-locked), the **`reached_pairing_screen` analytics event** (splits the download→invite_created leak into "reached pairing" vs "created invite once there"), and the **RevenueCat identity fix** (`Purchases.logIn(uid)` so the `revenueCatWebhook` — deployed 2026-07-27 — can resolve the couple for authoritative grant/revoke). App Store description updated (added the plan-a-trip/city-search lines). **Two-phone test of the Near You search + a sandbox buy/revoke webhook test are the outstanding on-device checks.** Details in the Near You / RevenueCat / Analytics decisions below.
@@ -111,7 +116,10 @@ couples/{coupleId}/memories/{memoryId}   // DONE — synced via MemoryService; M
   dateCompleted, cardTitle, cardEmoji, storagePath, rating, note, createdBy, schemaVersion, createdAt
   // photo BYTES live in Cloud Storage (couples/{coupleId}/memories/{memoryId}.jpg), NEVER in the doc
 couples/{coupleId}/dailyAnswers/{dayKey} // DailyQuestionService — Daily Question sync (committed c28201b; rules deployed)
-  answers: { uid: text }, questionId, updatedAt  // each writes ONLY own uid key; answer-to-unlock reveal, passive listener
+  answers: { uid: text }, question, dateKey, updatedAt  // each writes ONLY own uid key; answer-to-unlock reveal, passive listener
+  // NOTE: `question` is the QUESTION TEXT snapshotted as asked that day (DailyQuestionService.swift:38)
+  // — there is NO questionId/index field (this line used to claim one; corrected 2026-08-08).
+  // Consequence: the question bank can be grown/reordered/re-themed with ZERO migration.
 
 invites/{token}                          // Invite.swift — doc ID IS the token (5-char code, single-use)
   creatorId, status ("pending"|"consumed"), consumedBy (null until redeemed), createdAt
@@ -368,6 +376,698 @@ Three changes are now on the table: solo-first, the 14-day trial, and a usage ca
 **Whether to wait for 1.0.6 numbers before starting depends on a fact we do not have yet: is Apple Search Ads still spending?** Installs fell from ~7/day (Jul 28-29) to ~1.75/day (Jul 31-Aug 3), and 1.0.6 has **4 users total, 3 of them new installs**. If spend resumed, ~50-60 installs by early September makes the sign-in leak readable and it is worth waiting. If spend stopped, waiting buys nothing and the wait is pure delay.
 
 **Either way, start building now** — solo-first is 3-4 weeks of careful work (server-side couple creation, like→mission, and a `redeemInvite` that merges rather than creates). The ASA answer changes when it ships, not whether to begin.
+
+---
+
+## Retention — the Flame parallel (RAISED 2026-08-08, decide before the next release)
+
+**Flame's first product was a date-planning app for couples. It got 0.8% day-30 retention
+and they abandoned the model to survive.** Their founder's diagnosis, in his words: it was
+"a tool similar to Airbnb — you book an event, but you don't come back unless you need the
+next one." Same category, same mechanic, same market as iLovu.
+
+What rescued them was **not better date planning**. It was making a **daily question** the
+mainstay of the product: 0.8% -> 4.2% -> 30% -> 50% day-30 retention, above TikTok's ~40%
+and Instagram's ~35%. It took eight months of iterating on that one feature.
+
+**iLovu already has a Daily Question.** It is a card on Home, not the reason to open the
+app. The reason to open the app is currently planning a date — which is the thing that
+returned 0.8% for them.
+
+**The mechanics that did the work, and they are specific:**
+- Every retention event tied to a **trigger** (BJ Fogg's habit-formation work).
+- A **carrot and a stick** notification each day — but the stick was NOT "you will lose
+  your streak". It was **"your partner will be sad."** The obligation is to a person, not
+  to a number. That is the part they credit for beating TikTok, and it is only available
+  to a two-sided product.
+- A **missing-out lock**: you cannot see your partner's answer until you answer your own.
+  Each answer pulls the other person back, which compounds.
+- **Widgets** as a re-engagement surface — big, dynamic, unavoidable on the home screen.
+  iLovu already ships three (Days Together, Next Date, Latest Memory) and deliberately
+  leaves them un-gated, which matches what Flame found.
+
+**Why this matters more than the funnel fixes already queued.** The solo-first change
+above makes the paywall REACHABLE; it does not give anyone a reason to open the app
+tomorrow. Retention and monetization are separate problems and this file currently has a
+plan for only one of them. A 50%-D30 product with 49 installs is a business; a 4%-D30
+product with 10,000 installs is a leaking bucket.
+
+**Correction to the list above — the missing-out lock is ALREADY BUILT.** `DailyQuestionService`
+has shipped answer-to-unlock since `c28201b` (you see your partner's answer only after you
+answer). Don't re-scope it as new work. Of Flame's four mechanics iLovu has three; the one
+genuinely missing is the trigger.
+
+### DECIDED 2026-08-08 (founder call) — BUILD the daily-question trigger
+
+**Reverses the "skip the carrot/stick, it's Flame's mechanic not ours" recommendation
+made earlier the same day.** The founder and his partner use the Daily Question *every
+day* — it is the only feature with directly observed daily pull, and it is the plausible
+explanation for the Lithuania cohort's ~16-min sessions vs the US ad cohort's 33s. That
+outweighs the strategic worry, which was never that the feature is wrong but that
+*leading* with it drifts iLovu into the crowded prompt-app lane (Paired, Couple Joy).
+Resolution: build it, and keep it **feeding the proof loop rather than standing alone**
+(answers surface as date suggestions / seed the wishlist), so the daily habit routes into
+`memory_completed` instead of replacing it. Daily question = the *trigger*; the completed
+date stays the *value*. Positioning stays "one real date a month," unchanged.
+
+**THE ACTUAL CODE GAP — there is no trigger at all today.** The only daily-question push
+is `onDailyAnswer` (`functions/index.js:592`), which fires **only when the partner has
+already answered**. If neither person opens the app, nobody is ever notified — the loop
+can only be started by someone who was already coming back on their own, which is the
+exact inverse of a retention trigger. Fogg's formula is motivation x ability x TRIGGER;
+iLovu has the first two and a hard zero on the third.
+
+**Build shape (cheap — copy an existing function, no new architecture):** a
+`sendDailyQuestionNudge` scheduled function modelled on `sendDateReminders`
+(`functions/index.js:970`) — already a working `onSchedule` cron with FCM send path,
+`remindersSent` dedupe stamps and stale-token cleanup. Morning carrot ("today's question
+is live"), evening stick for the unanswered — **partner-framed, never self-framed**
+("Inesa answered. She's waiting on you 💛" is on-brand; "don't break your streak" is not).
+**Blocker to respect: `REMINDER_TZ` is single-zone `Europe/Vilnius`** — shipping this
+before per-couple timezone pings the US/AU cohort at ~3am local. Fix the tz first.
+
+**Sequencing caveat:** the Daily Question is per-couple (unpaired falls back to local
+`@AppStorage`, and `onDailyAnswer` skips half-paired couples), so a perfect trigger today
+reaches **3 couples**. Either ship it with/after solo-first, or make the solo daily
+question real — answer alone, revealed to the partner when they join, which doubles as a
+reason to invite. Build solo-first so `fcmTokens[uid]` and a real `dailyAnswers` path
+exist on a couple-of-one, or this becomes a data migration instead of a cron job.
+
+### iLovu-native retention mechanics (ranked; the parts Flame structurally cannot copy)
+
+Flame's core value event is daily (answer a prompt). iLovu's north star is monthly
+(`memory_completed`). Importing a *daily* streak wholesale would optimise daily opens
+while the valuable thing stays monthly. The uncopyable asset is **proof + an accumulating
+shared history** — no competitor has a Vault filled by verified proof photos.
+
+1. **Days Together / love-counter available SOLO** — ships with solo-first, addresses the
+   ~96%, needs no partner, ticks up with zero user effort (the most anti-pressure
+   retention mechanic there is), and is already **the #1 converting ASA keyword**. People
+   are paying to download for the counter and hitting a wall before they can see it.
+2. **"A year ago today" from the Vault** — resurface a proof photo on its anniversary.
+   Memories already carry `latitude`/`longitude` and `MemoryMapView` exists, so it is
+   near-free. Pure carrot, zero guilt, and it gets **better the longer someone stays** —
+   the inverse of a streak, which gets more stressful over time.
+3. **Countdown in the Next Date widget** — a Mission has a `scheduledDate` and the
+   multi-day anticipation window between planning and going is currently *completely
+   unexploited* (no countdown, no checklist nudge). Retention flowing from the product's
+   real value rather than bolted on.
+4. **Monthly date-streak** ("3 months in a row you actually went out") — streaks the
+   north-star event, forgiving by construction, and uncopyable without a proof loop. This
+   is the honest replacement for the fake card below.
+
+**FIX THE FAKE STREAK CARD (`HomeView.swift:628`).** `@AppStorage("dayStreak")` is
+initialised to `1` and **never written anywhere in the repo**, so any user without an
+anniversary sees "1 Day Streak" permanently — a stat that never moves reads as a broken
+app. Two structural problems beyond the placeholder: (a) it sits in the `else` branch of
+`quickStatsRow`, mutually exclusive with Days Together, so it **vanishes for users who set
+an anniversary** — backwards, it disappears for the more-invested user; (b) it contradicts
+locked brand comments in the same files (`HomeView.swift:7`, `DailyQuestionCard.swift:3`,
+both "no streaks, no shame"). Resolution per Flame: a **self**-directed streak is
+off-brand, a **couple**-framed one is not ("You two — 6 days in a row 💛"). Wire it to real
+`dailyAnswers` day-count, give it a permanent slot, update the two comments.
+
+### Paired-couple count (GA4, Jul 1 – Aug 8 2026)
+
+**3 paired couples — Australia 1, Lithuania 1, United Kingdom 1** (`invite_redeemed`, 3
+events / 3 users; country = the REDEEMER's). Up from 2 in the 2026-07-30 all-time read.
+The country split sums exactly to the un-dimensioned total, so **thresholding hid nothing
+this time** — but keep re-checking against the un-dimensioned total, per the GA4 GOTCHA
+above. Same window, unique users: `sign_in` 35, `invite_created` 10, `invite_redeemed` 3,
+`mission_created` 10, `match_created` 3, `memory_completed` 4, `paywall_shown` 2.
+
+**Two signals in that table:**
+- **`memory_completed` = 4 users but only 3 paired couples exist**, and the country rows
+  put completed memories in the **US and Canada, neither of which has a redeem**. Those
+  are **solo users completing real dates**, stored local-only and thrown away. Direct
+  evidence for solo-first: people reach the north-star event without a partner today.
+- **`match_created` = 20 events across only 3 users** — the UK pair alone is 18 of them.
+  The swipe loop is not broadly dead so much as one engaged couple and nobody else.
+
+**TOOLING BLOCKER (worth fixing before the next data read):** Firestore `couples` is the
+documented source of truth, but the Admin SDK is unreachable from this machine — ADC at
+`~/.config/gcloud/application_default_credentials.json` is authenticated as the ads
+account (`quota_project_id: kunwebs-ads-mcp`), not the iLovu Firebase owner
+(`ilovuapp27@gmail.com`, which only `firebase-tools` holds). **Do NOT run
+`gcloud auth application-default login` to fix this** — it overwrites the shared credential
+and breaks google-ads-mcp + analytics-mcp. The clean fix is a **service-account key for
+`ilovu-b5d87`** kept beside the project, which sidesteps the collision entirely.
+
+### BOTH non-founder pairs CHURNED within 24h of pairing (GA4, 2026-08-08)
+
+Per-day trace of the two pairs above, iOS stream only (`streamName = iLovu`; the country
+rows mix in `Ilovu.io` web traffic and must be filtered or they mislead).
+
+**🇦🇺 AU — paired Jul 27, last seen Jul 27, silent 12 days.** Jul 22 `sign_in` +
+`onboarding_complete` + `invite_created` (16 ev / 4m48s) · Jul 24 opened, no funnel events
+(5 ev / 47s) · Jul 25 sign_in + onboarding AGAIN (8 ev / 52s) · Jul 26 sign_in + onboarding
+AGAIN (6 ev / 20s) · **Jul 27 `invite_created` → `invite_redeemed`, 2 users (26 ev /
+5m53s)** · Jul 28–Aug 8 **nothing**. **Zero `card_liked`, zero `mission_created`, zero
+`memory_completed`, zero `paywall_shown` — they paired and never used the product.**
+
+**🇬🇧 UK — paired Jul 31, last seen Jul 31, silent 8 days.** Jul 24 sign_in + onboarding
+(8 ev / 35s) · Jul 28 2 users sign in + `invite_created` (34 ev / 5m24s) · **Jul 31
+`invite_redeemed` + 46 `card_liked` → 18 `match_created` (106 ev / 9m24s)** · Aug 1–Aug 8
+**nothing**.
+
+**D1 retention = 0 for both pairs. Neither reached D7.** D30 not yet measurable (AU hits it
+2026-08-26). n=2 — a signal about SHAPE, never a rate.
+
+**Three findings, in order of importance:**
+
+1. **The pairing session IS the peak, then a cliff.** Both pairs spent their largest
+   session on the day they paired and never opened the app again. Pairing is being
+   experienced as the destination, and **nothing is scheduled to pull them back the next
+   day** — which is the DECIDED daily-question trigger above, now with direct evidence
+   behind it rather than a Flame analogy.
+2. **The UK pair completed the entire "aha" and churned anyway: 46 swipes → 18 matches →
+   `mission_created` 0, `memory_completed` 0.** This is sharper than "the swipe loop is
+   dead" (the loop worked perfectly); the dead end is **match → mission**. Eighteen mutual
+   matches produced not one planned date. "Plan This Date" is UNGATED, so the paywall is
+   not the cause. **This deserves its own investigation before the next build** — it is a
+   SECOND retention hole, downstream of pairing and independent of the funnel work.
+3. **AU fired `onboarding_complete` on FOUR separate days** (Jul 22/25/26/27). Onboarding
+   is gated by `hasCompletedOnboarding` in `@AppStorage` and should fire once per install.
+   Repeated firing = repeated reinstalls or local state being wiped — and it happened
+   during exactly the window they were struggling to pair. **Possible bug, not just a
+   metric; check before assuming it's noise.**
+
+**Consequence for strategy — state it plainly:** solo-first makes the paywall REACHABLE,
+but it does not fix this. Both couples who *did* pair churned inside a day. Getting users
+through the funnel is necessary and NOT sufficient; there is a distinct
+post-pairing retention hole, and match→mission is where it leaks.
+
+### Daily Question bank — expansion plan (PROPOSED 2026-08-08)
+
+Current content banks, counted from source: **`ConnectionQuestions.all` = 130** (Daily
+Question) · **`WouldYouRather.prompts` = 120** · **`ThirtySixQuestions` = 36** · 286 total
+(separate from the 165-card date deck). Goal: **~1,000 Daily Questions** (~2.7 years),
+science-grounded, so partners keep learning about each other.
+
+**⚠️ BLOCKER — THE BANK CANNOT EXCEED 366 TODAY. FIX ROTATION BEFORE WRITING CONTENT.**
+`ConnectionQuestions.today` (`ConnectionQuestions.swift:172-176`) is
+`(ordinality(of:.day, in:.year) - 1) % all.count`. `ordinality` returns **1–366**, so the
+index never exceeds 365 no matter how large the bank is — **questions 367+ are unreachable
+dead code.** Writing 870 questions against today's rotation would ship ~236 of them.
+
+**Migration risk: NONE (verified).** `DailyAnswerDoc.question` snapshots the question TEXT
+as asked (`DailyQuestionService.swift:38`), not an index or ID — so the bank can be grown,
+reordered and re-themed freely and past answers keep their original prompt. See the
+corrected `dailyAnswers` note in the data model above.
+
+**Rotation fix — continuous counter + per-couple offset:** replace day-of-year with days
+since a fixed epoch, plus an offset derived from `coupleId`. Buys three things: (a) unlocks
+banks >366, (b) kills the **Jan 1 sequence reset** (a couple in year two currently re-runs
+the same order), (c) different couples get different questions on the same day while BOTH
+partners still compute the identical prompt locally with no server call (same `coupleId` →
+same offset), preserving the existing design. **GOTCHA: `hashValue` is per-process seeded
+in Swift and is NOT stable across launches — using it would hand each partner a DIFFERENT
+question.** Use a deterministic hash (FNV-1a / UTF8 byte sum).
+
+**Structure — `[String]` → a struct with theme + depth.** Escalating reciprocal
+self-disclosure is the actual mechanism behind Aron's 36 Questions; a flat random bank
+discards the effect the research demonstrates. Early days lean `.light`, depth unlocks as
+answered-days accumulate. Themes, each anchored to a real construct: **Love Maps**
+(Gottman — the canonical "knowing your partner's inner world" construct, the core of this
+goal) · **Dreams & self-expansion** (Aron) · **Gratitude & capitalization** (Gable,
+active-constructive responding) · **Savoring & memories** (Bryant — ties into the Memory
+Vault) · **Growth & affirmation** (Drigotas & Rusbult, Michelangelo phenomenon) · **Awe &
+novelty** (Keltner; Aron arousal — already the rationale behind the 165-card deck) ·
+**Playful** (Fredrickson) · **Closeness** (Reis & Shaver intimacy process model).
+
+**HARD BRAND GUARD on generation:** anti-pressure positioning is locked and
+"relationship repair/reignite" framing is explicitly off-brand; `WouldYouRatherPrompts.swift:2-3`
+bans "heavy/relationship-audit territory." No conflict diagnostics, no "what do you
+resent," no therapy-speak. Warm and curious, always.
+
+**Build order (volume LAST — the precedent is quality over volume; bulk-padding
+near-duplicates was already rejected once when growing the deck 140→165):**
+1. Rotation fix + `ConnectionQuestion` struct (small; unblocks everything else)
+2. Re-theme the existing 130 into the taxonomy (tagging, no new writing)
+3. Batches of ~110 to 1,000, **deduped per batch**, never one dump
+
+**Honest caveat:** at today's retention nobody has come close to exhausting 130 — both
+paired couples churned inside a day. This is content for a retention problem not yet
+solved. Worth doing anyway (the rotation bug means even the current 130 partly doesn't
+work, and content compounds), but **after** the trigger work, not instead of it.
+
+### What SOLO users actually do (GA4, 2026-08-08) — Near You, never the card deck
+
+**MEASUREMENT GAP FIRST:** `near_you_opened` / `daily_question_answered` /
+`would_you_rather_answered` / `memory_viewed` fire in **Lithuania ONLY** — i.e. dev builds.
+They are on `main` but **NOT in submitted 1.0.6 build 11**, so no shipped build reports
+them. **"What do users do inside the app" is unanswerable for real users until that build
+ships — make it the next build's first priority.** (GA4 also cannot segment solo vs paired;
+the `is_paired` user property is still only PROPOSED. Below is by exclusion, knowing
+exactly what the 3 paired couples did.)
+
+**Almost nobody arrives.** US (the whole paid cohort): 38 `first_open` → 16 `sign_in` → 15
+onboarded → **3 `reached_pairing_screen`** → 2 `invite_created` → **0 redeemed. Zero US
+pairs, ever.**
+
+**Those who DO engage plan dates and never swipe** (users, iOS stream):
+
+| Country | `card_liked` | `mission_created` | `memory_completed` |
+|---|---|---|---|
+| United States | **0** | 4 | 1 |
+| Canada | 0 | 1 | 1 |
+| Bulgaria | 3 | 1 | 0 |
+| UK (the pair) | 46 | **0** | 0 |
+| Lithuania (founder/testers) | 21 | 4 | 2 |
+
+**16 US users signed in and NOT ONE swiped a card, yet 4 created missions.** The only route
+to a mission without a swipe is **Near You → "Plan This Date"** (ungated). **This answers
+the parked Fix 4 strategic question: outside founder testing the card deck is essentially
+unused and Near You IS the product.** Note the inverse for the UK pair — 46 swipes, 0
+missions. Swiping and planning are being done by *different people*, and only planning
+reaches the north star.
+
+**Two solo users completed the full north-star loop alone** (US 1, CA 1): swiped nothing,
+planned from Near You, went, captured a proof photo. The Canadian tried to pair first
+(`reached_pairing_screen` → `invite_created` → never redeemed), gave up, and used it solo
+anyway. All of it stored **local-only and discarded** — the strongest single argument for
+solo-first storage.
+
+**DATA-INTEGRITY CATCH — `match_created` is contaminated.** Bulgaria logs `match_created`
+with no pairing: unpaired swipes fall back to a `Bool.random()` solo celebration
+(`SwipeView.swift:214`) which appears to fire the analytics event. So "3 users ever
+matched" is really ~2 real + a coin flip. **Either stop logging `match_created` on the
+solo fallback or give it a distinct name** before any decision leans on that number.
+
+Prior evidence: `~/ilovu-content/ILOVU-PLAN.md` and the Flame interview notes there.
+
+### PARKED — future Near You categories + a "Trending" cross-cutting filter (raised 2026-08-08/10, NOT scheduled)
+
+Deliberately parked by the founder: worth building, not now. Near You is where real solo
+users actually go (see the solo section above), so investment here is better-aimed than
+most — but it fixes none of the retention holes.
+
+**Beaches — a dictionary edit, the `.trails` pattern exactly.** New `LocalEvent.Category`
+case + `SearchGroup` (30 km, day-trip intent) + `typeScores` + `minRatingCount` (LOW, ~10
+like trails — beaches draw few reviews) + `curationVersion` bump. **Put it in its OWN
+SearchGroup and verify the type against Table A first** — "a bad type 400s the whole
+group", so appending an unverified beach type to the trails group would take hiking
+coverage down with it. Empty in Vilnius (Palanga/Nida are ~300 km out, past any radius) —
+**already handled**: 1.0.5's dynamic pills only render categories present in the loaded
+deck, so a Beaches pill won't appear in Vilnius and WILL appear via the plan-a-trip city
+search. "Top" beaches needs nothing new — `popularityBoost` already ranks.
+
+**Rooftops — structurally harder: Google has NO rooftop place type.** Rooftop is an
+ATTRIBUTE, not a type, so `searchNearby`/`includedTypes` cannot find them at all. Options:
+**(A)** `PlacesService.searchText` already exists (`PlacesService.swift:70`) — but its
+`searchFieldMask` lacks `primaryType`, `types`, `location`, `businessStatus`, i.e. exactly
+the four fields `curate()` needs to map a category and drop closed venues; it would have to
+use `nearbyFieldMask` (`PlacesService.swift:58`), slightly pricier per call. **(B)** name/
+review matching over already-cached `bar`/`wine_bar` venues — zero extra API calls, zero
+cost, low recall. **(C) RECOMMENDED: one text search per location bucket, cached to
+`placeDeckQueries`** — respects the locked "scale with venues, not users" cost rule.
+Seasonal (Vilnius rooftops are summer-only); dynamic pills handle the empty state.
+
+**"Trending" filter (the TikTok idea, REFINED 2026-08-10) — a CROSS-CUTTING TOGGLE, not a
+category.** Categories are mutually exclusive; "viral" is an attribute a restaurant, a
+rooftop bar and a viewpoint can all carry at once, so making it a category would force a
+false choice. Shape: an OPTIONAL `viralScore`/`isViral` on the cached venue (optional =>
+old cached docs decode nil, no orphaning — same property that made `.trails` safe); the
+filter row becomes category pills **+ one independent toggle** that composes with them;
+same empty-state guard as the dynamic pills (hide when the deck has zero viral venues —
+the Music-pill lesson); `curationVersion` bump. **This shape makes manual curation almost
+trivial: a list of placeIds per city + a flag.** No taxonomy work, no caption parsing — the
+venue already carries its category, rating, photos, hours. Ship the filter with hand-picked
+data, swap the source later without touching the UI.
+
+**⚠️ NAMING: do NOT ship "TikTok" as the user-facing label.** Third-party trademark in the
+UI and App Store listing, and if the data ever comes from scraping the name advertises it.
+Use **"Trending" / "Viral" / "Hyped right now"** — stays accurate if the source later
+becomes Foursquare or our own data.
+
+**Data sources, ranked (2026-08-10):** **(1) Manual curation per city — RECOMMENDED at
+current scale.** ~20–30 spots per market, zero cost, zero ToS risk, and HIGHER quality than
+fuzzy-matched scrape output. The 165-card deck and `searchGroups` are already hand-curated;
+this is the same muscle. **(2) Foursquare Places API** — the legitimate version of the
+Apify idea (real popularity/trending signals, free tier); **check Lithuania coverage
+first** — thin launch-market coverage is what killed Ticketmaster AND Eventbrite, and it
+would kill this too. **(3) Our own `bucketList` aggregate** — anonymised wishlist adds =
+"trending with couples on iLovu"; proprietary, legally clean, compounds with scale. Cold
+start is fatal today (3 couples) but the schema is worth designing now. **(4) Review
+recency** — `places.reviews` is ALREADY in the field mask, fetched, billed and cached, but
+`PlacesService.Review` (`PlacesService.swift:293`) decodes only rating/text/author and
+**drops `publishTime`**; adding it is a 2-line Codable change at ZERO extra API cost.
+Weak though: Places returns ~5 reviews chosen by RELEVANCE, not recency — a biased sample
+of five, cheap to try, not reliable to rank on alone.
+
+**On Apify/TikTok specifically:** **there is NO legitimate TikTok API for this** (Research
+API = academic-gated, Display API = the user's own content only, Commercial Content API =
+ads transparency), so scraping is the only TikTok path — real ToS risk, weigh it
+deliberately. If ever done: frame TikTok as a **ranking SIGNAL on venues already cached**,
+never as a source of venues (entity resolution from captions is where these projects die);
+run it **server-side, per city bucket, weekly** (never per user — that repeats the ~$16k/mo
+Places mistake); and **extract venue names ONLY** — no usernames, comments or video
+content — which keeps it clear of the messiest GDPR exposure. Cache writes are already
+CF-only since the hardening sprint, so it has to be server-side regardless.
+
+### TOOLING BACKLOG (2026-08-10)
+
+- **Firestore service-account key for `ilovu-b5d87`** — so `couples` (the documented source
+  of truth) is directly readable. See the ADC collision note above; never fix it with
+  `gcloud auth application-default login`.
+- **Apple Ads (Search Ads) API — IN PROGRESS.** Removes the documented "read CPI/spend from
+  the dashboard by hand" step. **P-256 keypair generated 2026-08-10 at `~/.apple-ads/`**
+  (`private-key.pem` 600, dir 700; public key uploaded in Apple Ads → Account Settings →
+  API → Client Credentials). Still needed: **`clientId` / `teamId` / `keyId`** (returned on
+  upload) plus **`orgId`** (NOT on that screen — Account Settings or the `/me` endpoint).
+  Flow: ES256 client-secret JWT (iss=teamId, sub=clientId, aud=`https://appleid.apple.com`,
+  kid=keyId) → `appleid.apple.com/auth/oauth2/token` (`grant_type=client_credentials`,
+  `scope=searchadsorg`) → **1-hour** access token → `api.searchads.apple.com/api/v5/...`
+  with `Authorization: Bearer` + `X-AP-Context: orgId=<orgId>`.
+  **⚠️ The client-secret JWT expires in ≤180 DAYS and will fail silently months later** —
+  diarise it (same failure mode as the 7-day `-personal` ADC).
+  **MCP choice:** all options are third-party and unvetted, holding WRITE access to real ad
+  spend. **Prefer a LOCAL stdio server over a hosted one** (hosted = credentials on someone
+  else's infrastructure) and read the source before installing — "74 typed tools / full v5
+  coverage" means full mutate access by default. Candidates: `AppVisionOS/apple-search-ads-mcp`,
+  `Happygallo/apple-ads-mcp`, `gregtuc/asa-mcp` (local) vs `ppcprophet/apple-ads-mcp`
+  (hosted — avoid). **Alternative with zero third-party trust: a ~50-line read-only script**
+  doing JWT → token → report, which covers the actual need (CPI, spend, installs).
+
+---
+
+## ASA WORLDWIDE + 1.1.0 PLAN (2026-08-11) — read this before the next build
+
+**Apple Search Ads went WORLDWIDE on 2026-08-08** (was US/UK/AU/NZ at ~€2.6 CPI).
+**Blended CPI is now ~€0.50.** The €2.6 benchmark everywhere above is OBSOLETE, and the new
+number is dangerous: it fell because spend moved to cheap storefronts (Algeria, Mongolia,
+Uzbekistan, Nepal, Peru, Venezuela), where a $49.99/yr sub is a very heavy ask. **Read CPI
+and revenue-per-install PER STOREFRONT, never blended.** This makes the half-built Apple Ads
+API (TOOLING BACKLOG above) the highest-value tooling item — 25 storefronts is not a
+by-hand job.
+
+### The worldwide cohort — GA4, iLovu stream, 2026-08-08 to 08-10
+
+Volume jumped from 0–2 new users/day (Aug 5–7) to **8 / 15 / 11**. Unique-user funnel:
+
+    34 first_open → 29 sign_in (85%) → 26 onboarded → 18 near_you → 11 reached_pairing
+                                     → 5 invite_created → 0 invite_redeemed
+    mission_created 8 · card_liked 1
+
+vs the 2026-07-30 all-time baseline (49 → 27 → 27 → 9 → 2). **The sign-in leak went from
+45% to 15%** — the biggest single funnel result to date. **CAVEAT: cannot be attributed.**
+It could be 1.0.6/1.0.7 working OR a higher-intent cohort mix, and *we do not know which
+build these users ran* — CLAUDE.md never recorded whether 1.0.6 or 1.0.7 was approved.
+Confirm in App Store Connect before banking it.
+
+**Per country (Aug 8–10):** Italy is the standout — 6 installs, 6 sign-ins, 4 Near You,
+2 pairing, 1 invite, 1 mission. Then Algeria 3/3/2/1/–/1 · Mongolia 2/2/2/1/–/1 ·
+Mexico 2/2/1/1/–/1 · Türkiye 2/2/1/2/–/– · Chile, Peru, Uzbekistan each reached an invite
+from 2 installs. **The US collapsed to 1 install and 0 sign-ins** — worldwide did not ADD
+to the US cohort, it REPLACED it. The long tail is NOT behaving like junk traffic; several
+of those geos convert deeper than the US ever did at €2.6.
+**Spanish cluster (MX/CL/PE/VE/HN): 8 installs → 7 sign-ins → 3 pairing → 2 invites.**
+
+### Couples: still 3, and ~1 alive
+
+`invite_redeemed` all-time = **3** (AU 1 / LT 1 / UK 1), the country split summing exactly
+to the un-dimensioned total (thresholding hid nothing). **Unchanged since 2026-08-08 — the
+worldwide cohort has produced ZERO pairs from 5 invites.** In the last 7 days
+`match_created` and `memory_completed` are both **0**; the only couple-shaped signal is 2
+users answering daily questions (the founder pair). Note `daily_question_answered` /
+`would_you_rather_answered` are NEW events (`70b58ef`) — their earlier zeros are
+instrumentation, not churn.
+
+### FOUR MEASUREMENT BUGS — the numbers above are partly fog
+
+1. **`is_paired` is NOT registered as a GA4 custom dimension** (only
+   `firebase_last_notification` exists). The code sends it (`ba7c649`) but **GA4 silently
+   discards unregistered user properties and registration is NOT retroactive.** Solo vs
+   paired cannot be segmented, and every day of delay is permanently lost. Register it FIRST.
+2. **Solo swipes log NOTHING.** `card_liked` fires only inside `MatchService.recordLike`,
+   which requires a `coupleId`. `completeSwipe` logs nothing on the solo branch. **We have
+   zero observations of solo swipe volume** — which is why the swipe-cap number below
+   cannot be chosen from data we hold.
+3. **`near_you_opened` is a TAB-OPEN counter, not a visit** — logged in `.task`
+   (`NearYouView.swift:171`), so it re-fires on every view appearance. Aug 6 shows **33
+   events from 1 user** (founder testing the parallel-load build). Any engagement read
+   built on it is inflated by an unknown multiple.
+4. **`paywall_shown` = 0 across 37 new users in 7 days.** Also 0: `paywall_dismissed`,
+   `purchase_success`, `restore_success`, `memory_shared`. The money path has never once
+   executed end-to-end, and the RevenueCat sandbox buy/revoke test is still outstanding.
+
+### THE FAKE MATCH — solo users get a coin flip (`NearYouView.swift:373-383`)
+
+    if let coupleId { Task { await matchService.recordLike(...) } }
+    else if Bool.random() { matchedEvent = event }      // ← unpaired: 50/50
+
+An unpaired right-swipe has a **50% chance** of showing the full celebration —
+`EventMatchView.swift:55` literally reads **"It's a Match! 🎉"** — with a "Plan This Date →"
+CTA that calls `missionStore.add`. The other 50% does nothing at all. The comment calls it
+a "placeholder coin-flip … for solo/preview"; **it is shipping to production in ~25
+countries.** Consequences: it is a lie to the user, half of all solo intent is silently
+discarded, and **`mission_created` is ~50% noise** so real solo intent is higher than
+measured. Not an A/B question — delete it.
+
+### SOLO USERS ALREADY PLAN DATES — the strongest solo-first evidence yet
+
+`MissionStore.add` (`MissionStore.swift:53-60`) writes to **UserDefaults first**;
+`remoteUpsert` is nil when unpaired (comment at :34-36), so **mission planning already
+works solo, device-local.** `Mission(from:)` sets `.upcoming` (`Mission.swift:74`), so it
+does render on Home. Last 7 days: **9 users created 14 missions with `match_created` = 0
+and only 3 couples in existence.** Missions (9 users) OUTNUMBER invites (5) — people plan
+before they invite. Those missions are fragile (reinstall or a uid change wipes them) and
+**none of those 9 can ever pay us** — `PaywallGate` is per-couple.
+
+### What solo users do, ranked (7d, % of the 27 who onboarded)
+
+    Near You 18 (67%) · pairing screen 11 (41%) · Mission 9 (33%) · invite 5 (19%)
+    Would You Rather 3 (11%, 3.7 plays each) · Daily Question 2 (7%, 4.5 each)
+    card deck 1 (4%) · bucket list 1 · memory viewed 1
+
+The card deck is DEAD — **Fix 4 is settled**, stop treating it as open. The games have the
+highest DEPTH of anything in the app from the few who find them: a discovery problem, not
+an interest problem.
+
+### NEAR YOU DOES NOT RETAIN — reach 67%, next-day return <10%
+
+Aug 8–10: **18 distinct Near You users, 20 daily-user-days → 2 return-days. 16 of 18
+opened it on exactly one day.** Structural, not polish: **the deck is exhaustible** — swipe
+your city and there is nothing new tomorrow. This is exactly Flame's Airbnb diagnosis in
+the retention section above. **Near You is an ACTIVATION surface, not a retention surface.**
+More categories (Beaches, Rooftops) improve the FIRST session only; **"Trending" is the one
+parked Near You idea that would retain**, because novelty-over-time is the mechanism.
+
+### SOLO USERS CANNOT BE REACHED AT ALL — the retention blocker
+
+`CoupleService.persistFCMToken` (`:425-443`) writes to `couples/{id}.fcmTokens[uid]`. With
+no couple the token is **parked in memory and never persisted** (sole exception: attached to
+`invites/{token}.creatorFcmToken` when an open invite exists, purely for the pairing push).
+**A solo user has no server-side push token — we cannot send them a single notification.**
+Every push mechanic, including the DECIDED daily-question trigger, is unavailable to ~96%
+of users. So solo retention has only two possible surfaces: **a home-screen surface that
+changes without us, and a commitment the user made themselves.**
+
+- **Days Together solo — the best build in the app.** The widget exists and is ungated, but
+  `WidgetDataWriter.swift:31` reads `couple?.milestoneDate(.dating)` → **nil when unpaired,
+  so it renders blank.** It is the **#1 converting ASA keyword**: people pay to install FOR
+  this and hit a wall. Move `datingDate` to user-scoped storage.
+- **Next Date countdown — already works solo** (reads the local mission store). The
+  plan→date anticipation window is completely unexploited; the post-date "how did it go?"
+  prompt is the path to `memory_completed`, currently **0**.
+- **FLAME'S BEST MECHANIC DOES NOT PORT.** Their stick was "your partner will be sad" —
+  obligation to a person. A solo user has nobody to disappoint. **Only carrots exist solo.**
+  The retention section above was derived from an inherently two-sided mechanic; it
+  quietly assumes a partner.
+
+### UNIT ECONOMICS AT €0.50 CPI — the gate is the whole problem
+
+Annual $49.99 → ~$42.49 net (Apple Small Business 15%) ≈ **€39** → break-even at
+**78 installs per annual sub = 1.3% install→paid**. Founding $39.99 ≈ €31 → 62 installs =
+1.6%. **1.3% is a completely normal target — €0.50 CPI is profitable-capable.**
+
+Decompose it: `1.3% = onboard 76% × reach-paywall X × buy Y`
+
+    X = 2%  (today, pairing-gated)  →  Y = 85%   IMPOSSIBLE
+    X = 33% (usage-triggered)       →  Y = 5.2%  normal
+    X = 50%                         →  Y = 3.4%  comfortable
+
+And today X is not even 2% — `paywall_shown` is **0**. **Traffic prices are already
+profitable; the product is unmonetizable.** Exactly one change fixes it: make the paywall
+reachable without a partner.
+
+### SUPERSEDED SAME DAY — 1.0.8 monetization slice ships FIRST (2026-08-11)
+
+**The one-big-ship call below was made before the founder stated the priority as
+"generate revenue ASAP and get some numbers."** Those conflict: 1.1.0 is 2–3 weeks
+and most of it (solo-first Firestore storage, Days Together, retention) earns
+nothing. So the monetization slice was split out and built the same day.
+
+**THE KEY DISCOVERY THAT MADE IT DAYS INSTEAD OF WEEKS: `PaywallGate` never
+touched Firestore.** It is entirely `UserDefaults`, and `coupleId` was only ever a
+string used to namespace local keys. **Solo-first storage is NOT required to charge
+money** — it is required for sync, push and durability. Pass a uid-derived scope and
+the whole gate works alone.
+
+**PAYMENTS AUDIT (2026-08-11) — the money path is GREEN.** Verified before building,
+because a broken purchase path would make everything else theatre:
+`premium` entitlement exists with BOTH real App Store products attached to the real
+iLovu app ✓ · offering `default` is Current with `$rc_annual`/`$rc_monthly` mapping to
+`com.ilovu.app.annual`/`.monthly`, matching `RevenueCatConfig` byte-for-byte ✓ · SDK
+key valid ✓ · `revenueCatWebhook` deployed (europe-west1), endpoint live, auth guard
+correct (GET→405, bad auth→401) ✓ · `REVENUECAT_WEBHOOK_SECRET` set ✓ · webhook
+registered in RevenueCat for **Both Production and Sandbox** ✓ · **Paid Applications
+Agreement ACTIVE, all countries, through 2027-06-03** ✓ · `purchase_success` correctly
+logged at `SubscriptionService.swift:170` ✓.
+**Conclusion: €0 is NOT a payments bug — it is `paywall_shown` = 0.**
+Two leftovers: the webhook has never received a single event (no purchase has ever
+happened, so nothing to send — its Authorization header therefore remains UNTESTED,
+and a mismatch would silently 401 and break revocation only); and an old `iLovu Pro`
+entitlement holds Test Store products (`monthly`/`yearly`/`lifetime`) — harmless
+prototype junk from 2026-06-17, ignore it.
+**⚠️ DIARISE: the Paid Apps Agreement expires 2027-06-03. A lapsed agreement silently
+blocks ALL purchases** — same failure mode as the Apple Ads JWT.
+
+**⚠️ THE FOUNDING OFFER DOES NOT EXIST IN THE PRODUCT CONFIG.** Pricing below locks
+"$39.99/yr for the first 500 users", but RevenueCat serves only
+`com.ilovu.app.annual` ($49.99) and `com.ilovu.app.monthly`. There is no founding SKU,
+so any revenue test runs at the HIGHEST price point we will ever charge, on an app with
+3 couples. Decide before spending on ads.
+
+### SHIPPED in 1.0.8 (built 2026-08-11, branch `solo-paywall-1.0.8`; build + tests pass)
+
+**Two paywall triggers, both reachable without a partner:**
+
+    mission-open   armed at the 2nd Mission planned, presents when one is opened   ~33% reach
+    swipe cap      20 swipes/day in Near You                                       ~67% reach
+
+- **`PaywallGate` is now SCOPE-keyed, not couple-keyed.** Scope = `coupleId` when
+  paired, `"solo.<uid>"` when not (`CoupleService.paywallScopeId`). New arming
+  **condition C: 2 Missions planned** — the solo-reachable input, since `MissionStore`
+  persists locally and `remoteUpsert` is nil when unpaired.
+  **The UserDefaults key STRINGS were left byte-identical** (`pairingDate.*` etc.) so
+  the 3 existing couples keep their armed latch and backstop stamp across upgrade.
+- **THE `Bool.random()` FAKE MATCH IS DELETED.** A solo right-swipe now ALWAYS saves
+  the venue as a Mission, with an honest toast ("Saved to your plans 💛 · <venue>") —
+  deliberately a toast and not a full-screen cover, because interrupting every
+  right-swipe would suppress exactly the swipe volume the cap needs.
+- **The swipe cap is REMOTELY TUNABLE** — `MainTabView.loadPaywallConfig` reads
+  `config/paywall.soloSwipeCap` from Firestore once per launch. Firestore, NOT Firebase
+  Remote Config, which is not linked in this project; no new dependency for one integer.
+  Tighten 20 → 15 → 10, or kill it with `0`, **without an App Store release.** Any
+  failure (offline / rules / missing doc) keeps the built-in default — the safe
+  direction. New read-only `config/{key}` rule added.
+  **The cap is checked BEFORE the card is consumed**, so hitting the wall never costs a
+  venue, and that swipe is neither counted nor logged.
+- **New measurement:** `swipe_made` (`direction`, `scope`) — solo swipes were entirely
+  invisible before, which is why the cap number is still a guess — and `paywall_shown`
+  now carries (`trigger`, `scope`).
+- **`hardMode` left `true`** (the locked default): an armed, unsubscribed solo user is
+  BLOCKED from opening their own planned date. Fastest revenue signal, highest churn
+  risk. One line to soften — revisit as soon as drop-off is visible.
+
+**NOT done in 1.0.8, still open:** deploy `firestore:rules` + create the
+`config/paywall` doc (the dial is inert until both) · one sandbox purchase end-to-end ·
+register `is_paired` in GA4 · price/founding-SKU decision · concentrate ASA on ~2
+storefronts · version bump · the Layer-1 leftovers (`near_you_opened` visit fix, fake
+`dayStreak` card, per-couple `REMINDER_TZ`) · all of Layer 2 (solo-first storage).
+
+**Learning-budget arithmetic:** ~100 paywall views gives a rough conversion rate; at
+~67% reach that is ~150 installs; at €0.50 CPI ≈ **€75**. Call it €150 over ~10 days
+(~300 installs). At 3–5% conversion that is 3–5 subs ≈ €117–195 net — the learning
+spend plausibly pays for itself. **Concentrate it on 2 storefronts, not 25: data
+density matters as much as user density.**
+
+### DECIDED 2026-08-11 (founder call) — 1.1.0, ONE BIG SHIP (SUPERSEDED — see above)
+
+**Reverses the 1.0.7/1.0.8/1.0.9 split proposed in "Sequencing" above** (and its warning
+that "shipping any two together at ~50 installs means learning nothing about either").
+**Version is 1.1.0 — 1.0.7 was already spent on the Near You batch (`aaa218f`).**
+
+**Mitigation that recovers clean attribution: ship the usage cap behind a REMOTE FLAG, OFF.**
+Confirm solo-first alone for a week, then flip the cap remotely. One ship, clean reads.
+
+    LAYER 1 — instrumentation + bugs (prerequisites; nothing is readable without these)
+      · delete the Bool.random() fake match + honest copy ("Saved to your plans", not "It's a Match!")
+      · add swipe_made; add a `reason` param to paywall_shown (swipe_limit | mission_start)
+      · near_you_opened → count visits, not view appearances
+      · register is_paired in GA4 (do TODAY — not retroactive)
+      · fix the fake dayStreak card (HomeView.swift:628, @AppStorage init 1, never written)
+      · per-couple REMINDER_TZ — now a LIVE bug, not a future blocker (Vilnius 09:00 is
+        ~2am in Mexico City); blocks the daily-question trigger
+    LAYER 2 — solo-first storage
+      · couple-of-one at sign-in, server-side creation
+      · redeemInvite MERGES rather than creates  ← the only piece that can corrupt live data
+      · gives fcmTokens[uid] and dailyAnswers a real home; makes missions durable
+    LAYER 3 — monetization + retention on top
+      · PaywallGate arms on USAGE, not pairing
+      · swipe cap behind the remote flag
+      · Days Together solo · Next Date countdown · solo Daily Question
+
+### Swipe cap — design (extends the 2026-08-03 proposal above)
+
+Prerequisite is FORCED: swipes live at `couples/{coupleId}/swipes/{cardId}` scoped by
+`isCoupleMember`, so a solo user cannot write one today. **Couple-of-one makes the cap free
+— no rules change.** Count via `swipeCount` + `swipeCountDay` **on the couple doc** (not
+`@AppStorage` — a reinstall would reset the paywall; not a collection count — reads cost
+money per swipe). Gate inside **`PaywallGate`** as `shouldPresentAtSwipeLimit(coupleId:)`
+so arming stays single-sourced, reusing `hardMode` + a `presentedThisSession` cap. Fires in
+`completeSwipe` **before the card is consumed** — otherwise the user pays a venue to be walled.
+
+**THE CAP NUMBER CANNOT BE CHOSEN FROM DATA WE HAVE.** The 2026-08-03 figures (25 and 21 in
+one session) came from ONE PAIRED COUPLE's Firestore swipe docs; solo is now 96% of users
+and solo swipes are uninstrumented (bug #2 above). Downside is asymmetric — Near You is the
+ONLY thing solo users do and 16 of 18 use it once, so a low cap walls the single activation
+surface mid-first-session.
+**→ Read the cap from a Firestore config doc at launch, cached.** No new dependency
+(**Firebase Remote Config is NOT linked** in the project; Firestore is already there). Ship
+at 40 or off, measure the real distribution for a week, tighten 40 → 25 → 15 **without App
+Review.**
+
+### PARKED — a dating layer for solo users (raised 2026-08-11, NOT scheduled)
+
+Prompted by BPM (French sports dating app, €140k MRR in 6 months). Idea: let solo users
+swipe on PARTNERS by shared interest, then scroll ACTIVITIES together once matched.
+**The matching half is taken** — Hinge/Bumble interests, and sport-dating specifically is
+occupied (BPM in FR, **Surf** in US/AU with a Hyrox deal, Fitafy, Sweatt). **The unclaimed
+half is ours: converting a match into a real date.** Dating apps dump you into a chat and
+the date never happens; the proof loop applied one stage earlier is genuinely
+differentiated.
+
+**Why NOT now, from BPM's own numbers:** (1) **density IS the product** — he stayed in ONE
+country for 7 months and refused the US for lack of cash; we are in ~25 countries at ~37
+installs/week, i.e. 2–3 users per city. (2) He had **distribution before the app** — a run
+club, 3k waitlist, 500 first-weekend installs; we have paid ads only, and buying BOTH sides
+of a marketplace cold is the most expensive thing in consumer apps. (3) **Moderation** —
+he had 10–20 fake profiles within TWO DAYS, pre-marketing; we have no reporting/blocking/
+verification, plus stricter App Review (iOS dating rejections since 2024; he thinks niche
+saved him). (4) It **abandons our one working acquisition signal** — "love counter" is the
+#1 converting ASA keyword and it is *already-in-a-relationship* intent.
+**Revisit only if 1.1.0 proves solo users will NOT pay.** Then it is a NEW product launched
+ONE CITY at a time with a real-world hook, reusing the venue/deck code as a library — not a
+bolt-on to the live couples app.
+**The transferable BPM lesson is not "build dating"** — it is *niche + one geography +
+density + every €1 returns €1*. Applied here that means CONCENTRATING ASA on one or two
+storefronts instead of 25, which is free to do and the opposite of what we did on 2026-08-08.
+
+### PARKED — localization / Spanish (raised 2026-08-11)
+
+**There is ZERO localization infrastructure today:** no `.lproj`, no `.xcstrings`, no
+`NSLocalizedString`/`LocalizedStringKey` anywhere; `developmentRegion = en`,
+`knownRegions = (en, Base)`. Every string is a hardcoded English literal.
+**There is no LANGUAGE gap in the market** — Cupla ships Spanish, Amora claims 30+ locales,
+Paired is multi-locale. A language gap is also the easiest kind to close, so it is not
+defensible; the positional gap (proof loop + venue discovery) is.
+Three iLovu-specific blockers if we ever do it:
+1. **The content banks are the real cost** — 130 Daily Questions + 120 WYR + 36 Questions +
+   the 165-card deck ≈ **451 pieces of content** needing warm on-brand translation. Machine
+   translation will flatten the locked anti-pressure voice.
+2. **`dailyAnswers` snapshots the question TEXT** (`DailyQuestionService.swift:38`), so two
+   partners on different device languages would write different-language prompts into the
+   same shared doc and the reveal would mismatch. **Language must be a PER-COUPLE setting on
+   the couple doc, not per-device.** (The same design is what makes the bank expansion
+   migration-free — it cuts the other way here.)
+3. **The Near You deck cache is language-blind** — the only `languageCode` in
+   `PlacesService.swift:272` is a decoded RESPONSE field; nothing sets it on a request.
+   Language would have to join the cache key, multiplying cached decks per city — a direct
+   hit to the locked "scale with venues, not users" cost rule.
+**Recommendation: localize the App Store LISTING for es-MX/es-ES first** (cheap, reversible,
+no binary change, tests demand). Localize the app only once the funnel holds.
 
 ---
 

@@ -232,16 +232,32 @@ struct HomeView: View {
     // wall never appears mid-celebration. Hard vs. soft (block vs. dismiss-
     // through) is decided in the .sheet onDismiss above via paywallGate.hardMode.
     private func openMission(_ mission: Mission) {
-        if let coupleId = coupleService.coupleId,
-           paywallGate.shouldPresentAtMissionStart(coupleId: coupleId) {
+        // Signed out — never gate.
+        guard let scopeId = coupleService.paywallScopeId else {
+            missionToOpen = mission
+            return
+        }
+        // Feed the gate the current mission count BEFORE asking. This is the
+        // SOLO-reachable arming input (PaywallGate condition C); recording it at
+        // the open point needs no extra listener — by the time someone opens a
+        // mission the count is already correct, and arming here still lands on
+        // the calm entry point rather than mid-celebration.
+        paywallGate.recordMissionCount(missionStore.missions.count, scopeId: scopeId)
+
+        if paywallGate.shouldPresentAtMissionStart(scopeId: scopeId) {
             // Soft mode is show-once; latch it. Hard mode presents every time,
             // so it deliberately never latches.
             if !paywallGate.hardMode {
-                paywallGate.markShown(coupleId: coupleId)
+                paywallGate.markShown(scopeId: scopeId)
             }
             missionAfterPaywall = mission
             showPaywall = true
-            AppAnalytics.log("paywall_shown", ["trigger": "mission_start"])
+            AppAnalytics.log("paywall_shown", [
+                "trigger": "mission_start",
+                // Splits the funnel by whether the wall is reaching the ~96% of
+                // users who are unpaired — the whole point of the 1.0.8 change.
+                "scope": coupleService.coupleId == nil ? "solo" : "couple"
+            ])
         } else {
             missionToOpen = mission
         }

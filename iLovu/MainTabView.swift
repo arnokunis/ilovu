@@ -206,6 +206,8 @@ struct MainTabView: View {
         // the shared couple doc (couple listener republishes isPremium).
         .onChange(of: subscriptionService.myEntitlementActive) { _, _ in updatePremiumGate() }
         .onChange(of: coupleService.couple?.isPremium) { _, _ in updatePremiumGate() }
+        // Pull the remotely tunable paywall config once per launch.
+        .task { await loadPaywallConfig() }
         // When a match celebration cover dismisses, see if a warm push ask is
         // queued. Watched on both decks because either celebration can be the
         // first match. maybePresentPushAsk re-checks we're truly idle first.
@@ -264,9 +266,9 @@ struct MainTabView: View {
         // the 14-day backstop on a cold launch with no new match/memory). The
         // server createdAt is preferred when resolved; nil falls back to a
         // first-seen stamp inside the gate.
-        paywallGate.noteCoupleActive(coupleId: id, createdAt: coupleService.couple?.createdAt?.dateValue())
-        paywallGate.recordMatchCount(celebrated.count, coupleId: id)
-        paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: id)
+        paywallGate.noteScopeActive(scopeId: id, createdAt: coupleService.couple?.createdAt?.dateValue())
+        paywallGate.recordMatchCount(celebrated.count, scopeId: id)
+        paywallGate.recordMemoryCount(memoryStore.memories.count, scopeId: id)
 
         // Premium reconcile: if this user is already subscribed (including
         // subscribed-BEFORE-pairing, which the entitlement callback couldn't
@@ -309,6 +311,25 @@ struct MainTabView: View {
     /// wall once true. Cheap; called on attach and whenever either input changes.
     private func updatePremiumGate() {
         paywallGate.isSubscribed = subscriptionService.premiumActive(couple: coupleService.couple)
+    }
+
+    /// Reads the remotely tunable paywall config from `config/paywall`, once per
+    /// launch. Deliberately Firestore rather than Firebase Remote Config: Remote
+    /// Config is NOT linked in this project and Firestore already is, so this adds
+    /// no dependency for one integer.
+    ///
+    /// Why it must be remote: the swipe cap number is a genuine guess until
+    /// `swipe_made` data lands, and Near You is the only surface most (unpaired)
+    /// users reach — a cap set too low suppresses the single activation surface.
+    /// This lets it be retuned, or switched off with `soloSwipeCap: 0`, in minutes
+    /// instead of an App Store release. Any failure (offline, rules, missing doc)
+    /// silently keeps the built-in default, which is the safe direction.
+    private func loadPaywallConfig() async {
+        guard let snap = try? await Firestore.firestore()
+            .collection("config").document("paywall").getDocument(),
+              let cap = snap.data()?["soloSwipeCap"] as? Int
+        else { return }
+        paywallGate.swipeCap = cap
     }
 
     private func detachCoupleListeners() {
@@ -397,7 +418,7 @@ struct MainTabView: View {
         // Mirrors local completion (MissionDetailView) + attach: same source the
         // gate reads (memoryStore.memories.count). Read-side gate counting only.
         if let id = coupleId {
-            paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: id)
+            paywallGate.recordMemoryCount(memoryStore.memories.count, scopeId: id)
         }
     }
 
@@ -414,7 +435,7 @@ struct MainTabView: View {
         // it never presents here (mid-celebration). The wall waits for the next
         // calm mission-start in HomeView.
         if let id = coupleId {
-            paywallGate.recordMatchCount(celebrated.count, coupleId: id)
+            paywallGate.recordMatchCount(celebrated.count, scopeId: id)
         }
 
         // Stage 5 push: a real match is the warm, partner-relevant moment to ask

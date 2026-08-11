@@ -54,6 +54,22 @@ struct NearYouView: View {
     // Read for the SHARED event-location bucket (so both partners load one deck)
     // and written when this device claims/re-anchors it. nil-couple => solo deck.
     @Environment(CoupleService.self) private var coupleService
+    // Needed so a SOLO right-swipe can save the venue as a Mission directly.
+    // MissionStore persists locally and its remoteUpsert is nil when unpaired,
+    // so this works with no couple and no Firestore write.
+    @Environment(MissionStore.self) private var missionStore
+
+    /// Venue just saved by a solo right-swipe — drives the brief confirmation
+    /// toast. Nil hides it.
+    @State private var savedVenueName: String? = nil
+
+    // Swipe-cap paywall. Near You reaches ~67% of onboarded users vs ~33% for
+    // mission-open, so this is the trigger that actually gets the wall in front
+    // of people — hence its own presentation here rather than routing through
+    // HomeView.
+    @Environment(PaywallGate.self) private var paywallGate
+    @Environment(SubscriptionService.self) private var subscriptionService
+    @State private var showPaywall = false
 
     @State private var selectedCategory: LocalEvent.Category? = nil
 
@@ -170,6 +186,48 @@ struct NearYouView: View {
         .task {
             AppAnalytics.log("near_you_opened")
             await loadDeck()
+        }
+        // Swipe-cap wall. Mirrors HomeView's sheet so the purchase path is
+        // identical wherever the wall fires.
+        .sheet(isPresented: $showPaywall, onDismiss: {
+            AppAnalytics.log("paywall_dismissed", ["trigger": "swipe_limit"])
+        }) {
+            PaywallView(
+                annualPriceText:    subscriptionService.annualDisplay?.priceText,
+                annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
+                monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
+                onPurchase: { plan in
+                    switch plan {
+                    case .annual:  await subscriptionService.purchaseAnnual()
+                    case .monthly: await subscriptionService.purchaseMonthly()
+                    }
+                },
+                onRestore: { await subscriptionService.restore() }
+            )
+            .task { await subscriptionService.loadOfferings() }
+        }
+        // Solo save confirmation. Deliberately a light toast, NOT a full-screen
+        // cover: a right-swipe is a cheap, repeated action and interrupting every
+        // one of them would suppress exactly the swipe volume we now want. Copy is
+        // honest — nothing "matched", the venue was saved.
+        .overlay(alignment: .bottom) {
+            if let savedVenueName {
+                Text("Saved to your plans 💛 · \(savedVenueName)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(Color.louvCoral, in: Capsule())
+                    .shadow(radius: 8, y: 4)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task(id: savedVenueName) {
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation(LouvAnimation.spring) { self.savedVenueName = nil }
+                    }
+            }
         }
         // If location permission is granted AFTER the first load, or the couple
         // link completes mid-session, re-fetch — but only while the deck is still
@@ -348,9 +406,31 @@ struct NearYouView: View {
     private func completeSwipe(direction: SwipeDirection) {
         let topEvent = visibleDeck.first
 
+        // Swipe cap — evaluated BEFORE the card is consumed, so hitting the wall
+        // never costs the user a venue. The card snaps back instead of flying off,
+        // and the swipe is neither counted nor logged: it didn't happen.
+        if let scopeId = coupleService.paywallScopeId,
+           paywallGate.registerSwipeAndShouldPresent(scopeId: scopeId) {
+            withAnimation(LouvAnimation.spring) { dragOffset = .zero }
+            showPaywall = true
+            AppAnalytics.log("paywall_shown", [
+                "trigger": "swipe_limit",
+                "scope": coupleId == nil ? "solo" : "couple"
+            ])
+            return
+        }
+
         // Mark the session as touched so a late location/pairing reload won't
         // yank the deck out from under the user.
         swipedCount += 1
+
+        // Solo swipes were entirely uninstrumented before 1.0.8 — card_liked only
+        // fires inside MatchService.recordLike, which requires a coupleId — so
+        // there was no data to size a swipe cap against. Log every swipe.
+        AppAnalytics.log("swipe_made", [
+            "direction": direction == .right ? "right" : "left",
+            "scope": coupleId == nil ? "solo" : "couple"
+        ])
 
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
@@ -368,8 +448,8 @@ struct NearYouView: View {
 
             // Right-swipe = a like. With a couple, record it for real — the
             // match is detected and celebrated via MainTabView's listener (we
-            // don't set matchedEvent here). Without a couple, fall back to the
-            // placeholder coin-flip so the deck still celebrates in solo/preview.
+            // don't set matchedEvent here). SOLO saves the venue straight to
+            // Missions; see below.
             if direction == .right, let event = topEvent {
                 if let coupleId {
                     // Record under the card's OWN deck (.places / .events), so the
@@ -377,8 +457,16 @@ struct NearYouView: View {
                     // .events, as before.
                     let deck = event.sourceDeck ?? .events
                     Task { await matchService.recordLike(coupleId: coupleId, cardId: event.cardId, deck: deck) }
-                } else if Bool.random() {
-                    matchedEvent = event
+                } else {
+                    // SOLO — deterministic. This REPLACED a `Bool.random()`
+                    // placeholder that showed a FAKE "It's a Match! 🎉" half the
+                    // time and silently dropped the other half, which both lied to
+                    // the user and threw away ~50% of solo intent (CLAUDE.md,
+                    // 2026-08-11). A right-swipe now always saves the venue as a
+                    // Mission — mission_created fires inside MissionStore.add, and
+                    // PaywallGate condition C arms on the 2nd one.
+                    missionStore.add(Mission(from: DateCard(fromVenue: event)))
+                    withAnimation(LouvAnimation.spring) { savedVenueName = event.venue }
                 }
             }
         }

@@ -48,6 +48,18 @@ final class CoupleService {
     /// the matches listener key off this.
     var coupleId: String? { couple?.id }
 
+    /// Scope key for per-user LOCAL gate state (PaywallGate). Prefers the couple —
+    /// one subscription unlocks both partners, so paired state must stay shared —
+    /// and falls back to a per-uid solo scope so an UNPAIRED user still has a
+    /// durable identity to arm the paywall against. Before 1.0.8 there was no
+    /// fallback, so a solo user could never see the wall at any duration.
+    /// nil only when signed out, in which case no gate should evaluate at all.
+    var paywallScopeId: String? {
+        if let id = couple?.id { return id }
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return "solo.\(uid)"
+    }
+
     /// The partner's display name from the shared couple doc, or nil if unpaired
     /// or they haven't set one yet. Reads the signed-in uid here so views (HomeView)
     /// don't have to touch Auth/Firebase themselves.

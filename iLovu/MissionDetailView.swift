@@ -544,7 +544,7 @@ struct MissionDetailView: View {
             // when the couple has also reached its 2nd match). Never presents
             // here — the wall waits for the next calm mission-start.
             if let coupleId = coupleService.coupleId {
-                paywallGate.recordMemoryCount(memoryStore.memories.count, coupleId: coupleId)
+                paywallGate.recordMemoryCount(memoryStore.memories.count, scopeId: coupleId)
             }
         }
 
