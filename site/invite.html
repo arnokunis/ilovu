@@ -72,6 +72,54 @@
   .steps strong { color: var(--ink); }
   footer { text-align: center; padding: 0 0 40px; color: var(--ink-soft); font-size: 13px; position: relative; z-index: 1; }
   footer a { color: var(--rose); text-decoration: none; }
+
+  /* ---- The envelope ("unboxing") ----------------------------------------
+     Only ever shown when the link carries a plan (?p=...). A generic invite
+     keeps the old direct page — there is nothing to reveal, and an empty
+     envelope would be a worse experience than no envelope. */
+  .env-stage { padding: 18px 0 6px; }
+  .env {
+    position: relative; width: 260px; height: 176px; margin: 0 auto 18px;
+    background: none; border: none; padding: 0; cursor: pointer; display: block;
+    filter: drop-shadow(0 18px 34px rgba(196,69,105,0.28));
+    transition: transform .2s ease;
+  }
+  .env:hover { transform: translateY(-2px); }
+  .env:active { transform: scale(0.99); }
+  .env:focus-visible { outline: 3px solid var(--rose); outline-offset: 6px; border-radius: 12px; }
+  .env-body { position: absolute; inset: 0; background: #fff; border-radius: 12px; }
+  .env-flap {
+    position: absolute; left: 0; right: 0; top: 0; height: 88px;
+    background: linear-gradient(160deg, #FFE7E1 0%, #FFD9CF 100%);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+    transform-origin: top center; transition: transform .75s cubic-bezier(.22,.9,.28,1);
+    border-radius: 12px 12px 0 0;
+  }
+  .env-seal {
+    position: absolute; left: 50%; top: 74px; transform: translate(-50%,-50%);
+    width: 46px; height: 46px; border-radius: 50%; background: var(--gradient);
+    display: grid; place-items: center; font-size: 20px; color: #fff;
+    box-shadow: 0 6px 14px -4px rgba(196,69,105,0.6); transition: opacity .3s ease;
+  }
+  .env-hint { font-size: 13.5px; color: var(--ink-soft); font-weight: 600; }
+  .env.is-open .env-flap { transform: rotateX(180deg); }
+  .env.is-open .env-seal { opacity: 0; }
+
+  .letter { display: none; }
+  .letter.is-shown { display: block; animation: rise .55s cubic-bezier(.22,.9,.28,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+  .plan {
+    background: rgba(255,107,107,0.07); border: 1.5px solid rgba(196,69,105,0.18);
+    border-radius: 18px; padding: 20px 18px; margin: 4px 0 22px;
+  }
+  .plan-emoji { font-size: 34px; line-height: 1; margin-bottom: 8px; }
+  .plan-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; color: var(--rose); }
+  .plan-when { font-size: 14px; color: var(--ink-soft); margin-top: 6px; font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .env-flap, .letter.is-shown { transition: none; animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -81,9 +129,29 @@
   <nav><a href="/" class="logo">iL<span>o</span>vu</a></nav>
 
   <div class="card">
-    <div class="heart">💌</div>
-    <h1>Y<span class="o">o</span>u're invited</h1>
-    <p class="sub">Your person wants to plan real dates with you — swipe ideas together, match, and make them happen.</p>
+    <!-- Sealed stage: only rendered when the link carries a plan. -->
+    <div class="env-stage" id="env-stage" style="display:none;">
+      <button class="env" id="env" type="button" aria-expanded="false"
+              aria-label="Open your invitation">
+        <span class="env-body"></span>
+        <span class="env-flap"></span>
+        <span class="env-seal" aria-hidden="true">💗</span>
+      </button>
+      <p class="env-hint" id="env-hint">Tap to open your invitation</p>
+    </div>
+
+    <!-- Everything below is the letter. Shown immediately for a generic invite;
+         revealed by the envelope when a plan is present. -->
+    <div id="letter" class="letter is-shown">
+    <div class="heart" id="heart">💌</div>
+    <h1 id="headline">Y<span class="o">o</span>u're invited</h1>
+    <p class="sub" id="sub">Your person wants to plan real dates with you — swipe ideas together, match, and make them happen.</p>
+
+    <div class="plan" id="plan" style="display:none;">
+      <div class="plan-emoji" id="plan-emoji">💘</div>
+      <div class="plan-title" id="plan-title"></div>
+      <div class="plan-when" id="plan-when"></div>
+    </div>
 
     <div id="code-block" style="display:none;">
       <p class="code-label">Your connection code</p>
@@ -99,6 +167,7 @@
       <p><strong>2.</strong> Tap "Have a code?" and enter the code above<br>&nbsp;&nbsp;&nbsp;&nbsp;(or just tap this link again — it opens the app)</p>
       <p><strong>3.</strong> You're connected 💕</p>
     </div>
+    </div><!-- /letter -->
   </div>
 </div>
 <footer>
@@ -130,6 +199,68 @@
         setTimeout(function () { copy.textContent = "Copy code"; }, 2000);
       });
     });
+
+    // ---- The plan, and the envelope that reveals it ----------------------
+    //
+    // The app appends the plan to the link (p = title, w = ISO day, e = emoji,
+    // n = sender's first name) because this page is static and cannot read
+    // Firestore. Sequence we're building: plan alone -> partner opens a link and
+    // sees a date someone MADE for them -> installs. The app has delivered value
+    // before the second person did anything.
+    //
+    // SECURITY: every value below goes in via textContent, never innerHTML.
+    // These strings come from a URL a stranger can craft, so treating them as
+    // markup would be an XSS hole on our own domain.
+    var params = new URLSearchParams(window.location.search);
+    var plan = (params.get("p") || "").slice(0, 80);
+    if (!plan) return;                       // generic invite → letter already shown
+
+    var sender = (params.get("n") || "").slice(0, 40);
+    var emoji  = (params.get("e") || "").slice(0, 8);
+    var when   = params.get("w");
+
+    document.getElementById("plan-title").textContent = plan;
+    if (emoji) document.getElementById("plan-emoji").textContent = emoji;
+
+    if (when && /^\d{4}-\d{2}-\d{2}$/.test(when)) {
+      // Parse as LOCAL time. new Date("2026-08-16") is parsed as UTC and would
+      // show the previous day for anyone west of Greenwich.
+      var bits = when.split("-");
+      var d = new Date(+bits[0], +bits[1] - 1, +bits[2]);
+      if (!isNaN(d)) {
+        document.getElementById("plan-when").textContent =
+          d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      }
+    }
+    document.getElementById("plan").style.display = "block";
+
+    document.getElementById("headline").textContent =
+      sender ? (sender + " planned something for you") : "Someone planned something for you";
+    document.getElementById("sub").textContent =
+      "Get the app to see the whole plan — and to say yes.";
+    document.getElementById("heart").textContent = "💌";
+    document.title = sender ? (sender + " planned something for you — iLovu")
+                            : "A date is waiting for you — iLovu";
+
+    // Seal it: hide the letter and show the envelope.
+    var letter = document.getElementById("letter");
+    var stage  = document.getElementById("env-stage");
+    var env    = document.getElementById("env");
+    letter.classList.remove("is-shown");
+    stage.style.display = "block";
+
+    var opened = false;
+    function openEnvelope() {
+      if (opened) return;
+      opened = true;
+      env.classList.add("is-open");
+      env.setAttribute("aria-expanded", "true");
+      document.getElementById("env-hint").textContent = "";
+      // Let the flap finish before the letter rises.
+      setTimeout(function () { letter.classList.add("is-shown"); }, 380);
+      if (typeof gtag === "function") gtag("event", "invite_letter_opened");
+    }
+    env.addEventListener("click", openEnvelope);
   })();
 </script>
 </body>
