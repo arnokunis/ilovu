@@ -13,6 +13,8 @@ Project context for Claude Code sessions. Read this first.
 reachable solo via two triggers (2nd Mission, and a remotely tunable 20/day swipe cap),
 and the `Bool.random()` fake match is deleted. The payments stack was audited end-to-end
 and is GREEN — €0 was never a payments bug. It supersedes the sequencing plan below.
+- **⬅ ASA ACTION, found 2026-08-11: iLovu is rated 18+, and since 2026-02-24 Apple BLOCKS 18+ downloads in Brazil, Australia and Singapore for un-verified adults** — an install leak that happens BEFORE `first_open`, so it is invisible in GA4 while we buy those storefronts worldwide. See "iLovu IS RATED 18+" under the ASA plan.
+- **⬅ DECIDED 2026-08-11: the solo DATING layer is gated, not scheduled** — competitor scan, the guideline 1.2 moderation bill, and four explicit entry gates are in "PARKED — a dating layer for solo users" near the bottom. Two pieces of it (interest tags, fresh-couple question track) were split out as build-now items that need no dating.
 - **⬅ ALSO BEFORE THE NEXT BUILD: read "Retention playbook — Flame audit (2026-08-08)" near the bottom.** The daily-question TRIGGER (carrot/stick push) is now a decided build item, plus three iLovu-native retention mechanics and a fresh paired-couple count (3: AU/LT/UK).
 - **1.0.6 SUBMITTED (build 11, 2026-07-30) — LATEST; a funnel-fix batch driven by an all-time GA4 read (see ALL-TIME FUNNEL ANALYSIS below).** Attacks the two biggest leaks the data exposed. **Sign-in leak (~45% of installs never sign in):** a "Free to start — signing in never charges you" reassurance line (a real tester feared Apple sign-in would CHARGE her) + a public **Email sign-up/sign-in** alongside Apple (`AppleSignInViewModel.createAccount` / `signInEmail` / `sendPasswordReset`; stable numeric FIRAuthErrorCode mapping; the email sheet forces `.preferredColorScheme(.light)` so placeholders + the segmented toggle aren't white-on-white in dark mode). **Pairing leak (~70% never invite):** a prominent **unpaired-only "invite your partner" card on the Home dashboard** (was buried in the Us tab) — opens the same `PairingView`, vanishes once paired. **Notifications:** the invite REDEEMER is now asked for permission at redeem (only the creator was → redeemers had NO FCM token → zero pushes + the "nudge didn't send" bug); a **Notifications enable/status row in the Us tab** (request / re-register token / open Settings + a confirmation alert); copy now names the special-date reminders and says ONE grant activates ALL push types. **Data-isolation fix:** signing in as a DIFFERENT account (now possible via email) had account B inheriting A's name/missions/memories/couple, because sign-out never cleared the device-local stores — `handleAuthChange` at the app root now resets the in-memory stores + `removePersistentDomain` on a uid change (sign-out itself doesn't wipe, so signing back in as yourself keeps your data). **Fix 1 (explore-before-sign-in) DEFERRED until 1.0.6 stats land** — the structural 45%-leak fix; touches the locked auth-upfront decision, so decide with data, not blind.
 - **1.0.5 SHIPPED (build 10, submitted 2026-07-28) — prior release.** The post-1.0.4 Near You polish batch (all found via on-device testing of 1.0.4's new search): **city-search keyboard fix** (the inline `TextField` keyboard shoved the deck layout up and hid the search box → moved to a native `.alert` text field), **popularity ranking** (`curationVersion 3→4` — busier/more-reviewed venues rank higher via a log-scaled capped `popularityBoost`), **all cached venue photos** shown (was 4 of ~10), and **dynamic filter pills** (the always-empty Music pill is gone — pills now derive from categories actually in the deck). App Store "What's New" framed as Near You improvements. Details in the "Near You polish batch" decision. **1.0.4 is live**, so this shipped as a new version (not a build-9 replacement).
@@ -783,6 +785,31 @@ to the US cohort, it REPLACED it. The long tail is NOT behaving like junk traffi
 of those geos convert deeper than the US ever did at €2.6.
 **Spanish cluster (MX/CL/PE/VE/HN): 8 installs → 7 sign-ins → 3 pairing → 2 invites.**
 
+### ⚠️ iLovu IS RATED 18+ — and 18+ is now AGE-GATED in 3 storefronts (found 2026-08-11)
+
+**The App Store listing shows a 18+ age rating** (verified on the live product page; a
+consequence of the 2025 age-rating overhaul that replaced 12+/17+ with 13+/16+/18+ and
+forced every app through a new questionnaire by 2026-01-31). Nothing in this file had ever
+recorded it.
+
+**Since 2026-02-24 Apple BLOCKS downloads of 18+ apps in Brazil, Australia and Singapore**
+unless the Apple Account has been confirmed as an adult; the App Store does the check itself,
+before the install. Utah (2026-05-06) and Louisiana (2026-07-01) additionally share age
+categories with apps via the Declared Age Range API for new accounts.
+
+**Why this matters right now:** ASA went worldwide on 2026-08-08 into ~25 storefronts, and
+**AU is one of only 3 paired couples all-time**. If AU/BR/SG are in the campaign, a share of
+that spend is buying impressions against a download gate — an install leak that is INVISIBLE
+in the GA4 funnel, because it happens before `first_open`. **→ Check the ASA per-storefront
+install rate for AU/BR/SG against comparable geos, and exclude them if the tap-to-install
+rate is depressed.** Independent argument for concentrating ASA on 1–2 storefronts.
+
+**Also worth a deliberate decision: is 18+ even correct?** It restricts the whole app in
+those markets and narrows ASA reach everywhere. If the rating came from an over-cautious
+questionnaire answer rather than a real content requirement, a re-rate is free reach. But
+**do NOT re-rate below 18+ if the dating layer is ever built** (see PARKED below) — and note
+the questionnaire is the honest-answer obligation of guideline 2.3.6.
+
 ### Couples: still 3, and ~1 alive
 
 `invite_redeemed` all-time = **3** (AU 1 / LT 1 / UK 1), the country split summing exactly
@@ -1019,31 +1046,124 @@ surface mid-first-session.
 at 40 or off, measure the real distribution for a week, tighten 40 → 25 → 15 **without App
 Review.**
 
-### PARKED — a dating layer for solo users (raised 2026-08-11, NOT scheduled)
+### PARKED — a dating layer for solo users (raised 2026-08-11; researched + gated 2026-08-11)
 
 Prompted by BPM (French sports dating app, €140k MRR in 6 months). Idea: let solo users
 swipe on PARTNERS by shared interest, then scroll ACTIVITIES together once matched.
-**The matching half is taken** — Hinge/Bumble interests, and sport-dating specifically is
-occupied (BPM in FR, **Surf** in US/AU with a Hyrox deal, Fitafy, Sweatt). **The unclaimed
-half is ours: converting a match into a real date.** Dating apps dump you into a chat and
-the date never happens; the proof loop applied one stage earlier is genuinely
-differentiated.
+**Founder's expanded version (2026-08-11):** relationship status in onboarding → single
+route collects INTEREST TAGS (running, gym, triathlon, football, cinema, theatre, AI,
+business, marketing…) → filter who you swipe by those tags + radius, tabs styled like the
+Near You cuisine filter → on match, the fresh pair enters the EXISTING loop (swipe venues
+together, plan, maybe chat) → a DIFFERENT Daily Question bank tuned for a brand-new couple.
 
-**Why NOT now, from BPM's own numbers:** (1) **density IS the product** — he stayed in ONE
-country for 7 months and refused the US for lack of cash; we are in ~25 countries at ~37
-installs/week, i.e. 2–3 users per city. (2) He had **distribution before the app** — a run
-club, 3k waitlist, 500 first-weekend installs; we have paid ads only, and buying BOTH sides
-of a marketplace cold is the most expensive thing in consumer apps. (3) **Moderation** —
-he had 10–20 fake profiles within TWO DAYS, pre-marketing; we have no reporting/blocking/
-verification, plus stricter App Review (iOS dating rejections since 2024; he thinks niche
-saved him). (4) It **abandons our one working acquisition signal** — "love counter" is the
-#1 converting ASA keyword and it is *already-in-a-relationship* intent.
-**Revisit only if 1.1.0 proves solo users will NOT pay.** Then it is a NEW product launched
-ONE CITY at a time with a real-world hook, reusing the venue/deck code as a library — not a
-bolt-on to the live couples app.
+**COMPETITOR SCAN (2026-08-11, done properly — the earlier "matching half is taken" line
+was right but understated):**
+- **Interest/sport-tag matching is fully occupied and funded.** **Surf** became the
+  *official dating app partner of HYROX Americas* (Jan 2026) — a HYROX filter, race-venue
+  activations, and interest filters deliberately kept **free, not paywalled**. **GRASS**
+  (outdoor) has 50k+ downloads clustered in Denver/Portland/LA/Seattle. **DateFit** filters
+  by activity type, workout frequency and goals. **Leg Day** (Apr 2026) only works while you
+  are physically inside your gym. Plus BPM (FR), Fitafy, and Hinge/Bumble interest badges +
+  exercise filters at unreachable scale.
+- **"Plan the activity instead of chatting" is the FASTEST-GROWING category in dating, not a
+  gap.** GRASS's own positioning is literally *"replaces swiping and chatting with planning
+  and doing"* — activity-first ("what do I want to do, who wants to join") vs people-first.
+  **Tinder Events** lets singles browse local activities and see who is going. **Hinge Date
+  Ideas** suggests first dates. **222** runs questionnaire → real reservation → post-event
+  "see them again?". Activity-based platforms are growing while Match Group and Bumble
+  stall, which is exactly why all of them are shipping into it. **This half is closing.**
+- **The couples-side co-swipe is crowded too** (our own category): Cobble, WeDo, DateMatch,
+  Connected, Cupla all do partner-matched date ideas.
+- **GENUINELY UNCLAIMED: converting a fresh MATCH into a completed, proof-photographed,
+  jointly-vaulted date.** Nothing found does it. **But understand WHY it is empty — it is
+  not hard to build, it is that a dating app which works LOSES TWO USERS.** Hinge has no
+  incentive to build the thing that graduates people off Hinge. That is the one durable
+  strategic story here: **iLovu is the retention half that dating apps structurally cannot
+  want.** It also argues the funnel runs the OTHER way — the couples product is the LTV
+  tail of dating, not dating a feature of the couples product.
+- **Cautionary precedent: HowAboutWe** — a date-idea-first dating product ("How about
+  we… go hiking") that launched **You&Me**, a couples app, in 2014, was absorbed into IAC
+  and disappeared. The exact concept, tried at the top of the market, and the couples half
+  is where it ended up.
+
+**WOULD APPLE APPROVE IT? Yes, with one real ongoing cost — and one pleasant surprise.**
+- **4.3(b) names dating explicitly** as saturated: *"we will not accept new submissions
+  unless they offer a meaningfully different or improved experience."* That targets **new
+  submissions**; an update to an already-approved app is a softer path. Real risk, NOT the
+  binding constraint.
+- **1.2 (User-Generated Content) IS the binding constraint** — four mandatory requirements
+  we satisfy ZERO of today, because iLovu has no profiles, no chat and no stranger photos:
+  (1) filter objectionable material *before* it posts, (2) a report mechanism with timely
+  response, (3) block abusive users, (4) published contact info. In practice: image
+  moderation on every profile photo, a report queue a HUMAN works, block lists propagating
+  through `firestore.rules`, a staffed support address. **Ongoing opex, not a one-time
+  build** — and BPM had 10–20 fake profiles within TWO DAYS, pre-marketing.
+- **1.1.4 bans "hookup" apps.** The long-term-relationship framing is on the right side of
+  this; keep it there explicitly in metadata and screenshots.
+- **AGE RATING COSTS NOTHING: iLovu is ALREADY 18+** (see the ASA section above). The
+  assumed "a dating layer forces an 18+ re-rate" blocker does not exist. Corollary: do NOT
+  re-rate below 18+ while this idea is live.
+
+**WHY NOT NOW (unchanged, and the interest-filter idea makes one reason WORSE):**
+1. **Density IS the product, and FILTERS DIVIDE AN EMPTY POOL.** ~37 installs/week across
+   ~25 countries ≈ 2–3 users per city. "Women into AI + business + marketing + football +
+   triathlon within 20km" returns ZERO in Vilnius and zero everywhere else. Interest filters
+   are a feature that only works ABOVE a density threshold we are orders of magnitude below;
+   they make the cold-start worse, not better. Every winner bought density first — BPM held
+   ONE country for 7 months, Surf bought HYROX, GRASS lives in five US metros.
+2. **Buying BOTH sides of a marketplace cold is the most expensive thing in consumer apps**,
+   and paid ads are our only channel. BPM had a run club, a 3k waitlist and 500
+   first-weekend installs BEFORE the app.
+3. **Moderation opex** (1.2 above) with no team.
+4. **It abandons our one working acquisition signal** — "love counter" is the #1 converting
+   ASA keyword and it is *already-in-a-relationship* intent.
+5. **It dodges the cheapest unknown on the table.** 1.0.8 exists specifically to answer
+   "will a solo user pay?" and is still unshipped. ~€150 and ~10 days buys that answer;
+   spending 2–3 months on a two-sided marketplace to avoid learning it is the wrong trade.
+
+**WOULD WE BUILD IT LATER, AND IN WHICH PHASE? — Not a phase of iLovu. Phase 1 of a
+DIFFERENT product, entered only on a specific negative result.** Explicit gates:
+
+    GATE A (now)  ship 1.0.8 · deploy rules + config/paywall doc · concentrate ASA on ≤2
+                  storefronts · reach ~100 paywall_shown  →  install→paid rate is KNOWN
+    GATE B        install→paid ≥ 1.3% (break-even at €0.50 CPI)
+                  →  DO NOT BUILD DATING. Scale the couples app. Dating never happens.
+    GATE C        install→paid < 1.3% AND solo D7 retention still <10% AFTER the retention
+                  batch has shipped and been measured
+                  →  the couples thesis is failing; dating becomes the PIVOT CANDIDATE —
+                     never a bolt-on, never while the couples thesis is still untested
+    GATE D        before writing any dating code, all three must exist:
+                  (1) ONE city, chosen for a reason, not 25 storefronts
+                  (2) a real-world distribution hook that exists BEFORE the app (BPM's run
+                      club / Surf's HYROX) — paid ads alone cannot cold-start two sides
+                  (3) a budgeted, staffed answer to guideline 1.2 moderation
+
+**If it is ever built: a NEW app, one city, reusing the venue/deck code as a library.** And
+**do not compete on activity-first matching** — GRASS/BPM/Surf/Tinder Events already own it.
+Compete on what happens AFTER the match works, which is the only part nobody wants to build.
 **The transferable BPM lesson is not "build dating"** — it is *niche + one geography +
 density + every €1 returns €1*. Applied here that means CONCENTRATING ASA on one or two
 storefronts instead of 25, which is free to do and the opposite of what we did on 2026-08-08.
+
+### SPLIT OUT of the dating idea — two pieces worth building WITHOUT it (2026-08-11)
+
+The founder's dating proposal contains two components that pay for themselves inside the
+CURRENT couples product, need no profiles/chat/moderation, and carry ZERO App Review risk.
+**Build these; park the dating layer.** They are also exactly the prerequisites the dating
+layer would need, so building them here is free optionality rather than sunk cost.
+
+1. **Interest tags in onboarding** (running, gym, cinema, theatre, food, culture…), picked
+   with the same multi-select pill UI as the shipped Near You cuisine filter. Inside the
+   couples app they personalise **the Near You deck and the 165-card deck for the SOLO
+   majority** — solo users are ~96% of the base and Near You is the only surface they touch.
+   Same data model the dating layer would need, validated in a context where it earns its
+   keep first. **No moderation surface, no UGC, no rating change.**
+2. **A "fresh couple" Daily Question track** — a get-to-know-you arc served to a NEWLY
+   paired couple instead of the general rotation. This attacks a problem already MEASURED,
+   not a hypothetical: **both non-founder pairs churned within 24h of pairing** (see that
+   section above). Slots directly into the Daily Question bank expansion plan; the bank
+   snapshots question TEXT (`DailyQuestionService.swift:38`), so adding a track needs **no
+   migration**. Cost is content, not architecture.
 
 ### PARKED — localization / Spanish (raised 2026-08-11)
 
