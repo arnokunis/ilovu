@@ -66,7 +66,6 @@ struct HomeView: View {
     // Day streak stays as an @AppStorage placeholder until we wire it
     // to real activity data. The other two stats are now derived from
     // the live stores below — single source of truth, no duplication.
-    @AppStorage("dayStreak") private var dayStreak: Int = 1
 
     // Real counts read from the stores. Recomputed cheaply on every
     // render; SwiftUI re-renders this view whenever the @Observable
@@ -203,6 +202,7 @@ struct HomeView: View {
             }
         }) {
             PaywallView(
+                isPaired:           coupleService.coupleId != nil,
                 annualPriceText:    subscriptionService.annualDisplay?.priceText,
                 annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
                 monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
@@ -636,12 +636,19 @@ struct HomeView: View {
     private var quickStatsRow: some View {
         HStack(spacing: 12) {
             statCard(number: missionsCompletedCount, label: "Missions")
-            // Real "Days Together" once an anniversary is set; falls back to the
-            // placeholder Day Streak until then.
-            if let days = coupleService.daysTogether {
+            // "Days Together" whenever a dating date exists — effectiveDaysTogether
+            // so it also works for an unpaired user who set one.
+            //
+            // The old `else` branch showed a "Day Streak" card backed by
+            // @AppStorage("dayStreak"), which was initialised to 1 and NEVER
+            // written anywhere in the repo: anyone without a date saw "1 Day
+            // Streak" permanently, a stat that can never move. It also contradicted
+            // the locked "no streaks, no shame" rule stated at the top of this file
+            // and in DailyQuestionCard, and it was mutually exclusive with Days
+            // Together — so it vanished for the MORE invested user. Removed rather
+            // than wired: a self-directed streak is off-brand by decision.
+            if let days = coupleService.effectiveDaysTogether {
                 statCard(number: days, label: "Days Together")
-            } else {
-                statCard(number: dayStreak, label: "Day Streak")
             }
             statCard(number: memoriesSavedCount,     label: "Memories")
         }

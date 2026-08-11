@@ -184,7 +184,7 @@ struct NearYouView: View {
         // Load the deck once on appear (real events via EventCache, or the
         // SampleEvents fallback). .task is cancelled automatically on disappear.
         .task {
-            AppAnalytics.log("near_you_opened")
+            logNearYouVisit()
             await loadDeck()
         }
         // Swipe-cap wall. Mirrors HomeView's sheet so the purchase path is
@@ -193,6 +193,7 @@ struct NearYouView: View {
             AppAnalytics.log("paywall_dismissed", ["trigger": "swipe_limit"])
         }) {
             PaywallView(
+                isPaired:           coupleId != nil,
                 annualPriceText:    subscriptionService.annualDisplay?.priceText,
                 annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
                 monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
@@ -402,6 +403,22 @@ struct NearYouView: View {
     // MARK: - Swipe Completion
 
     private enum SwipeDirection { case left, right }
+
+    /// Logs `near_you_opened` at most once per ~session.
+    ///
+    /// It used to fire directly in `.task`, which SwiftUI runs on EVERY view
+    /// appearance — so it counted TAB SWITCHES, not visits. One founder testing
+    /// session logged 33 "opens" from a single user in a day, inflating every
+    /// engagement read built on it by an unknown multiple. 30 minutes matches
+    /// GA4's own session timeout, so one event now means one visit.
+    @MainActor private static var lastOpenLoggedAt: Date?
+
+    private func logNearYouVisit() {
+        let now = Date()
+        if let last = Self.lastOpenLoggedAt, now.timeIntervalSince(last) < 30 * 60 { return }
+        Self.lastOpenLoggedAt = now
+        AppAnalytics.log("near_you_opened")
+    }
 
     private func completeSwipe(direction: SwipeDirection) {
         let topEvent = visibleDeck.first

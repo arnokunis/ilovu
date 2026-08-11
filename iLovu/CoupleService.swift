@@ -86,7 +86,12 @@ final class CoupleService {
     }
 
     /// A relationship milestone's date (dating / engaged / wedding), or nil.
-    func milestoneDate(_ milestone: CoupleMilestone) -> Date? { couple?.milestoneDate(milestone) }
+    /// Falls back to the locally parked dating date when unpaired, so the Couple
+    /// Story editor pre-fills and the counter reads correctly before pairing.
+    func milestoneDate(_ milestone: CoupleMilestone) -> Date? {
+        if let onCouple = couple?.milestoneDate(milestone) { return onCouple }
+        return milestone == .dating ? soloDatingDate : nil
+    }
 
     /// The "started dating" date — the source of the Days Together counter.
     var datingDate: Date? { couple?.milestoneDate(.dating) }
@@ -94,8 +99,59 @@ final class CoupleService {
     /// Days together (start day = day 1), or nil until the dating date is set.
     var daysTogether: Int? { couple?.daysTogether() }
 
-    /// The couple's relationship stage, or nil if unset.
-    var relationshipStatus: String? { couple?.relationshipStatus }
+    /// The couple's relationship stage, or nil if unset. Falls back to the locally
+    /// parked pick when unpaired (the Couple Story editor keys its visible
+    /// milestones off this, so without the fallback the date field vanishes).
+    var relationshipStatus: String? { couple?.relationshipStatus ?? soloRelationshipStatus }
+
+    // MARK: - Solo (unpaired) relationship details
+    //
+    // Milestones live on the couple doc, so before 1.0.8 an unpaired user could
+    // open the Couple Story editor, pick a status, enter their dating date — and
+    // silently lose it, because setMilestone/setRelationshipStatus write to a
+    // couple that does not exist. The Days Together widget therefore rendered
+    // BLANK for the ~96% who are unpaired, even though "love counter" is the #1
+    // converting Apple Search Ads keyword: people pay to install FOR the counter
+    // and hit nothing. Park both locally and flush at pairing — the same shape as
+    // the parked display name and FCM token.
+
+    private static let soloDatingKey = "solo.datingDate"
+    private static let soloStatusKey = "solo.relationshipStatus"
+
+    private(set) var soloDatingDate: Date? =
+        UserDefaults.standard.object(forKey: CoupleService.soloDatingKey) as? Date
+    private(set) var soloRelationshipStatus: String? =
+        UserDefaults.standard.string(forKey: CoupleService.soloStatusKey)
+
+    /// Dating date to DISPLAY: the couple's when paired, the locally parked one
+    /// when not. Use this for widgets and UI; `datingDate` stays couple-only.
+    var effectiveDatingDate: Date? { couple?.milestoneDate(.dating) ?? soloDatingDate }
+
+    /// Days together from `effectiveDatingDate`, so the counter works solo.
+    /// Start day counts as day 1, matching Couple.daysTogether().
+    var effectiveDaysTogether: Int? {
+        if let paired = couple?.daysTogether() { return paired }
+        guard let start = soloDatingDate else { return nil }
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: start),
+            to: Calendar.current.startOfDay(for: Date())
+        ).day
+        return days.map { $0 + 1 }
+    }
+
+    /// Pushes anything parked while solo up to the couple doc, once one exists.
+    /// Idempotent and non-destructive: it never overwrites a value the couple
+    /// already carries, so a partner who set the date first always wins.
+    func flushSoloRelationshipDetails() async {
+        guard couple?.id != nil else { return }
+        if let parked = soloDatingDate, couple?.milestoneDate(.dating) == nil {
+            await setMilestone(.dating, date: parked)
+        }
+        if let parked = soloRelationshipStatus, couple?.relationshipStatus == nil {
+            await setRelationshipStatus(parked)
+        }
+    }
 
     /// The couple's SHARED Near You location bucket ("%.2f,%.2f"), or nil until a
     /// partner has claimed one. NearYouView reads this to fetch the shared deck.
@@ -634,6 +690,15 @@ final class CoupleService {
     /// wedding). Dot-path write so the others are untouched; hidden milestones are
     /// never deleted by a status change.
     func setMilestone(_ milestone: CoupleMilestone, date: Date) async {
+        // Unpaired: park a dating date locally instead of losing the write, so
+        // Days Together works solo (see the solo section above). Engagement and
+        // wedding dates are inherently couple-scoped — nothing to park.
+        guard couple?.id != nil else {
+            guard milestone == .dating else { return }
+            soloDatingDate = date
+            UserDefaults.standard.set(date, forKey: Self.soloDatingKey)
+            return
+        }
         await updateCoupleField(["milestones.\(milestone.rawValue)": Timestamp(date: date)]) {
             var map = $0.milestones ?? [:]
             map[milestone.rawValue] = Timestamp(date: date)
@@ -653,6 +718,13 @@ final class CoupleService {
 
     /// Sets the couple's shared relationship stage.
     func setRelationshipStatus(_ status: String) async {
+        // Unpaired: park it, or the Couple Story editor silently forgets the pick
+        // and the dating-date field never reappears (visibleMilestones keys off it).
+        guard couple?.id != nil else {
+            soloRelationshipStatus = status
+            UserDefaults.standard.set(status, forKey: Self.soloStatusKey)
+            return
+        }
         await updateCoupleField(["relationshipStatus": status]) {
             $0.relationshipStatus = status
         }

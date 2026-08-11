@@ -27,6 +27,19 @@ struct PaywallView: View {
     /// Stubbed for now — real eligibility comes from the backend later.
     var isFoundingEligible: Bool = false
 
+    /// Whether this user has a partner yet. Defaults true so existing call sites
+    /// and previews keep the original couple-framed copy.
+    ///
+    /// WHY THIS EXISTS (1.0.8): the wall used to be reachable ONLY by paired
+    /// couples, so every line safely assumed a partner. It is now reached mostly
+    /// by SOLO users — and "unlocks everything for both of you" reads to someone
+    /// with no partner as "this is useless until you find one", which is the worst
+    /// possible framing at the moment of purchase. Solo copy keeps the value on
+    /// what they already have (their saved plans) and makes the partner an
+    /// upgrade, never a prerequisite. Anti-pressure brand rule still applies:
+    /// no nudging them about being single.
+    var isPaired: Bool = true
+
     // Real localized prices from RevenueCat packages, fed by the caller. nil →
     // the static fallback copy in annualInfo/monthlyInfo is used, so the screen
     // renders fully (and previews) without RevenueCat.
@@ -212,12 +225,19 @@ struct PaywallView: View {
                 .font(.system(size: 44))
                 .accessibilityHidden(true)
 
-            Text("Keep building your story together.")
+            Text(isPaired
+                 ? "Keep building your story together."
+                 : "Keep every date you plan.")
                 .font(.system(size: heroSize, weight: .bold))
                 .foregroundStyle(Color.deepRose)
                 .multilineTextAlignment(.center)
 
-            Text("One subscription unlocks everything — for both of you.")
+            // Solo subhead deliberately mentions the partner as something the
+            // subscription ALREADY covers — an upgrade waiting, not a condition
+            // to satisfy first.
+            Text(isPaired
+                 ? "One subscription unlocks everything — for both of you."
+                 : "Unlocks everything now — and covers your partner too, whenever you connect.")
                 .font(.system(size: bodySize))
                 .foregroundStyle(.gray)
                 .multilineTextAlignment(.center)
@@ -362,7 +382,7 @@ struct PaywallView: View {
                     if isPurchasing {
                         ProgressView().tint(.white)
                     } else {
-                        Text("Start together")
+                        Text(isPaired ? "Start together" : "Start planning")
                             .font(.system(size: ctaSize, weight: .semibold))
                             .foregroundStyle(.white)
                     }

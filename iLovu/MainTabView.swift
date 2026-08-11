@@ -275,6 +275,9 @@ struct MainTabView: View {
         // mirror because no couple existed yet), stamp the shared flag now that
         // the couple is present. Then push effective premium into the gate.
         Task { await coupleService.syncPremiumEntitlement(subscriptionService.myEntitlementActive) }
+        // Push up anything set before pairing (dating date, relationship status).
+        // Non-destructive: a value the partner already set always wins.
+        Task { await coupleService.flushSoloRelationshipDetails() }
         updatePremiumGate()
 
         matchListener = matchService.observeMatches(coupleId: id) { match in
