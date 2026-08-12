@@ -1105,6 +1105,57 @@ becomes `httpsilovuioinvitemtv7w`. Five-line fix (take the last path component w
 contains `invite/`). **Higher-value than before, because "Copy my code" just made the
 clipboard the primary path.**
 
+### 1.0.8 SUBMITTED 2026-08-12 (build 13) — the first release that can take money
+
+**Live version before this was 1.0.7** (confirmed via the ASC API, not inferred) — so the
+worldwide cohort since 2026-08-08 ran 1.0.7, which settles the attribution question the
+funnel analysis could not answer.
+
+**Contents:** paywall reachable without a partner (2 Missions · 20 swipes/day · 14 days) ·
+both coin flips deleted · solo paywall copy · Days Together + Next Date countdown solo ·
+fake dayStreak card removed · QR scan-to-pair · invite from a Mission carrying the plan ·
+invite expiry 7→30d · creator nudge · `invite_redeem_failed` reasons · pasted invite URLs
+accepted · per-couple timezone · daily-question trigger (couples only) · add-the-widget
+prompt · `near_you_opened` counts visits.
+
+**WATCH FIRST, in this order:**
+1. `paywall_shown` as a share of installs. It was **0 for the app's entire life**; if it
+   stays near zero the triggers are still not reaching people and the swipe cap is the
+   remote dial to turn (`config/paywall.soloSwipeCap`, no resubmit).
+2. `purchase_success` ÷ `paywall_shown` — the conversion rate that decides everything.
+3. **Cost per paying subscriber, per storefront** = ASA spend ÷ purchases. THE number.
+   Break-even at €0.50 CPI is 1.3% install→paid.
+4. `invite_redeem_failed` reasons — separates "never tried" from "it broke", which have
+   opposite fixes and were indistinguishable before this release.
+5. Drop-off after day 14, now that the backstop arms solo users with `hardMode` on.
+
+**⚠️ APPLE ADS IS CONNECTED and CLAUDE.md's TOOLING BACKLOG was stale** — it was finished
+2026-08-10. `~/.apple-ads/apple-ads.mjs`, zero-dependency, all four credentials set
+(org **KUNIS, MB / 22908940**, EUR, PAYG). `report countries <start> <end>` gives spend,
+downloads, CPI and tap→install per storefront. Metric names are `totalNewDownloads` /
+`totalInstalls`, NOT `installs` (that key returns undefined).
+
+**APP STORE CONNECT IS NOW CONNECTED TOO (2026-08-12).** `~/.appstoreconnect/asc.mjs`,
+same shape, **read-only by construction** — no POST/PATCH path exists, because an App
+Manager key can change live pricing and metadata and the safest guard is not having the
+code. Key `8TK4GLZ527` in `private_keys/` (600), issuer in `credentials.json`.
+`apps | versions | builds | iaps | sales <vendorNo> | get <path>`. Tokens are minted per
+run (≤20 min), so unlike the Apple Ads client secret there is no silent-expiry trap.
+**Sales reports need the VENDOR NUMBER** (ASC → Payments and Financial Reports), not yet
+recorded here.
+
+**FIRST REAL ASA READ (2026-08-08 → 08-12, €28.57, 67 new downloads, blended CPI €0.43):**
+**🇮🇹 Italy is the standout — €3.52 → 11 downloads at €0.32, 25% tap→install**, the
+highest volume AND the deepest GA4 funnel. Two independent sources agreeing.
+Then DZ €0.30/32% · UZ €0.22/22% · PE €0.23/27% · PT €0.23/25% · CL €0.21/33%.
+**€9.08 (32% of spend) went to 27 countries with ZERO downloads**, and
+**US/UK/AU/NZ burned €4.62 for zero** — the original €2.6-CPI target markets are now the
+worst performers in the campaign. Money going nowhere fast: VN €0.76 at 7% tap→install,
+KZ €0.92, TR €0.82, KG €0.80, IN 14 taps → 0 downloads.
+**Cheap CPI is only half the test: $49.99/yr is not a plausible ask in DZ/UZ/KH/PK, so
+those installs cannot convert however cheap they are. Italy and Portugal are cheap AND
+able to pay** — concentrate there. Caveat: 5 days; only Italy's 11 downloads has weight.
+
 ### PARKED — a dating layer for solo users (raised 2026-08-11; researched + gated 2026-08-11)
 
 Prompted by BPM (French sports dating app, €140k MRR in 6 months). Idea: let solo users
