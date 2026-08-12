@@ -64,6 +64,16 @@ struct Couple: Codable, Identifiable {
     /// either partner. nil until set.
     var relationshipStatus: String? = nil
 
+    /// IANA timezone identifier for this couple ("Europe/Vilnius", "America/Mexico_City"),
+    /// written by whichever partner's device last opened the app.
+    ///
+    /// WHY (2026-08-12): every scheduled push used a hardcoded `Europe/Vilnius`, which
+    /// was a fine approximation for a single-market launch. Apple Search Ads went
+    /// WORLDWIDE on 2026-08-08, so special-date reminders have since been firing at
+    /// roughly 2am in Mexico City and mid-afternoon in Ulaanbaatar. Optional so older
+    /// couple docs decode cleanly; the functions fall back to the old constant.
+    var timeZone: String? = nil
+
     /// COUPLE-LEVEL subscription flag — "one subscription unlocks BOTH partners".
     /// Written ONLY by the payer (the partner whose RevenueCat entitlement is
     /// active) via CoupleService.syncPremiumEntitlement; both partners then read

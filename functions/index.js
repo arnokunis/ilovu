@@ -810,6 +810,30 @@ function monthDayInTz(date, tz) {
   return `${m}-${d}`;
 }
 
+// Local hour (0–23) for a date in a given timezone. The gate that replaced the
+// single-zone schedule: the job now wakes hourly and each couple is served only
+// in its OWN local morning.
+function hourInTz(date, tz) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour: "2-digit", hour12: false,
+  }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "hour").value);
+}
+
+// The couple's timezone, or the launch-market default. Validated because the
+// value is client-written: a bogus identifier makes Intl THROW, which would take
+// down the whole run for every other couple.
+function coupleTz(couple) {
+  const tz = couple && couple.timeZone;
+  if (!tz) return REMINDER_TZ;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch (e) {
+    return REMINDER_TZ;
+  }
+}
+
 // YYYY-MM-DD for a date in REMINDER_TZ — the per-day dedup key for remindersSent.
 function dateKeyInTz(date, tz) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -930,15 +954,12 @@ async function sendReminder(coupleRef, couple, reminder) {
 // (and does NOT write) the per-day dedup stamp, so a test can re-run repeatedly
 // and leaves no remindersSent residue to clean up afterwards.
 async function runDateReminders({ now = new Date(), force = false } = {}) {
-  const todayMD = monthDayInTz(now, REMINDER_TZ);
   const heads = new Date(now.getTime() + REMINDER_LEAD_DAYS * 24 * 60 * 60 * 1000);
-  const headsMD = monthDayInTz(heads, REMINDER_TZ);
-  const todayKey = dateKeyInTz(now, REMINDER_TZ);
 
   const db = admin.firestore();
   const couplesSnap = await db.collection("couples").get();
 
-  const summary = { date: todayKey, force, couples: couplesSnap.size, sent: [], skipped: [] };
+  const summary = { force, couples: couplesSnap.size, sent: [], skipped: [] };
 
   for (const doc of couplesSnap.docs) {
     const couple = doc.data() || {};
@@ -947,6 +968,20 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
     // ended. The leaver's identifiers are already scrubbed, but the shared dates
     // (milestones) linger on the doc, so guard here.
     if ((couple.deletedMembers || []).length > 0) continue;
+
+    // PER-COUPLE TIMEZONE (2026-08-12). This used to run once daily on a single
+    // Vilnius schedule; after ASA went worldwide that meant ~2am in Mexico City
+    // and mid-afternoon in Ulaanbaatar. The job now wakes HOURLY and each couple
+    // is served only in its own local morning. Everything below — today, the
+    // heads-up day, and the dedup key — is evaluated in THEIR zone, so a couple
+    // near the date line no longer gets yesterday's reminder.
+    const tz = coupleTz(couple);
+    if (!force && hourInTz(now, tz) !== REMINDER_HOUR) continue;
+
+    const todayMD = monthDayInTz(now, tz);
+    const headsMD = monthDayInTz(heads, tz);
+    const todayKey = dateKeyInTz(now, tz);
+
     const reminders = buildReminders(couple, todayMD, headsMD);
     if (reminders.length === 0) continue;
 
@@ -967,15 +1002,16 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
     }
   }
 
-  console.log(`runDateReminders ${todayKey}: ${summary.sent.length} sent, ${summary.skipped.length} skipped, ${summary.couples} couples`);
+  console.log(`runDateReminders: ${summary.sent.length} sent, ${summary.skipped.length} skipped, ${summary.couples} couples scanned`);
   return summary;
 }
 
-// The scheduled entry point. Runs daily at REMINDER_HOUR REMINDER_TZ. onSchedule
-// provisions a Cloud Scheduler job + Pub/Sub topic on deploy (needs the Cloud
-// Scheduler + Pub/Sub APIs enabled — `firebase deploy` enables them on Blaze).
+// Runs HOURLY (was daily). The hour gate moved INTO the loop so each couple is
+// served at REMINDER_HOUR in its own timezone — see the per-couple note above.
+// A full couples scan 24×/day instead of once is still trivial at this scale;
+// revisit only if the collection gets large.
 exports.sendDateReminders = onSchedule(
-  { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
+  { schedule: "0 * * * *", timeZone: "Etc/UTC" },
   async () => { await runDateReminders(); },
 );
 
@@ -1067,4 +1103,71 @@ async function runInviteNudges() {
 exports.sendInviteNudges = onSchedule(
   { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
   async () => { await runInviteNudges(); },
+);
+
+// ---------------------------------------------------------------------------
+// sendDailyQuestionNudges — the missing TRIGGER on the Daily Question.
+//
+// CLAUDE.md's Flame audit: retention needs motivation x ability x TRIGGER, and
+// iLovu had a hard zero on the third. The only daily-question push today is
+// onDailyAnswer, which fires ONLY once a partner has already answered — so the
+// loop can be started solely by someone who was coming back anyway, the exact
+// inverse of a trigger. This is the morning carrot that starts it.
+//
+// COUPLES ONLY, deliberately: fcmTokens live on the couple doc
+// (CoupleService.persistFCMToken needs a coupleId), so an unpaired user has no
+// server-side token and literally cannot be reached. Revisit when solo-first
+// gives a couple-of-one somewhere to store one.
+//
+// Fires only when NOBODY has answered yet — if one partner has, onDailyAnswer
+// already nudged the other and a second push would be nagging.
+//
+// BRAND (locked): warm, never guilt- or streak-framed. With no answers yet there
+// is no partner action to reference, so this is a pure carrot.
+async function runDailyQuestionNudges({ now = new Date(), force = false } = {}) {
+  const db = admin.firestore();
+  const couplesSnap = await db.collection("couples").get();
+
+  const summary = { couples: couplesSnap.size, sent: 0, skipped: 0, answered: 0, offHour: 0 };
+
+  for (const doc of couplesSnap.docs) {
+    const couple = doc.data() || {};
+    if ((couple.deletedMembers || []).length > 0) { summary.skipped++; continue; }
+
+    const members = couple.members || [];
+    if (members.length < 2) { summary.skipped++; continue; }   // half-paired: nobody to share with
+
+    const tz = coupleTz(couple);
+    if (!force && hourInTz(now, tz) !== REMINDER_HOUR) { summary.offHour++; continue; }
+
+    const todayKey = dateKeyInTz(now, tz);
+    if (couple.dailyNudgeSent === todayKey) { summary.skipped++; continue; }   // once a day
+
+    // Has either partner already answered today? The doc id matches the client's
+    // ConnectionQuestions.todayDateKey ("YYYY-MM-DD", local), which is why the
+    // couple's timezone has to drive this key too.
+    const answersSnap = await doc.ref.collection("dailyAnswers").doc(todayKey).get();
+    const answers = answersSnap.exists ? (answersSnap.data().answers || {}) : {};
+    if (Object.keys(answers).length > 0) { summary.answered++; continue; }
+
+    const delivered = await sendReminder(doc.ref, couple, {
+      key: "dailyQuestion",
+      recipients: members,
+      title: "Today's question is here 💛",
+      body: "A small thing to learn about each other.",
+    });
+    if (delivered && !force) {
+      await doc.ref.update({ dailyNudgeSent: todayKey });
+    }
+    if (delivered) summary.sent++; else summary.skipped++;
+  }
+
+  console.log(`runDailyQuestionNudges: ${JSON.stringify(summary)}`);
+  return summary;
+}
+
+// Hourly, same per-couple local-hour gate as sendDateReminders.
+exports.sendDailyQuestionNudges = onSchedule(
+  { schedule: "0 * * * *", timeZone: "Etc/UTC" },
+  async () => { await runDailyQuestionNudges(); },
 );

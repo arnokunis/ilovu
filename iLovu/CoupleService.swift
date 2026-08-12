@@ -744,6 +744,18 @@ final class CoupleService {
         }
     }
 
+    /// Publishes this device's timezone to the couple doc, so scheduled pushes land
+    /// at a sane LOCAL hour instead of Vilnius 09:00. Cheap and idempotent: it only
+    /// writes when the value actually changed, so it is safe to call on every
+    /// couple attach. Last device to open the app wins — for a couple in two
+    /// timezones there is no single right answer, and either partner's local
+    /// morning beats a third country's small hours.
+    func syncTimeZone() async {
+        let current = TimeZone.current.identifier
+        guard couple?.id != nil, couple?.timeZone != current else { return }
+        await updateCoupleField(["timeZone": current]) { $0.timeZone = current }
+    }
+
     /// Sets the couple's shared relationship stage.
     func setRelationshipStatus(_ status: String) async {
         // Unpaired: park it, or the Couple Story editor silently forgets the pick
@@ -1046,7 +1058,23 @@ final class CoupleService {
     /// (o→0, i/l→1) so a slightly mistyped code still resolves. The token
     /// alphabet excludes i/l/o/u, so these maps only ever fix typos.
     nonisolated static func normalizeInviteCode(_ raw: String) -> String {
-        let mapped = raw.lowercased()
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // A pasted LINK is at least as likely as a typed code — the invite page's
+        // primary action is now "Copy my code", and plenty of people copy the whole
+        // URL instead. Without this the character filter below turns
+        // "https://ilovu.io/invite/mtv7w" into "httpsilovuioinvitemtv7w", which can
+        // never resolve: a guaranteed dead end, silently. Pull the token out first.
+        if let url = URL(string: text), let token = inviteToken(from: url) {
+            text = token
+        } else if let range = text.range(of: "invite/", options: .caseInsensitive) {
+            // Not a URL the parser accepts (a bare "ilovu.io/invite/x", a trailing
+            // "?p=..." the pasteboard mangled), but the shape is unmistakable.
+            text = String(text[range.upperBound...])
+            text = text.components(separatedBy: CharacterSet(charactersIn: "?#/")).first ?? text
+        }
+
+        let mapped = text.lowercased()
             .replacingOccurrences(of: "o", with: "0")
             .replacingOccurrences(of: "i", with: "1")
             .replacingOccurrences(of: "l", with: "1")

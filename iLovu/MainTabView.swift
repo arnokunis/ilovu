@@ -278,6 +278,9 @@ struct MainTabView: View {
         // Push up anything set before pairing (dating date, relationship status).
         // Non-destructive: a value the partner already set always wins.
         Task { await coupleService.flushSoloRelationshipDetails() }
+        // Keep the couple's timezone current so scheduled pushes land at a sane
+        // LOCAL hour. No-ops unless it actually changed (travel, or first write).
+        Task { await coupleService.syncTimeZone() }
         updatePremiumGate()
 
         matchListener = matchService.observeMatches(coupleId: id) { match in

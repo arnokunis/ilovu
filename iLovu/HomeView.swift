@@ -63,6 +63,9 @@ struct HomeView: View {
     // — both feed into the same score.
     @AppStorage("sparkScore") private var sparkScore: Int = 2
 
+    /// Dismissal latch for the add-the-widget hint. Once off, stays off.
+    @AppStorage("widgetPromptDismissed") private var widgetPromptDismissed: Bool = false
+
     // Day streak stays as an @AppStorage placeholder until we wire it
     // to real activity data. The other two stats are now derived from
     // the live stores below — single source of truth, no duplication.
@@ -149,6 +152,7 @@ struct HomeView: View {
                         nudgeButton
                     }
                     quickStatsRow
+                    addWidgetCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -632,6 +636,49 @@ struct HomeView: View {
     }
 
     // MARK: - Quick Stats
+
+    /// One-time prompt to put Days Together on the home screen.
+    ///
+    /// "love counter" is the #1 converting Apple Search Ads keyword — people pay
+    /// to install FOR this — but iOS offers NO way to add a widget
+    /// programmatically, and almost nobody discovers the long-press flow on their
+    /// own. So the surface they came for never reaches the place it matters. That
+    /// is what this card fixes; the widget itself has shipped since 1.0.2.
+    ///
+    /// Shown only once there is a date to count from (otherwise the widget would
+    /// render empty), and dismissible for good — this is a hint, not a nag, and
+    /// there is no API to detect whether they already added it.
+    @ViewBuilder
+    private var addWidgetCard: some View {
+        if !widgetPromptDismissed, coupleService.effectiveDaysTogether != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Keep it on your home screen 💛")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.deepRose)
+                    Spacer()
+                    Button {
+                        withAnimation(LouvAnimation.spring) { widgetPromptDismissed = true }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.gray)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
+                }
+                Text("Touch and hold your home screen → tap ➕ → search iLovu → add **Days Together**.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .louvShadow()
+        }
+    }
 
     private var quickStatsRow: some View {
         HStack(spacing: 12) {
