@@ -36,6 +36,11 @@ struct SwipeView: View {
     // Records likes + creates match docs. Celebration itself is presented by
     // MainTabView's listener, not here — see completeSwipe.
     @Environment(MatchService.self) private var matchService
+    // Solo right-swipes save a plan locally, same as the Near You deck.
+    @Environment(MissionStore.self) private var missionStore
+
+    /// Card just saved by a solo right-swipe — drives the confirmation toast.
+    @State private var savedCardTitle: String? = nil
 
     // Currently selected difficulty filter. nil = "All" (show every card).
     // Changing this immediately changes the deck the user sees.
@@ -93,6 +98,27 @@ struct SwipeView: View {
             // Pin the VStack to the full ZStack — guards against the layout
             // collapsing to its intrinsic content height on iPad / Catalyst.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // Solo save confirmation, mirroring the Near You deck. A light toast, not
+        // a full-screen cover: a right-swipe is cheap and repeated.
+        .overlay(alignment: .bottom) {
+            if let savedCardTitle {
+                Text("Saved to your plans 💛 · \(savedCardTitle)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(Color.louvCoral, in: Capsule())
+                    .shadow(radius: 8, y: 4)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 110)   // clear of the action buttons
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task(id: savedCardTitle) {
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation(LouvAnimation.spring) { self.savedCardTitle = nil }
+                    }
+            }
         }
     }
 
@@ -206,13 +232,23 @@ struct SwipeView: View {
             // Right-swipe = a like. With a couple, record it for real: the
             // match (if the partner already liked it too) is detected and
             // celebrated via MainTabView's matches listener — we do NOT set
-            // matchedCard here. Without a couple, fall back to the placeholder
-            // coin-flip so the deck still celebrates in solo/preview.
+            // matchedCard here. SOLO saves the card as a plan; see below.
             if direction == .right, let card = topCard {
+                AppAnalytics.log("swipe_made", [
+                    "direction": "right",
+                    "deck": "dates",
+                    "scope": coupleId == nil ? "solo" : "couple"
+                ])
                 if let coupleId {
                     Task { await matchService.recordLike(coupleId: coupleId, cardId: card.cardId, deck: .dates) }
-                } else if Bool.random() {
-                    matchedCard = card
+                } else {
+                    // SOLO — deterministic, matching NearYouView. This branch was
+                    // ALSO a `Bool.random()` fake match: the 1.0.8 fix landed on the
+                    // venue deck only, so the date-card deck kept showing "It's a
+                    // Match!" to users with no partner half the time, and silently
+                    // dropping the other half. Found on-device 2026-08-12.
+                    missionStore.add(Mission(from: card))
+                    withAnimation(LouvAnimation.spring) { savedCardTitle = card.title }
                 }
             }
         }

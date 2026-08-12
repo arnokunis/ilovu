@@ -63,10 +63,12 @@ struct HomeView: View {
     // — both feed into the same score.
     @AppStorage("sparkScore") private var sparkScore: Int = 2
 
+    /// Dismissal latch for the add-the-widget hint. Once off, stays off.
+    @AppStorage("widgetPromptDismissed") private var widgetPromptDismissed: Bool = false
+
     // Day streak stays as an @AppStorage placeholder until we wire it
     // to real activity data. The other two stats are now derived from
     // the live stores below — single source of truth, no duplication.
-    @AppStorage("dayStreak") private var dayStreak: Int = 1
 
     // Real counts read from the stores. Recomputed cheaply on every
     // render; SwiftUI re-renders this view whenever the @Observable
@@ -150,6 +152,7 @@ struct HomeView: View {
                         nudgeButton
                     }
                     quickStatsRow
+                    addWidgetCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -203,6 +206,7 @@ struct HomeView: View {
             }
         }) {
             PaywallView(
+                isPaired:           coupleService.coupleId != nil,
                 annualPriceText:    subscriptionService.annualDisplay?.priceText,
                 annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
                 monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
@@ -232,16 +236,32 @@ struct HomeView: View {
     // wall never appears mid-celebration. Hard vs. soft (block vs. dismiss-
     // through) is decided in the .sheet onDismiss above via paywallGate.hardMode.
     private func openMission(_ mission: Mission) {
-        if let coupleId = coupleService.coupleId,
-           paywallGate.shouldPresentAtMissionStart(coupleId: coupleId) {
+        // Signed out — never gate.
+        guard let scopeId = coupleService.paywallScopeId else {
+            missionToOpen = mission
+            return
+        }
+        // Feed the gate the current mission count BEFORE asking. This is the
+        // SOLO-reachable arming input (PaywallGate condition C); recording it at
+        // the open point needs no extra listener — by the time someone opens a
+        // mission the count is already correct, and arming here still lands on
+        // the calm entry point rather than mid-celebration.
+        paywallGate.recordMissionCount(missionStore.missions.count, scopeId: scopeId)
+
+        if paywallGate.shouldPresentAtMissionStart(scopeId: scopeId) {
             // Soft mode is show-once; latch it. Hard mode presents every time,
             // so it deliberately never latches.
             if !paywallGate.hardMode {
-                paywallGate.markShown(coupleId: coupleId)
+                paywallGate.markShown(scopeId: scopeId)
             }
             missionAfterPaywall = mission
             showPaywall = true
-            AppAnalytics.log("paywall_shown", ["trigger": "mission_start"])
+            AppAnalytics.log("paywall_shown", [
+                "trigger": "mission_start",
+                // Splits the funnel by whether the wall is reaching the ~96% of
+                // users who are unpaired — the whole point of the 1.0.8 change.
+                "scope": coupleService.coupleId == nil ? "solo" : "couple"
+            ])
         } else {
             missionToOpen = mission
         }
@@ -617,15 +637,65 @@ struct HomeView: View {
 
     // MARK: - Quick Stats
 
+    /// One-time prompt to put Days Together on the home screen.
+    ///
+    /// "love counter" is the #1 converting Apple Search Ads keyword — people pay
+    /// to install FOR this — but iOS offers NO way to add a widget
+    /// programmatically, and almost nobody discovers the long-press flow on their
+    /// own. So the surface they came for never reaches the place it matters. That
+    /// is what this card fixes; the widget itself has shipped since 1.0.2.
+    ///
+    /// Shown only once there is a date to count from (otherwise the widget would
+    /// render empty), and dismissible for good — this is a hint, not a nag, and
+    /// there is no API to detect whether they already added it.
+    @ViewBuilder
+    private var addWidgetCard: some View {
+        if !widgetPromptDismissed, coupleService.effectiveDaysTogether != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Keep it on your home screen 💛")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.deepRose)
+                    Spacer()
+                    Button {
+                        withAnimation(LouvAnimation.spring) { widgetPromptDismissed = true }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.gray)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
+                }
+                Text("Touch and hold your home screen → tap ➕ → search iLovu → add **Days Together**.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .louvShadow()
+        }
+    }
+
     private var quickStatsRow: some View {
         HStack(spacing: 12) {
             statCard(number: missionsCompletedCount, label: "Missions")
-            // Real "Days Together" once an anniversary is set; falls back to the
-            // placeholder Day Streak until then.
-            if let days = coupleService.daysTogether {
+            // "Days Together" whenever a dating date exists — effectiveDaysTogether
+            // so it also works for an unpaired user who set one.
+            //
+            // The old `else` branch showed a "Day Streak" card backed by
+            // @AppStorage("dayStreak"), which was initialised to 1 and NEVER
+            // written anywhere in the repo: anyone without a date saw "1 Day
+            // Streak" permanently, a stat that can never move. It also contradicted
+            // the locked "no streaks, no shame" rule stated at the top of this file
+            // and in DailyQuestionCard, and it was mutually exclusive with Days
+            // Together — so it vanished for the MORE invested user. Removed rather
+            // than wired: a self-directed streak is off-brand by decision.
+            if let days = coupleService.effectiveDaysTogether {
                 statCard(number: days, label: "Days Together")
-            } else {
-                statCard(number: dayStreak, label: "Day Streak")
             }
             statCard(number: memoriesSavedCount,     label: "Memories")
         }

@@ -42,6 +42,15 @@ struct NextMissionView: View {
                     Text(date, format: .dateTime.weekday(.wide).month().day())
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(LovuWidgetStyle.coralDeep)
+                    // The multi-day gap between planning a date and going on it was
+                    // completely unexploited — no countdown anywhere in the app.
+                    // This is anticipation, not pressure: it only ever counts DOWN
+                    // to something good, and disappears once the day passes.
+                    if let countdown = Self.countdownText(to: date, from: entry.date) {
+                        Text(countdown)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Text("Pick a day together")
                         .font(.system(size: 12))
@@ -52,12 +61,32 @@ struct NextMissionView: View {
                 Text("No date planned yet")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.primary)
-                Text("Swipe together to match one")
+                // Was "Swipe together to match one" — but since 1.0.8 a solo
+                // right-swipe saves a plan on its own, so the old copy told most
+                // users to do something they cannot do yet.
+                Text("Swipe in Near You to plan one")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    /// Warm, day-granular countdown. Compares START OF DAY on both sides so
+    /// "Tomorrow" means the next calendar day rather than 24 hours away. Returns
+    /// nil once the day has arrived-and-gone, so a stale mission never nags.
+    static func countdownText(to date: Date, from now: Date) -> String? {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day],
+                                      from: cal.startOfDay(for: now),
+                                      to: cal.startOfDay(for: date)).day
+        guard let days else { return nil }
+        switch days {
+        case ..<0:  return nil
+        case 0:     return "Today 💛"
+        case 1:     return "Tomorrow"
+        default:    return "in \(days) days"
+        }
     }
 }

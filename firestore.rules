@@ -255,6 +255,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---------- config/{key} ----------
+    // Remotely tunable client config (today: `paywall.soloSwipeCap`). Read-only to
+    // clients and writable ONLY from the console/Admin SDK, so it can never be
+    // used to disable someone else's paywall. Contains no user data and no
+    // secrets — a monetization dial, nothing more. The client falls back to its
+    // built-in default whenever this read fails, so a denied/missing doc is safe.
+    match /config/{key} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ---------- venueQueries/{queryKey} ----------
     // Pointer cache: a normalized free-text query + location bucket -> placeId,
     // so repeat lookups skip the billed Text Search. World-readable; writes are

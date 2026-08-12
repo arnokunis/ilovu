@@ -168,3 +168,44 @@ struct PlaceCuisineTests {
         #expect(PlaceCuration.cuisineDisplayOrder.count == PlaceCuration.Cuisine.allCases.count)
     }
 }
+
+// normalizeInviteCode — what people ACTUALLY paste into "Have a code?".
+// Before 2026-08-12 anything URL-shaped was stripped to garbage
+// ("https://ilovu.io/invite/mtv7w" -> "httpsilovuioinvitemtv7w") and could never
+// resolve, silently. The invite page's primary action is now "Copy my code", so
+// pasted links arrive here more often, not less.
+struct InviteCodeNormalizationTests {
+
+    @Test func acceptsATypedCode() {
+        #expect(CoupleService.normalizeInviteCode("MTV7W") == "mtv7w")
+        #expect(CoupleService.normalizeInviteCode(" mtv7w ") == "mtv7w")
+        #expect(CoupleService.normalizeInviteCode("MTV-7W") == "mtv7w")
+    }
+
+    @Test func acceptsAPastedUniversalLink() {
+        #expect(CoupleService.normalizeInviteCode("https://ilovu.io/invite/mtv7w") == "mtv7w")
+        #expect(CoupleService.normalizeInviteCode("https://www.ilovu.io/invite/mtv7w") == "mtv7w")
+    }
+
+    @Test func acceptsAPastedCustomSchemeLink() {
+        #expect(CoupleService.normalizeInviteCode("ilovu://invite/mtv7w") == "mtv7w")
+    }
+
+    /// The mission invite appends the plan (?p=…&w=…), so the query must not
+    /// bleed into the token.
+    @Test func stripsPlanQueryParams() {
+        #expect(CoupleService.normalizeInviteCode(
+            "https://ilovu.io/invite/mtv7w?p=Alchemikas&w=2026-08-16&n=Arnoldas") == "mtv7w")
+    }
+
+    /// Not a parseable URL, but the shape is unmistakable — someone pasting from
+    /// a message that lost its scheme.
+    @Test func acceptsASchemelessLink() {
+        #expect(CoupleService.normalizeInviteCode("ilovu.io/invite/mtv7w") == "mtv7w")
+    }
+
+    /// Crockford look-alike mapping still applies to the extracted token.
+    @Test func stillFixesLookAlikeTypos() {
+        #expect(CoupleService.normalizeInviteCode("MTVOW") == "mtv0w")
+    }
+}

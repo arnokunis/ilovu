@@ -144,7 +144,14 @@ exports.redeemInvite = onCall(async (request) => {
   // tries/hour, brute-forcing 33.5M combos takes centuries per account.
   const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
   const RATE_LIMIT_MAX_FAILED = 10;
-  const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  // 7 -> 30 days (2026-08-11). The expiry was never what made 5-char codes safe:
+  // the RATE LIMIT is. At 10 failed tries/hour a 30-day window allows ~7,200
+  // attempts against 32^5 (~33.5M) combinations — a 0.02% chance of landing one,
+  // so the security posture is essentially unchanged. What 7 days DID do was kill
+  // invites for partners who were simply busy for a week, silently, with the
+  // creator never told. See sendInviteNudges below, which now nudges at day 7
+  // instead — the same signal, as a reminder rather than a death.
+  const INVITE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   // redeemAttempts/{uid} — server-only bookkeeping (no rules grant client
   // access): { count, windowStart }. Best-effort, not transactional — a racing
@@ -803,6 +810,30 @@ function monthDayInTz(date, tz) {
   return `${m}-${d}`;
 }
 
+// Local hour (0–23) for a date in a given timezone. The gate that replaced the
+// single-zone schedule: the job now wakes hourly and each couple is served only
+// in its OWN local morning.
+function hourInTz(date, tz) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour: "2-digit", hour12: false,
+  }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "hour").value);
+}
+
+// The couple's timezone, or the launch-market default. Validated because the
+// value is client-written: a bogus identifier makes Intl THROW, which would take
+// down the whole run for every other couple.
+function coupleTz(couple) {
+  const tz = couple && couple.timeZone;
+  if (!tz) return REMINDER_TZ;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch (e) {
+    return REMINDER_TZ;
+  }
+}
+
 // YYYY-MM-DD for a date in REMINDER_TZ — the per-day dedup key for remindersSent.
 function dateKeyInTz(date, tz) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -923,15 +954,12 @@ async function sendReminder(coupleRef, couple, reminder) {
 // (and does NOT write) the per-day dedup stamp, so a test can re-run repeatedly
 // and leaves no remindersSent residue to clean up afterwards.
 async function runDateReminders({ now = new Date(), force = false } = {}) {
-  const todayMD = monthDayInTz(now, REMINDER_TZ);
   const heads = new Date(now.getTime() + REMINDER_LEAD_DAYS * 24 * 60 * 60 * 1000);
-  const headsMD = monthDayInTz(heads, REMINDER_TZ);
-  const todayKey = dateKeyInTz(now, REMINDER_TZ);
 
   const db = admin.firestore();
   const couplesSnap = await db.collection("couples").get();
 
-  const summary = { date: todayKey, force, couples: couplesSnap.size, sent: [], skipped: [] };
+  const summary = { force, couples: couplesSnap.size, sent: [], skipped: [] };
 
   for (const doc of couplesSnap.docs) {
     const couple = doc.data() || {};
@@ -940,6 +968,20 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
     // ended. The leaver's identifiers are already scrubbed, but the shared dates
     // (milestones) linger on the doc, so guard here.
     if ((couple.deletedMembers || []).length > 0) continue;
+
+    // PER-COUPLE TIMEZONE (2026-08-12). This used to run once daily on a single
+    // Vilnius schedule; after ASA went worldwide that meant ~2am in Mexico City
+    // and mid-afternoon in Ulaanbaatar. The job now wakes HOURLY and each couple
+    // is served only in its own local morning. Everything below — today, the
+    // heads-up day, and the dedup key — is evaluated in THEIR zone, so a couple
+    // near the date line no longer gets yesterday's reminder.
+    const tz = coupleTz(couple);
+    if (!force && hourInTz(now, tz) !== REMINDER_HOUR) continue;
+
+    const todayMD = monthDayInTz(now, tz);
+    const headsMD = monthDayInTz(heads, tz);
+    const todayKey = dateKeyInTz(now, tz);
+
     const reminders = buildReminders(couple, todayMD, headsMD);
     if (reminders.length === 0) continue;
 
@@ -960,14 +1002,172 @@ async function runDateReminders({ now = new Date(), force = false } = {}) {
     }
   }
 
-  console.log(`runDateReminders ${todayKey}: ${summary.sent.length} sent, ${summary.skipped.length} skipped, ${summary.couples} couples`);
+  console.log(`runDateReminders: ${summary.sent.length} sent, ${summary.skipped.length} skipped, ${summary.couples} couples scanned`);
   return summary;
 }
 
-// The scheduled entry point. Runs daily at REMINDER_HOUR REMINDER_TZ. onSchedule
-// provisions a Cloud Scheduler job + Pub/Sub topic on deploy (needs the Cloud
-// Scheduler + Pub/Sub APIs enabled — `firebase deploy` enables them on Blaze).
+// Runs HOURLY (was daily). The hour gate moved INTO the loop so each couple is
+// served at REMINDER_HOUR in its own timezone — see the per-couple note above.
+// A full couples scan 24×/day instead of once is still trivial at this scale;
+// revisit only if the collection gets large.
 exports.sendDateReminders = onSchedule(
-  { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
+  { schedule: "0 * * * *", timeZone: "Etc/UTC" },
   async () => { await runDateReminders(); },
+);
+
+// ---------------------------------------------------------------------------
+// sendInviteNudges — tell the CREATOR their invitation is still unopened.
+//
+// Why this exists: invite_redeemed has sat at 3 all-time while invites kept
+// being created (21 invites from 15 users, with visible retry behaviour). The
+// redeemer always got a clear error, but the CREATOR — the only person who can
+// actually do something, i.e. resend — was never told anything at all. They sent
+// a link, nobody joined, and they could not tell "ignored" from "expired".
+//
+// Pairs with the expiry change above: invites now live 30 days instead of 7, and
+// day 7 became this nudge. Same signal, as a reminder rather than a silent death.
+//
+// Brand rule (see CLAUDE.md): warm, never guilt- or time-pressure-framed. This
+// nudges the SENDER about their own invite; it never implies the partner is
+// ignoring them.
+const INVITE_NUDGE_AFTER_DAYS = 7;
+
+async function runInviteNudges() {
+  // Every function in this file takes its own handle — there is no module-level
+  // `db`, and referencing one would only fail at runtime (node --check passes).
+  const db = admin.firestore();
+  const cutoff = admin.firestore.Timestamp.fromMillis(
+      Date.now() - INVITE_NUDGE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+
+  // Pending invites older than the nudge threshold. Admin SDK bypasses the
+  // creator-only read rule, which is why this can only live server-side.
+  const snap = await db.collection("invites")
+      .where("status", "==", "pending")
+      .where("createdAt", "<=", cutoff)
+      .get();
+
+  const summary = { pendingStale: snap.size, nudged: 0, noToken: 0, alreadyPaired: 0, skipped: 0 };
+
+  for (const doc of snap.docs) {
+    const invite = doc.data();
+    if (invite.creatorNudgedAt) { summary.skipped++; continue; }   // once only
+
+    // Never nudge someone who has since paired — they may have created several
+    // invites and only needed one to land.
+    const couples = await db.collection("couples")
+        .where("members", "array-contains", invite.creatorId)
+        .limit(1)
+        .get();
+    if (!couples.empty) { summary.alreadyPaired++; continue; }
+
+    const token = invite.creatorFcmToken;
+    if (!token) { summary.noToken++; continue; }   // never granted push
+
+    try {
+      await admin.messaging().send({
+        token,
+        notification: {
+          title: "Your invitation is still waiting 💌",
+          body: "It hasn't been opened yet. Want to send it again?",
+        },
+      });
+      await doc.ref.update({ creatorNudgedAt: admin.firestore.FieldValue.serverTimestamp() });
+      summary.nudged++;
+    } catch (e) {
+      // Stale/unregistered token: drop it so we stop retrying this invite, and
+      // stamp it so the invite isn't re-picked every day. Same policy as
+      // onMatchCreated's stale-token cleanup.
+      const code = e && e.errorInfo && e.errorInfo.code;
+      if (code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-argument") {
+        await doc.ref.update({
+          creatorFcmToken: admin.firestore.FieldValue.delete(),
+          creatorNudgedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      summary.noToken++;
+    }
+  }
+
+  // Logged deliberately: this line is also the ONLY visibility we have into how
+  // many invites sit unredeemed, since Firestore is not readable from the dev
+  // machine (the ADC collision documented in CLAUDE.md).
+  console.log(`runInviteNudges: ${JSON.stringify(summary)}`);
+  return summary;
+}
+
+// NOTE: single-zone schedule, same caveat as sendDateReminders — REMINDER_TZ is
+// Europe/Vilnius, so a creator abroad gets this at an odd local hour. Far less
+// harmful than a date reminder (it is not time-critical), but it goes away with
+// the per-couple timezone fix.
+exports.sendInviteNudges = onSchedule(
+  { schedule: `0 ${REMINDER_HOUR} * * *`, timeZone: REMINDER_TZ },
+  async () => { await runInviteNudges(); },
+);
+
+// ---------------------------------------------------------------------------
+// sendDailyQuestionNudges — the missing TRIGGER on the Daily Question.
+//
+// CLAUDE.md's Flame audit: retention needs motivation x ability x TRIGGER, and
+// iLovu had a hard zero on the third. The only daily-question push today is
+// onDailyAnswer, which fires ONLY once a partner has already answered — so the
+// loop can be started solely by someone who was coming back anyway, the exact
+// inverse of a trigger. This is the morning carrot that starts it.
+//
+// COUPLES ONLY, deliberately: fcmTokens live on the couple doc
+// (CoupleService.persistFCMToken needs a coupleId), so an unpaired user has no
+// server-side token and literally cannot be reached. Revisit when solo-first
+// gives a couple-of-one somewhere to store one.
+//
+// Fires only when NOBODY has answered yet — if one partner has, onDailyAnswer
+// already nudged the other and a second push would be nagging.
+//
+// BRAND (locked): warm, never guilt- or streak-framed. With no answers yet there
+// is no partner action to reference, so this is a pure carrot.
+async function runDailyQuestionNudges({ now = new Date(), force = false } = {}) {
+  const db = admin.firestore();
+  const couplesSnap = await db.collection("couples").get();
+
+  const summary = { couples: couplesSnap.size, sent: 0, skipped: 0, answered: 0, offHour: 0 };
+
+  for (const doc of couplesSnap.docs) {
+    const couple = doc.data() || {};
+    if ((couple.deletedMembers || []).length > 0) { summary.skipped++; continue; }
+
+    const members = couple.members || [];
+    if (members.length < 2) { summary.skipped++; continue; }   // half-paired: nobody to share with
+
+    const tz = coupleTz(couple);
+    if (!force && hourInTz(now, tz) !== REMINDER_HOUR) { summary.offHour++; continue; }
+
+    const todayKey = dateKeyInTz(now, tz);
+    if (couple.dailyNudgeSent === todayKey) { summary.skipped++; continue; }   // once a day
+
+    // Has either partner already answered today? The doc id matches the client's
+    // ConnectionQuestions.todayDateKey ("YYYY-MM-DD", local), which is why the
+    // couple's timezone has to drive this key too.
+    const answersSnap = await doc.ref.collection("dailyAnswers").doc(todayKey).get();
+    const answers = answersSnap.exists ? (answersSnap.data().answers || {}) : {};
+    if (Object.keys(answers).length > 0) { summary.answered++; continue; }
+
+    const delivered = await sendReminder(doc.ref, couple, {
+      key: "dailyQuestion",
+      recipients: members,
+      title: "Today's question is here 💛",
+      body: "A small thing to learn about each other.",
+    });
+    if (delivered && !force) {
+      await doc.ref.update({ dailyNudgeSent: todayKey });
+    }
+    if (delivered) summary.sent++; else summary.skipped++;
+  }
+
+  console.log(`runDailyQuestionNudges: ${JSON.stringify(summary)}`);
+  return summary;
+}
+
+// Hourly, same per-couple local-hour gate as sendDateReminders.
+exports.sendDailyQuestionNudges = onSchedule(
+  { schedule: "0 * * * *", timeZone: "Etc/UTC" },
+  async () => { await runDailyQuestionNudges(); },
 );

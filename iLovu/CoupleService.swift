@@ -48,6 +48,18 @@ final class CoupleService {
     /// the matches listener key off this.
     var coupleId: String? { couple?.id }
 
+    /// Scope key for per-user LOCAL gate state (PaywallGate). Prefers the couple —
+    /// one subscription unlocks both partners, so paired state must stay shared —
+    /// and falls back to a per-uid solo scope so an UNPAIRED user still has a
+    /// durable identity to arm the paywall against. Before 1.0.8 there was no
+    /// fallback, so a solo user could never see the wall at any duration.
+    /// nil only when signed out, in which case no gate should evaluate at all.
+    var paywallScopeId: String? {
+        if let id = couple?.id { return id }
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return "solo.\(uid)"
+    }
+
     /// The partner's display name from the shared couple doc, or nil if unpaired
     /// or they haven't set one yet. Reads the signed-in uid here so views (HomeView)
     /// don't have to touch Auth/Firebase themselves.
@@ -74,7 +86,12 @@ final class CoupleService {
     }
 
     /// A relationship milestone's date (dating / engaged / wedding), or nil.
-    func milestoneDate(_ milestone: CoupleMilestone) -> Date? { couple?.milestoneDate(milestone) }
+    /// Falls back to the locally parked dating date when unpaired, so the Couple
+    /// Story editor pre-fills and the counter reads correctly before pairing.
+    func milestoneDate(_ milestone: CoupleMilestone) -> Date? {
+        if let onCouple = couple?.milestoneDate(milestone) { return onCouple }
+        return milestone == .dating ? soloDatingDate : nil
+    }
 
     /// The "started dating" date — the source of the Days Together counter.
     var datingDate: Date? { couple?.milestoneDate(.dating) }
@@ -82,8 +99,59 @@ final class CoupleService {
     /// Days together (start day = day 1), or nil until the dating date is set.
     var daysTogether: Int? { couple?.daysTogether() }
 
-    /// The couple's relationship stage, or nil if unset.
-    var relationshipStatus: String? { couple?.relationshipStatus }
+    /// The couple's relationship stage, or nil if unset. Falls back to the locally
+    /// parked pick when unpaired (the Couple Story editor keys its visible
+    /// milestones off this, so without the fallback the date field vanishes).
+    var relationshipStatus: String? { couple?.relationshipStatus ?? soloRelationshipStatus }
+
+    // MARK: - Solo (unpaired) relationship details
+    //
+    // Milestones live on the couple doc, so before 1.0.8 an unpaired user could
+    // open the Couple Story editor, pick a status, enter their dating date — and
+    // silently lose it, because setMilestone/setRelationshipStatus write to a
+    // couple that does not exist. The Days Together widget therefore rendered
+    // BLANK for the ~96% who are unpaired, even though "love counter" is the #1
+    // converting Apple Search Ads keyword: people pay to install FOR the counter
+    // and hit nothing. Park both locally and flush at pairing — the same shape as
+    // the parked display name and FCM token.
+
+    private static let soloDatingKey = "solo.datingDate"
+    private static let soloStatusKey = "solo.relationshipStatus"
+
+    private(set) var soloDatingDate: Date? =
+        UserDefaults.standard.object(forKey: CoupleService.soloDatingKey) as? Date
+    private(set) var soloRelationshipStatus: String? =
+        UserDefaults.standard.string(forKey: CoupleService.soloStatusKey)
+
+    /// Dating date to DISPLAY: the couple's when paired, the locally parked one
+    /// when not. Use this for widgets and UI; `datingDate` stays couple-only.
+    var effectiveDatingDate: Date? { couple?.milestoneDate(.dating) ?? soloDatingDate }
+
+    /// Days together from `effectiveDatingDate`, so the counter works solo.
+    /// Start day counts as day 1, matching Couple.daysTogether().
+    var effectiveDaysTogether: Int? {
+        if let paired = couple?.daysTogether() { return paired }
+        guard let start = soloDatingDate else { return nil }
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: start),
+            to: Calendar.current.startOfDay(for: Date())
+        ).day
+        return days.map { $0 + 1 }
+    }
+
+    /// Pushes anything parked while solo up to the couple doc, once one exists.
+    /// Idempotent and non-destructive: it never overwrites a value the couple
+    /// already carries, so a partner who set the date first always wins.
+    func flushSoloRelationshipDetails() async {
+        guard couple?.id != nil else { return }
+        if let parked = soloDatingDate, couple?.milestoneDate(.dating) == nil {
+            await setMilestone(.dating, date: parked)
+        }
+        if let parked = soloRelationshipStatus, couple?.relationshipStatus == nil {
+            await setRelationshipStatus(parked)
+        }
+    }
 
     /// The couple's SHARED Near You location bucket ("%.2f,%.2f"), or nil until a
     /// partner has claimed one. NearYouView reads this to fetch the shared deck.
@@ -140,8 +208,12 @@ final class CoupleService {
     /// document ID) to share. The token IS the secret — the rules let any signed-in
     /// user read an invite *if they know its id* — so never log it or expose it
     /// anywhere public; hand it straight to a share sheet / deep link.
+    /// `source` splits the funnel by WHERE the invite was created — the pairing
+    /// screen versus a planned mission. The two asks are very different ("install
+    /// my app" vs "come to this on Saturday"), and `invite_redeemed` has been
+    /// stuck at 3 all-time, so which one converts is the question worth answering.
     @discardableResult
-    func createInvite() async throws -> String {
+    func createInvite(source: String = "pairing_screen") async throws -> String {
         guard let uid = Auth.auth().currentUser?.uid else { throw InviteError.notSignedIn }
 
         let token = Self.makeToken()
@@ -157,7 +229,7 @@ final class CoupleService {
         if let fcm = pendingFCMToken { data["creatorFcmToken"] = fcm }
         try await db.collection("invites").document(token).setData(data)
         activeInviteToken = token
-        AppAnalytics.log("invite_created")
+        AppAnalytics.log("invite_created", ["source": source])
         return token
     }
 
@@ -187,9 +259,12 @@ final class CoupleService {
             coupleId = id
             members = mems
         } catch let error as InviteError {
+            Self.logRedeemFailure(error)
             throw error
         } catch {
-            throw Self.mapRedeemError(error)
+            let mapped = Self.mapRedeemError(error)
+            Self.logRedeemFailure(mapped)
+            throw mapped
         }
 
         // Publish the new couple locally right away — this lets the redeemer's app
@@ -214,6 +289,27 @@ final class CoupleService {
     /// distinguishes "already used" from "your own invite" (the HttpsError code
     /// alone can't). Unknown / transport errors are returned unchanged so a network
     /// blip doesn't masquerade as "invalid invite".
+    /// Records WHY a redemption failed.
+    ///
+    /// Until now `invite_redeemed` fired only on success and nothing fired on any
+    /// failure path — so "the partner never tried" and "the partner tried and it
+    /// broke" looked identical in GA4: a created invite with no redemption. Those
+    /// have opposite fixes (persuasion vs mechanics), and with `invite_redeemed`
+    /// stuck at 3 all-time we could only guess which we had.
+    private static func logRedeemFailure(_ error: Error) {
+        let reason: String
+        switch error {
+        case InviteError.inviteExpired:         reason = "expired"
+        case InviteError.alreadyConsumed:       reason = "already_consumed"
+        case InviteError.inviteNotFound:        reason = "not_found"
+        case InviteError.cannotRedeemOwnInvite: reason = "own_invite"
+        case InviteError.tooManyAttempts:       reason = "rate_limited"
+        case InviteError.notSignedIn:           reason = "not_signed_in"
+        default:                                reason = "other"
+        }
+        AppAnalytics.log("invite_redeem_failed", ["reason": reason])
+    }
+
     private static func mapRedeemError(_ error: Error) -> Error {
         let ns = error as NSError
         guard ns.domain == FunctionsErrorDomain else { return error }
@@ -622,6 +718,15 @@ final class CoupleService {
     /// wedding). Dot-path write so the others are untouched; hidden milestones are
     /// never deleted by a status change.
     func setMilestone(_ milestone: CoupleMilestone, date: Date) async {
+        // Unpaired: park a dating date locally instead of losing the write, so
+        // Days Together works solo (see the solo section above). Engagement and
+        // wedding dates are inherently couple-scoped — nothing to park.
+        guard couple?.id != nil else {
+            guard milestone == .dating else { return }
+            soloDatingDate = date
+            UserDefaults.standard.set(date, forKey: Self.soloDatingKey)
+            return
+        }
         await updateCoupleField(["milestones.\(milestone.rawValue)": Timestamp(date: date)]) {
             var map = $0.milestones ?? [:]
             map[milestone.rawValue] = Timestamp(date: date)
@@ -639,8 +744,27 @@ final class CoupleService {
         }
     }
 
+    /// Publishes this device's timezone to the couple doc, so scheduled pushes land
+    /// at a sane LOCAL hour instead of Vilnius 09:00. Cheap and idempotent: it only
+    /// writes when the value actually changed, so it is safe to call on every
+    /// couple attach. Last device to open the app wins — for a couple in two
+    /// timezones there is no single right answer, and either partner's local
+    /// morning beats a third country's small hours.
+    func syncTimeZone() async {
+        let current = TimeZone.current.identifier
+        guard couple?.id != nil, couple?.timeZone != current else { return }
+        await updateCoupleField(["timeZone": current]) { $0.timeZone = current }
+    }
+
     /// Sets the couple's shared relationship stage.
     func setRelationshipStatus(_ status: String) async {
+        // Unpaired: park it, or the Couple Story editor silently forgets the pick
+        // and the dating-date field never reappears (visibleMilestones keys off it).
+        guard couple?.id != nil else {
+            soloRelationshipStatus = status
+            UserDefaults.standard.set(status, forKey: Self.soloStatusKey)
+            return
+        }
         await updateCoupleField(["relationshipStatus": status]) {
             $0.relationshipStatus = status
         }
@@ -780,6 +904,69 @@ final class CoupleService {
         URL(string: "https://\(universalLinkHost)/\(inviteURLHost)/\(token)")!
     }
 
+    /// The same invite link, carrying the PLAN so the landing page can show the
+    /// date someone actually made rather than a generic "You're invited".
+    ///
+    /// The plan travels in the URL because `invite.html` is a static page and
+    /// cannot read Firestore without auth. Params are deliberately optional and
+    /// ignored by the app's own link parser (`inviteToken(from:)` reads only the
+    /// path), so an older build and the plain link both keep working.
+    ///
+    /// Kept short — `p` plan, `w` when (ISO day), `n` sender's first name, `e`
+    /// emoji — because the whole thing appears inside a text message. Nothing
+    /// sensitive should ever be added here: links get forwarded, logged and
+    /// previewed by messaging apps.
+    nonisolated static func missionInviteWebURL(token: String,
+                                                planTitle: String,
+                                                emoji: String?,
+                                                when: Date?,
+                                                senderName: String?) -> URL {
+        var components = URLComponents(url: inviteWebURL(token: token),
+                                       resolvingAgainstBaseURL: false)!
+        var items = [URLQueryItem(name: "p", value: planTitle)]
+        if let emoji, !emoji.isEmpty { items.append(URLQueryItem(name: "e", value: emoji)) }
+        if let when {
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            fmt.dateFormat = "yyyy-MM-dd"
+            items.append(URLQueryItem(name: "w", value: fmt.string(from: when)))
+        }
+        if let senderName, !senderName.isEmpty {
+            items.append(URLQueryItem(name: "n", value: senderName))
+        }
+        components.queryItems = items
+        return components.url ?? inviteWebURL(token: token)
+    }
+
+    /// Invite text sent FROM a planned mission. The generic invite is "install my
+    /// app" — abstract, no urgency, and plausibly why so few onboarded users ever
+    /// send one. This one is "I want to take you to this on Saturday": the
+    /// recipient reads a real plan in their messages before tapping anything.
+    nonisolated static func missionInviteShareMessage(token: String,
+                                                      planTitle: String,
+                                                      emoji: String?,
+                                                      when: Date?,
+                                                      senderName: String?) -> String {
+        let url = missionInviteWebURL(token: token,
+                                      planTitle: planTitle,
+                                      emoji: emoji,
+                                      when: when,
+                                      senderName: senderName)
+        let opener: String
+        if let when {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "EEEE"          // "Saturday"
+            opener = "I've planned \(planTitle) for \(fmt.string(from: when)) 💕"
+        } else {
+            opener = "I've planned \(planTitle) for us 💕"
+        }
+        return """
+        \(opener)
+        Open your invitation: \(url.absoluteString)
+        Your code: \(formatInviteCode(token))
+        """
+    }
+
     /// Extracts the token from an incoming invite link, or nil if `url` isn't
     /// one. Accepts BOTH forms — the custom scheme (ilovu://invite/<token>)
     /// and the Universal Link (https://ilovu.io/invite/<token>, www too);
@@ -871,7 +1058,23 @@ final class CoupleService {
     /// (o→0, i/l→1) so a slightly mistyped code still resolves. The token
     /// alphabet excludes i/l/o/u, so these maps only ever fix typos.
     nonisolated static func normalizeInviteCode(_ raw: String) -> String {
-        let mapped = raw.lowercased()
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // A pasted LINK is at least as likely as a typed code — the invite page's
+        // primary action is now "Copy my code", and plenty of people copy the whole
+        // URL instead. Without this the character filter below turns
+        // "https://ilovu.io/invite/mtv7w" into "httpsilovuioinvitemtv7w", which can
+        // never resolve: a guaranteed dead end, silently. Pull the token out first.
+        if let url = URL(string: text), let token = inviteToken(from: url) {
+            text = token
+        } else if let range = text.range(of: "invite/", options: .caseInsensitive) {
+            // Not a URL the parser accepts (a bare "ilovu.io/invite/x", a trailing
+            // "?p=..." the pasteboard mangled), but the shape is unmistakable.
+            text = String(text[range.upperBound...])
+            text = text.components(separatedBy: CharacterSet(charactersIn: "?#/")).first ?? text
+        }
+
+        let mapped = text.lowercased()
             .replacingOccurrences(of: "o", with: "0")
             .replacingOccurrences(of: "i", with: "1")
             .replacingOccurrences(of: "l", with: "1")

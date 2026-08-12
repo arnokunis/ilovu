@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import CoreImage.CIFilterBuiltins
 import FirebaseCore
 
 struct PairingView: View {
@@ -171,6 +172,8 @@ struct PairingView: View {
                 ) {
                     primaryLabel("Share invite", systemImage: "square.and.arrow.up")
                 }
+
+                qrSection(token: inviteToken)
             } else {
                 Button {
                     Task { await createInvite() }
@@ -243,6 +246,54 @@ struct PairingView: View {
     // MARK: - Reusable bits
 
     // A white rounded card with our standard soft shadow.
+    /// Scan-to-pair. The single most common pairing moment for a couples app is
+    /// the two people being in the same room — where messaging a link is absurd
+    /// friction. iOS's built-in Camera reads this and opens the Universal Link
+    /// straight into the app, so NO scanner had to be built on our side: the
+    /// partner just points their phone.
+    ///
+    /// Encodes the plain invite URL (not the share message) because a QR payload
+    /// must be a single actionable thing — extra prose would stop the Camera from
+    /// offering the link.
+    @ViewBuilder
+    private func qrSection(token: String) -> some View {
+        if let qr = Self.qrImage(from: CoupleService.inviteWebURL(token: token).absoluteString) {
+            VStack(spacing: 8) {
+                Text("Together right now? Let them scan this")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.gray)
+                    .multilineTextAlignment(.center)
+
+                Image(uiImage: qr)
+                    .interpolation(.none)          // keep the modules crisp
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 168, height: 168)
+                    .padding(10)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("QR code to connect")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+        }
+    }
+
+    /// CoreImage QR generation — no third-party dependency for what is one filter.
+    /// Medium correction tolerates a little glare/angle on a phone screen without
+    /// bloating the module count.
+    private static func qrImage(from string: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage else { return nil }
+        // Scale up BEFORE rasterizing: the generator emits roughly one pixel per
+        // module, which would render as a blurry smear at display size.
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        guard let cg = CIContext().createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)

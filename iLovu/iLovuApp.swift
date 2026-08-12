@@ -141,7 +141,9 @@ struct iLovuApp: App {
     // so recomputing it on every render is free; the newest-memory id+version
     // catches a photo replace, and the earliest scheduled date catches replanning.
     private var widgetDigest: String {
-        let daysValue: Int? = coupleService.couple?.daysTogether()
+        // Effective, not couple-only: a solo user setting their dating date must
+        // still change the digest, or the widget never refreshes for them.
+        let daysValue: Int? = coupleService.effectiveDaysTogether
         let days: String = daysValue.map { String($0) } ?? "-"
 
         let upcoming: [Mission] = missionStore.missions.filter { $0.status == .upcoming }
@@ -240,7 +242,9 @@ struct iLovuApp: App {
                         couple: coupleService.couple,
                         partnerName: coupleService.partnerDisplayName,
                         missions: missionStore.missions,
-                        memories: memoryStore.memories
+                        memories: memoryStore.memories,
+                        soloDaysTogether: coupleService.effectiveDaysTogether,
+                        soloDatingDate: coupleService.effectiveDatingDate
                     )
                 }
                 // Wire MissionStore's write-through sink once. Every local

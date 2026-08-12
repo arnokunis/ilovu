@@ -18,17 +18,23 @@ struct WidgetDataWriter {
     /// Rebuild + persist the widget snapshot, then reload timelines. Cheap enough
     /// to call on every relevant change: a small JSON write plus, at most, one
     /// downscaled image encode for the newest memory.
+    /// `soloDaysTogether` / `soloDatingDate` are the locally parked values used
+    /// when there is no couple yet. Without them the Days Together widget was
+    /// blank for every unpaired user — i.e. for almost everyone — despite "love
+    /// counter" being the top-converting install keyword.
     func refresh(couple: Couple?,
                  partnerName: String?,
                  missions: [Mission],
-                 memories: [Memory]) async {
+                 memories: [Memory],
+                 soloDaysTogether: Int? = nil,
+                 soloDatingDate: Date? = nil) async {
 
         // No shared container => App Group not set up yet. Do nothing.
         guard WidgetShared.containerURL != nil else { return }
 
         var snapshot = WidgetSnapshot()
-        snapshot.daysTogether = couple?.daysTogether()
-        snapshot.datingDate   = couple?.milestoneDate(.dating)
+        snapshot.daysTogether = couple?.daysTogether() ?? soloDaysTogether
+        snapshot.datingDate   = couple?.milestoneDate(.dating) ?? soloDatingDate
         snapshot.partnerName  = partnerName
 
         // Next mission = the soonest UPCOMING mission. Dated missions sort by
