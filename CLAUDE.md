@@ -950,11 +950,10 @@ prototype junk from 2026-06-17, ignore it.
 **⚠️ DIARISE: the Paid Apps Agreement expires 2027-06-03. A lapsed agreement silently
 blocks ALL purchases** — same failure mode as the Apple Ads JWT.
 
-**⚠️ THE FOUNDING OFFER DOES NOT EXIST IN THE PRODUCT CONFIG.** Pricing below locks
-"$39.99/yr for the first 500 users", but RevenueCat serves only
-`com.ilovu.app.annual` ($49.99) and `com.ilovu.app.monthly`. There is no founding SKU,
-so any revenue test runs at the HIGHEST price point we will ever charge, on an app with
-3 couples. Decide before spending on ads.
+**RESOLVED 2026-08-12: the founding offer is DROPPED, not missing.** This note used to
+flag "$39.99/yr for the first 500" as absent from the product config; it was never built
+because it was decided against. **Revenue tests run at $49.99/yr — that is the intended
+price, not an oversight.** See Pricing below. Do not re-propose the founding SKU.
 
 ### SHIPPED in 1.0.8 (built 2026-08-11, branch `solo-paywall-1.0.8`; build + tests pass)
 
@@ -1281,7 +1280,9 @@ no binary change, tests demand). Localize the app only once the funnel holds.
 
 ## Pricing (locked)
 
-$6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split payment.** Founding offer: $39.99/yr for first 500 users. Push annual. On breakup: subscription follows the payer; both keep their own copy of shared memories.
+$6.99/mo or $49.99/yr. **One subscription unlocks both partners — never split payment.** Push annual. On breakup: subscription follows the payer; both keep their own copy of shared memories.
+
+**FOUNDING OFFER ($39.99/yr for the first 500) — DROPPED (founder call, 2026-08-12).** It was listed here as locked for months but was never created in App Store Connect or RevenueCat, which repeatedly read as an oversight and generated "ship the founding SKU" recommendations. It was a decision, not a gap. **The live price points are the only two products that exist: `com.ilovu.app.annual` and `com.ilovu.app.monthly`.** Do not re-propose it.
 
 ---
 
