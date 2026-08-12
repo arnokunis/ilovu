@@ -120,6 +120,17 @@
   @media (prefers-reduced-motion: reduce) {
     .env-flap, .letter.is-shown { transition: none; animation: none; }
   }
+
+  /* In-app-browser guidance. Messenger/Instagram webviews BLOCK custom-scheme
+     navigation (ilovu://), so the "open the app" button is dead there — and most
+     invites arrive through exactly those apps. Say so plainly instead. */
+  .iab {
+    display: none; text-align: left; background: rgba(255,107,107,0.08);
+    border: 1.5px solid rgba(196,69,105,0.22); border-radius: 16px;
+    padding: 14px 16px; margin-bottom: 14px; font-size: 14px; color: var(--ink);
+  }
+  .iab strong { color: var(--rose); }
+  .iab.is-shown { display: block; }
 </style>
 </head>
 <body>
@@ -159,12 +170,18 @@
       <button class="copy-btn" id="copy" type="button">Copy code</button>
     </div>
 
+    <div class="iab" id="iab-hint">
+      <strong>Already have iLovu?</strong> This preview browser can't open apps.
+      Tap <strong>•••</strong> at the top right and choose <strong>Open in Safari</strong> —
+      or just open the app and enter the code above.
+    </div>
+
     <a class="btn btn-primary" href="https://apps.apple.com/app/id6781237573">Get iLovu — it's free</a>
     <a class="btn btn-secondary" id="open-app" href="#" style="display:none;">I have the app — open iLovu</a>
 
     <div class="steps">
       <p><strong>1.</strong> Get the app and sign in</p>
-      <p><strong>2.</strong> Tap "Have a code?" and enter the code above<br>&nbsp;&nbsp;&nbsp;&nbsp;(or just tap this link again — it opens the app)</p>
+      <p><strong>2.</strong> Tap "Have a code?" and enter the code above</p>
       <p><strong>3.</strong> You're connected 💕</p>
     </div>
     </div><!-- /letter -->
@@ -188,9 +205,37 @@
     document.getElementById("code").textContent = formatted;
     document.getElementById("code-block").style.display = "block";
 
+    // "Open the app" — and the single biggest trap on this page.
+    //
+    // Most invites arrive through Messenger / Instagram / WhatsApp, which open
+    // links in their OWN in-app webview. Those webviews BLOCK custom-scheme
+    // navigation (ilovu://) outright: the button appears to load and then does
+    // nothing, with no error. Found on-device 2026-08-12, in Messenger, and it is
+    // a strong candidate for why invite_redeemed sat at 3 all-time.
+    //
+    // Universal Links do not rescue it either — we are already ON that URL, and
+    // navigating to the page you are on never hands off to the app.
+    //
+    // So: detect the in-app browser and tell the truth instead of offering a dead
+    // control. The code stays the reliable path everywhere.
+    var ua = navigator.userAgent || "";
+    var inAppBrowser = /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|Twitter|Snapchat|musical_ly|BytedanceWebview|WhatsApp/i.test(ua);
+
     var openApp = document.getElementById("open-app");
-    openApp.href = "ilovu://invite/" + token;
-    openApp.style.display = "block";
+    if (inAppBrowser) {
+      document.getElementById("iab-hint").classList.add("is-shown");
+      if (typeof gtag === "function") gtag("event", "invite_inapp_browser");
+    } else {
+      openApp.href = "ilovu://invite/" + token;
+      openApp.style.display = "block";
+      // Even in Safari the scheme silently no-ops when the app is not installed.
+      // If we are still here shortly after the tap, surface the fallback.
+      openApp.addEventListener("click", function () {
+        setTimeout(function () {
+          if (!document.hidden) document.getElementById("iab-hint").classList.add("is-shown");
+        }, 1500);
+      });
+    }
 
     var copy = document.getElementById("copy");
     copy.addEventListener("click", function () {

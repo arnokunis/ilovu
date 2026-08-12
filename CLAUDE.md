@@ -1138,6 +1138,34 @@ DIFFERENT product, entered only on a specific negative result.** Explicit gates:
                       club / Surf's HYROX) — paid ads alone cannot cold-start two sides
                   (3) a budgeted, staffed answer to guideline 1.2 moderation
 
+**WHICH CITY (founder raised NZ / Madrid, 2026-08-11) — the city is the LAST decision:**
+- **NZ is NOT a cheap-ads market — it is one of our expensive ones.** ASA ran US/UK/AU/NZ at
+  **~€2.6 CPI**; today's blended €0.50 came *from moving spend AWAY from those four*. English
+  and cheap do not co-occur. (NZ's one edge over AU: **AU is in the 18+ download-block list,
+  NZ is not.**)
+- **CPI is the wrong metric for a marketplace. Use cost to reach N users inside ONE 20km
+  radius.** Cheap CPI in a thin geography buys a dead deck. Auckland ~1.7M · Madrid metro
+  ~6.7M · CDMX ~22M.
+- **If Spanish, the data says MEXICO CITY, not Madrid.** The promising Spanish signal is
+  **LatAm, not Spain** — MX/CL/PE/VE/HN was 8 installs → 7 sign-ins → 3 pairing → 2 invites,
+  our best deep-funnel cohort; **Spain was not in it at all**. CDMX pairs the cheapest CPI
+  with the highest density. Catch: $49.99/yr is a very heavy ask there → a **MX price tier
+  becomes mandatory** (liquidity is the first question, monetization the second).
+- **Budget honestly:** a deck needs ~500–1,000 CONCURRENTLY ACTIVE singles in one city;
+  after gender split + interest filters that is several thousand installs. At €1 CPI this is
+  a **€3–10k experiment**, not a €150 one. Different order of spend from Gate A.
+- **→ The one city where the Gate D hook is FREE is the one the founder lives in.** Vilnius
+  is small, but run clubs / gyms / universities are reachable on foot, in-language, at €0
+  CPI. Every comparable bought density with a real-world hook BEFORE ads, because ads deliver
+  strangers one at a time into an empty room and the first 200 leave before the next 200
+  arrive. **If the mechanic cannot be made to work where we have feet on the ground, a
+  foreign city with paid traffic will not rescue it.**
+- **THE €0 VERSION, DO THIS FIRST: a landing page + waitlist for ONE city.** <300 sign-ups in
+  a single metro → no amount of ASA creates liquidity. ≥300 → that IS the launch-day density
+  that made BPM's first weekend work. Validates the hook BEFORE the localization bill (451
+  content pieces + per-couple language field + language-blind deck cache) and before any
+  dating code.
+
 **If it is ever built: a NEW app, one city, reusing the venue/deck code as a library.** And
 **do not compete on activity-first matching** — GRASS/BPM/Surf/Tinder Events already own it.
 Compete on what happens AFTER the match works, which is the only part nobody wants to build.
