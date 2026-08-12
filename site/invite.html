@@ -225,6 +225,19 @@
     if (inAppBrowser) {
       document.getElementById("iab-hint").classList.add("is-shown");
       if (typeof gtag === "function") gtag("event", "invite_inapp_browser");
+
+      // Don't offer a control that cannot work — give it the job that always
+      // can. Copying the code is the ONE action available here, and it sets up
+      // the hand-off: the app offers to paste it on first launch.
+      openApp.textContent = "Copy my code";
+      openApp.href = "#";
+      openApp.style.display = "block";
+      openApp.addEventListener("click", function (e) {
+        e.preventDefault();
+        copyToken(function (ok) {
+          openApp.textContent = ok ? "Code copied ✓ — now get the app" : "Code: " + formatted;
+        });
+      });
     } else {
       openApp.href = "ilovu://invite/" + token;
       openApp.style.display = "block";
@@ -237,13 +250,46 @@
       });
     }
 
+    // One copy path, used by the copy link, the in-app-browser button, and the
+    // App Store hand-off below. execCommand is the fallback for older webviews
+    // where navigator.clipboard is unavailable — which is exactly the kind of
+    // browser this page has to survive.
+    function copyToken(done) {
+      function fallback() {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = token;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "absolute"; ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.select(); ta.setSelectionRange(0, ta.value.length);
+          var ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          if (done) done(ok);
+        } catch (e) { if (done) done(false); }
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(token).then(function () { if (done) done(true); }, fallback);
+      } else {
+        fallback();
+      }
+    }
+
     var copy = document.getElementById("copy");
     copy.addEventListener("click", function () {
-      navigator.clipboard.writeText(token).then(function () {
-        copy.textContent = "Copied ✓";
+      copyToken(function (ok) {
+        copy.textContent = ok ? "Copied ✓" : "Select the code above";
         setTimeout(function () { copy.textContent = "Copy code"; }, 2000);
       });
     });
+
+    // Poor-man's deferred deep link: put the code on the clipboard as they leave
+    // for the App Store, so the app can offer a one-tap paste on first launch.
+    // Nothing else survives the trip — install wipes any web context, and the
+    // in-app browser cannot hand off to the app at all. The tap itself is the
+    // user gesture the clipboard API requires.
+    var store = document.querySelector(".btn-primary");
+    if (store) store.addEventListener("click", function () { copyToken(null); });
 
     // ---- The plan, and the envelope that reveals it ----------------------
     //
