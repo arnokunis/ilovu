@@ -1046,6 +1046,66 @@ surface mid-first-session.
 at 40 or off, measure the real distribution for a week, tighten 40 → 25 → 15 **without App
 Review.**
 
+### ON-DEVICE 2026-08-12 — first revenue events ever, and two real bugs
+
+**THE MONEY PATH WORKS.** A sandbox purchase completed end to end on a real phone. GA4
+realtime, same session: `paywall_shown` **1** and `purchase_success` **1** — the **first of
+each in the app's lifetime** — plus `swipe_made` **20** (the cap fired on the 21st, exactly
+as designed) and `near_you_opened` **1** (visit dedupe works; it previously logged one per
+tab switch). Four changes verified in one sitting.
+**Still unverified:** the RevenueCat webhook received NOTHING, and not an auth failure
+either — RC never sent it. Not a ship blocker (the client mirrors the entitlement, which is
+what worked); it only means revoke lags. The auth header remains untested.
+
+**BUG 1 — THE COIN FLIP WAS ONLY HALF-FIXED.** `SwipeView` carried the identical
+`Bool.random()` fake match. The 1.0.8 fix landed on the venue deck only, so the DATE-CARD
+deck kept telling solo users "It's a Match!" half the time with no partner in existence.
+Now saves a plan and logs `swipe_made`, matching Near You. **Lesson: that mechanic existed
+in two decks — grep for the pattern, not the file.**
+
+**BUG 2 — THE INVITE PAGE'S "OPEN APP" BUTTON IS DEAD IN MESSENGER. Strongest candidate yet
+for why `invite_redeemed` sat at 3 all-time.**
+It navigates to `ilovu://invite/<token>`. **Messenger / Instagram / WhatsApp open links in
+their own WKWebView, which silently cancels custom-scheme navigation** — it spins, then
+nothing, no error. Most invites arrive through exactly those apps.
+**Universal Links CANNOT rescue it:** iOS deliberately refuses to hand a URL to the app when
+you are already viewing that URL in a browser (the designed escape hatch to the web
+version), and in-app webviews often ignore Universal Links anyway. **No href works there.**
+Shipped: detect the in-app browser and repurpose the button to **"Copy my code"** — the one
+action that always succeeds — plus an Open-in-Safari hint. "Get iLovu" now also copies the
+code on the way to the App Store: the poor-man's deferred deep link, since install wipes all
+web context. Also deleted the step-2 line *"or just tap this link again — it opens the
+app"*, which was **actively false** in the browser most recipients use.
+
+**⚠️ OPERATIONAL: NETLIFY DEPLOYS `main` ONLY.** Every site change sat on the feature branch
+for two days while on-device testing kept reproducing the "fixed" bug — the live page was
+still the old one. `netlify.toml` publishes `site/`, but CD is branch-scoped. **Site changes
+must land on `main` to go live; pushing a feature branch does nothing.** Cost two test
+cycles. The invite page is now cherried onto `main` and verified live; app work stays on
+`solo-paywall-1.0.8` until the device pass is done.
+
+**EMAIL DELIVERABILITY — password resets were going to SPAM (found on device).** Firebase
+sends from `noreply@<project>.firebaseapp.com`: a domain shared with every Firebase project,
+unrelated to ilovu.io, with a default template structurally identical to phishing. **This
+broke account recovery for exactly the cohort email sign-in was added to rescue in 1.0.6** —
+the cautious users — and no GA4 event would ever have surfaced it.
+Fixed 2026-08-12: Firebase custom email domain verified on ilovu.io. DNS is on **Netlify
+(NS1 nameservers)**. **⚠️ THE TRAP: Firebase instructs you to add a SECOND SPF record. Two
+SPF records on one domain violates RFC 7208 → PermError → SPF fails for ALL mail, including
+the Google Workspace inbox.** It must be MERGED. Live record is now exactly one:
+`v=spf1 include:_spf.google.com include:_spf.firebasemail.com ~all`, plus the
+`firebase=ilovu-b5d87` TXT and both `firebase{1,2}._domainkey` DKIM CNAMEs, verified
+resolving against the authoritative NS.
+**Still open:** no `_dmarc` record; sender name + template rewrite; and the action link still
+points at `firebaseapp.com` while the sender is now ilovu.io — a remaining domain mismatch
+that needs a self-hosted auth action handler (real work, deliberately deferred).
+
+**KNOWN DEAD END, NOT YET FIXED:** pasting the full invite URL into "Have a code?" always
+fails — `normalizeInviteCode` strips non-alphanumerics, so `https://ilovu.io/invite/mtv7w`
+becomes `httpsilovuioinvitemtv7w`. Five-line fix (take the last path component when the text
+contains `invite/`). **Higher-value than before, because "Copy my code" just made the
+clipboard the primary path.**
+
 ### PARKED — a dating layer for solo users (raised 2026-08-11; researched + gated 2026-08-11)
 
 Prompted by BPM (French sports dating app, €140k MRR in 6 months). Idea: let solo users
