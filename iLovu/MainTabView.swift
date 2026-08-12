@@ -208,6 +208,18 @@ struct MainTabView: View {
         .onChange(of: coupleService.couple?.isPremium) { _, _ in updatePremiumGate() }
         // Pull the remotely tunable paywall config once per launch.
         .task { await loadPaywallConfig() }
+        // Stamp "first seen" for the CURRENT paywall scope — including a solo one.
+        // This is what arms the 14-day backstop for users who never plan 2 Missions
+        // and never hit the daily swipe cap; without it they had no path to the
+        // wall at all. Keyed on the scope so it re-runs at sign-in and at pairing.
+        //
+        // Safe against the couple path: noteScopeActive only writes when the stamp
+        // is ABSENT unless given an explicit date, and syncCoupleListeners passes
+        // the authoritative server createdAt, which always wins regardless of order.
+        .task(id: coupleService.paywallScopeId) {
+            guard let scopeId = coupleService.paywallScopeId else { return }
+            paywallGate.noteScopeActive(scopeId: scopeId)
+        }
         // When a match celebration cover dismisses, see if a warm push ask is
         // queued. Watched on both decks because either celebration can be the
         // first match. maybePresentPushAsk re-checks we're truly idle first.

@@ -1,9 +1,10 @@
 // PaywallGate.swift
 // Decides WHEN the soft paywall (PaywallView) should appear — never the
-// purchase itself. Two trigger conditions, whichever comes first:
+// purchase itself. Three trigger conditions, whichever comes first:
 //
 //   A) the couple has reached its 2nd match AND saved its 1st memory, or
-//   B) 14 days have elapsed since pairing/first use (a calm backstop).
+//   B) 14 days have elapsed since pairing / first use (a calm backstop), or
+//   C) 2 Missions have been planned in this scope (the solo-reachable one).
 //
 // Brand rule baked into the mechanism: the wall NEVER interrupts a celebration.
 // When a condition becomes true it only *arms* the gate (latched, persisted);
@@ -20,6 +21,18 @@
 // duration. With ~96% of users unpaired, `paywall_shown` had fired ZERO times in
 // the app's lifetime and monetization was structurally unreachable rather than
 // underperforming. Condition C below is what makes it reachable.
+//
+// CONDITION B NOW APPLIES TO SOLO SCOPES TOO (founder call, 2026-08-12). Until
+// this, the 14-day stamp was only ever written from syncCoupleListeners, which
+// returns early when unpaired — so a solo user who never planned 2 Missions and
+// never swiped past the daily cap could use the app free forever. About a third
+// of onboarded users reach the Mission trigger, so the remainder had no path to
+// the wall at all.
+// NOTE this deliberately overrides the argument recorded in CLAUDE.md ("gate
+// depth, not access" — a day-14 wall lands on people who have not yet received
+// anything). The counter-argument that won: a user who has had the app for two
+// weeks has had every chance to receive something. Watch drop-off after day 14;
+// `hardMode = false` softens it in one line if it bites.
 //
 // `isSubscribed` is pushed in from MainTabView (RevenueCat entitlement OR the
 // shared couple-doc flag); once true the wall stops presenting.
