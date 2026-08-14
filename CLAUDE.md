@@ -987,11 +987,70 @@ price, not an oversight.** See Pricing below. Do not re-propose the founding SKU
   BLOCKED from opening their own planned date. Fastest revenue signal, highest churn
   risk. One line to soften — revisit as soon as drop-off is visible.
 
-**NOT done in 1.0.8, still open:** deploy `firestore:rules` + create the
-`config/paywall` doc (the dial is inert until both) · one sandbox purchase end-to-end ·
-register `is_paired` in GA4 · price/founding-SKU decision · concentrate ASA on ~2
+**CLEARED 2026-08-14:** ✅ **`firestore:rules` were ALREADY deployed** (`firebase deploy`
+reported *"latest version already up to date"* — the open item was stale, the `config/{key}`
+rule has been live all along). ✅ **`config/paywall` created** with `soloSwipeCap: 20` — the
+remote dial is now LIVE. 20 was chosen to EXACTLY MATCH the built-in default, so creating it
+changed no behaviour; it only proves the pipe. **Retune with one API write, no release** —
+but note the "Swipe cap — design" section below argues for shipping at **40 or off** first,
+because the cap number cannot be chosen from data we have and Near You is the ONLY solo
+activation surface. That decision is still OPEN. ✅ **`is_paired` registered in GA4**,
+**USER-scoped** (verified via the Admin API — user scope is the correct one; event scope
+would have silently not worked). ✅ **A sandbox purchase HAS happened** — see below.
+
+**NOT done in 1.0.8, still open:** the RevenueCat webhook is NOT receiving events (see
+below — the diagnosis CHANGED) · price/founding-SKU decision · concentrate ASA on ~2
 storefronts · version bump · the Layer-1 leftovers (`near_you_opened` visit fix, fake
 `dayStreak` card, per-couple `REMINDER_TZ`) · all of Layer 2 (solo-first storage).
+
+### ⚠️ THE GA4 "REVENUE" IS THE SANDBOX TEST — do not read it as sales (2026-08-14)
+
+**GA4 shows €92.27 / 10 transactions on the iLovu stream. It is NOT real money**, and a
+glance at the revenue card will say otherwise. All of it is ONE
+`app_store_subscription_renew` row: **10 events, one day (2026-08-12), Lithuania** — the
+device pass recorded below. **10 renewals in a single day is impossible in production**
+(annual renews yearly, monthly monthly); Apple only accelerates renewals in SANDBOX. The
+app's own `purchase_success` carries **rev=0** — it is a plain custom event with no
+value/currency param, so the euro figure comes entirely from Apple's sandbox reporting.
+
+**WEBHOOK FAULT — four causes ELIMINATED 2026-08-14, the search is now narrow.** The
+symptom is unchanged (RC never delivered anything, ever). What today's pass ruled out:
+1. **NOT a silent success.** `revenueCatWebhook` logs on EVERY path — 401, ignoring, no
+   user, no couple, GRANT, REVOKE. There is no code path that returns without logging, so
+   **zero log entries proves zero requests arrived**, not "arrived unlogged".
+2. **NOT an auth-header mismatch.** A wrong header logs `bad or missing authorization` and
+   401s — exactly what the 2026-08-11 curl tests produced. Nothing of the sort appears.
+3. **NOT a local StoreKit simulation.** Xcode scheme → Run → Options → **StoreKit
+   Configuration = None** (verified), so the purchase went to Apple's real sandbox.
+4. **NOT the wrong RevenueCat project.** The shipped SDK key (`appl_UArbbBU…bCuOuS`,
+   `Secrets.swift`) matches the project holding the webhook. Dashboard config re-verified:
+   correct URL, header set, **Both Production and Sandbox**, App = All, Event type = All.
+5. **NOT "RevenueCat never saw it" either — DISPROVEN 2026-08-14.** RC's *Recent sandbox
+   transactions* lists **10+ `RENEWAL` rows** for app_user_id `SBDD…8N63`, App Store,
+   Monthly, **$9.22 each** — which multiplies to exactly the €92.27 GA4 reported, so they
+   are the same events. RC **has** the data.
+**→ THE FAULT IS DELIVERY, NOT RECEIPT.** Everything upstream works; RC simply never POSTed.
+Note the row also shows **Expires: 2 days ago**, so an `EXPIRATION` (a REVOKE type) fired
+too and likewise never arrived — it is not type-specific.
+6. **NOT an identity/alias problem — CHECKED 2026-08-14 and it is HEALTHY.** The customer's
+   Original App User ID is anonymous (`$RCA…6896`), which is normal — RC keeps the first
+   anonymous id as canonical — but **Alias #7 is `SBDD1gRaDdNUmVL6nfuItqSc8N63`, a 28-char
+   Firebase uid**, created 2026-07-29. So **`Purchases.logIn(uid)` IS taking effect**, and
+   `revenueCatWebhook` already scans `app_user_id` + `original_app_user_id` + `aliases`, so
+   it would resolve the couple correctly the moment an event arrives. Entitlement resolves
+   too (shown as *iLovu Premium*, Monthly). **Sandbox history is long and healthy** — a full
+   buy → renew ×N → opt-out → expire cycle on both 2026-06-30 and 2026-08-12.
+**STILL OPEN — ONE cause left: the webhook registration itself.** Everything upstream is
+proven working and the config *looks* right, yet not one POST has ever been made. RC does
+not back-fill events that predate a webhook, so a silently-unsaved or stale registration
+fits every observation. **→ Delete the webhook and re-create it, then run ONE sandbox
+purchase and read the function log.** (RC's stored Authorization header stays masked and
+untestable from our side, so re-entering a known value while re-creating removes that
+variable at the same time.)
+**Do NOT spend more time staging tests: the next real purchase exercises the exact
+production path and the function logs answer it in one line.**
+**Consequence while unfixed: grants still work (client mirror), REVOCATION does not** — a
+cancelled subscriber keeps premium. Real bug, NOT a ship blocker.
 
 **Learning-budget arithmetic:** ~100 paywall views gives a rough conversion rate; at
 ~67% reach that is ~150 installs; at €0.50 CPI ≈ **€75**. Call it €150 over ~10 days
