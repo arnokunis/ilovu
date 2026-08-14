@@ -991,10 +991,14 @@ price, not an oversight.** See Pricing below. Do not re-propose the founding SKU
 reported *"latest version already up to date"* — the open item was stale, the `config/{key}`
 rule has been live all along). ✅ **`config/paywall` created** with `soloSwipeCap: 20` — the
 remote dial is now LIVE. 20 was chosen to EXACTLY MATCH the built-in default, so creating it
-changed no behaviour; it only proves the pipe. **Retune with one API write, no release** —
-but note the "Swipe cap — design" section below argues for shipping at **40 or off** first,
-because the cap number cannot be chosen from data we have and Near You is the ONLY solo
-activation surface. That decision is still OPEN. ✅ **`is_paired` registered in GA4**,
+changed no behaviour; it only proves the pipe. **Retune with one API write, no release.**
+**DECIDED 2026-08-14 (founder call): STAY AT 20.** Verified working on device. This
+overrides the "Swipe cap — design" section below, which argued for opening at **40 or off**
+on the grounds that the number cannot be chosen from data we have and Near You is the ONLY
+solo activation surface. That risk is accepted, and it is cheap to reverse: **if drop-off
+spikes once 1.0.8 reaches real users, loosen 20 → 30 → 40 with one API write.** Watch
+`near_you_opened` vs `swipe_made`, and specifically whether users who hit the wall return
+the next day — that is the signal to loosen, and it is the ONLY reason to revisit. ✅ **`is_paired` registered in GA4**,
 **USER-scoped** (verified via the Admin API — user scope is the correct one; event scope
 would have silently not worked). ✅ **A sandbox purchase HAS happened** — see below.
 
@@ -1064,13 +1068,27 @@ DEAD REGISTRATION — re-create it before debugging anything downstream.** Six c
 eliminated with evidence before this one, and every one of them was on our side. Cheapest
 first move next time: delete and re-create, THEN investigate.
 
-**STILL UNTESTED: the REVOKE path.** Only GRANT has fired. Revoke is the webhook's *unique*
-job (grants already work via the client mirror), so it is the half that actually matters.
-**To test: opt out of renewal on the sandbox subscription, let it expire, and confirm a
-`REVOKE` line + `isPremium:false` on the couple doc.** Sandbox expiry follows the accelerated
-clock, so this takes minutes, not a month.
-**AFTER that passes:** lock `isPremium` to CF-only in `firestore.rules` (the long-parked
-follow-up — it also closes the "a member forges `isPremium=true`" hole).
+**✅ REVOKE PATH ALSO VERIFIED, same session (2026-08-14 13:16 UTC):**
+
+    13:16:08  revenueCatWebhook: ignoring type CANCELLATION
+    13:16:08  revenueCatWebhook: REVOKE 4UEGg0jy7JndGcPnxmN7 (type EXPIRATION)
+    couple doc → isPremium:false, subscriptionUpdatedAt 13:16:10.378Z
+    app "Us" tab → "Free"
+
+**Both halves of the CANCELLATION/EXPIRATION contract behaved exactly as designed** —
+`CANCELLATION` correctly IGNORED (entitled until period end), `EXPIRATION` revoked. The app
+showing "Free" was momentarily mistaken for a bug; it was the revoke working. **The payments
+stack — grant, revoke, alias→couple resolution, Firestore write — is now proven end to end
+for the first time in the project's history.**
+
+**DO NOT lock `isPremium` to CF-only yet (the long-parked follow-up). DEFERRED DELIBERATELY.**
+The client mirror (`syncPremiumEntitlement`) is the belt that stops a webhook misconfig from
+regressing purchase-unlock, and today's proof is ONE sandbox run — **production has still
+never processed a single real purchase.** Removing the fallback immediately before the first
+real customers arrive is the wrong risk trade, and the whole point of the "deliberately
+incremental" design above. **Lock it only AFTER a real production purchase has flowed through
+the webhook**; that also closes the "a member forges `isPremium=true`" hole, which is a much
+smaller risk than a silent unlock failure at first revenue.
 **Do NOT spend more time staging tests: the next real purchase exercises the exact
 production path and the function logs answer it in one line.**
 **Consequence while unfixed: grants still work (client mirror), REVOCATION does not** — a
