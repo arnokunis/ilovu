@@ -1,3 +1,11 @@
+# media.ilovu.io proxies to the Firebase media site, which is where generated
+# carousel slides are served from. TikTok will only pull photos from a domain
+# verified with them and it checks the exact host, so the images cannot be
+# served from the .web.app address directly.
+# HOST-SCOPED deliberately: a bare /* rule here would proxy ilovu.io itself,
+# because _redirects applies to every domain serving this site.
+https://media.ilovu.io/*   https://ilovu-media.web.app/:splat   200
+
 # AASA served at Apple's required path via internal rewrite (200 = transparent),
 # because Finder/browser drag-and-drop skips the hidden .well-known folder.
 /.well-known/apple-app-site-association   /aasa.json   200
