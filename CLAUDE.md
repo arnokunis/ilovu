@@ -1040,13 +1040,37 @@ too and likewise never arrived — it is not type-specific.
    it would resolve the couple correctly the moment an event arrives. Entitlement resolves
    too (shown as *iLovu Premium*, Monthly). **Sandbox history is long and healthy** — a full
    buy → renew ×N → opt-out → expire cycle on both 2026-06-30 and 2026-08-12.
-**STILL OPEN — ONE cause left: the webhook registration itself.** Everything upstream is
-proven working and the config *looks* right, yet not one POST has ever been made. RC does
-not back-fill events that predate a webhook, so a silently-unsaved or stale registration
-fits every observation. **→ Delete the webhook and re-create it, then run ONE sandbox
-purchase and read the function log.** (RC's stored Authorization header stays masked and
-untestable from our side, so re-entering a known value while re-creating removes that
-variable at the same time.)
+### ✅ RESOLVED 2026-08-14 — the webhook registration was STALE; re-creating it fixed it
+
+**Cause: the old RevenueCat webhook registration had gone stale.** Its config was byte-identical
+to the new one — same URL, same header, Both environments, All apps / All events — and it had
+**never delivered a single POST in its life**. Deleting it and creating a fresh one with the
+same values fixed it immediately. **There was nothing wrong with our code, our secret, our
+deploy, or the app.**
+
+**Verified live, first successful delivery ever** (Cloud Logging, `POST 200` ×3, sandbox
+renewals ~5 min apart):
+
+    12:41:44  GRANT 4UEGg0jy7JndGcPnxmN7 (owner SBDD1gRa…8N63, type RENEWAL)
+    12:46:13  GRANT 4UEGg0jy7JndGcPnxmN7 (owner SBDD1gRa…8N63, type RENEWAL)
+    12:51:05  GRANT 4UEGg0jy7JndGcPnxmN7 (owner SBDD1gRa…8N63, type RENEWAL)
+
+That single line proves the WHOLE chain: RC delivered · the Authorization header matched (200,
+not 401) · the alias→uid→couple lookup resolved a real couple · `isPremium` was written to the
+couple doc. **The payments stack is now green end-to-end, including the server path.**
+
+**LESSON worth generalising: a webhook that shows correct config but zero deliveries is a
+DEAD REGISTRATION — re-create it before debugging anything downstream.** Six causes were
+eliminated with evidence before this one, and every one of them was on our side. Cheapest
+first move next time: delete and re-create, THEN investigate.
+
+**STILL UNTESTED: the REVOKE path.** Only GRANT has fired. Revoke is the webhook's *unique*
+job (grants already work via the client mirror), so it is the half that actually matters.
+**To test: opt out of renewal on the sandbox subscription, let it expire, and confirm a
+`REVOKE` line + `isPremium:false` on the couple doc.** Sandbox expiry follows the accelerated
+clock, so this takes minutes, not a month.
+**AFTER that passes:** lock `isPremium` to CF-only in `firestore.rules` (the long-parked
+follow-up — it also closes the "a member forges `isPremium=true`" hole).
 **Do NOT spend more time staging tests: the next real purchase exercises the exact
 production path and the function logs answer it in one line.**
 **Consequence while unfixed: grants still work (client mirror), REVOCATION does not** — a
