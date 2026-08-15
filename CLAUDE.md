@@ -1509,6 +1509,39 @@ layer would need, so building them here is free optionality rather than sunk cos
    snapshots question TEXT (`DailyQuestionService.swift:38`), so adding a track needs **no
    migration**. Cost is content, not architecture.
 
+### PARKED — creator / affiliate programme (raised 2026-08-16, future idea only)
+
+Instinct is right: **organic is the lever at €5/day, and creator traffic is far warmer than
+app-install ads.** Three reasons it is not a NOW build, and a cheap test that answers the
+same question.
+
+1. **A commission cannot be designed without LTV.** Standard affiliate share is 20–30% of
+   first-year revenue ≈ **€8–13 per subscriber**. With conversion unmeasured we would be
+   guessing whether that is generous or ruinous. **The entire current month exists to
+   produce exactly that number** — offering revenue share before it lands is how you pay
+   more than a subscriber is worth.
+2. **The volume maths does not attract real creators.** At 1.5%, a creator sending 1,000
+   installs makes ~15 subscribers ≈ €190 net, their share ≈ €50. Nobody with a genuine
+   couples audience works for €50. The programme only interests them at a scale we do not
+   have — so recruiting, terms, tracking and payouts would be built for people the economics
+   cannot hold.
+3. **It spends one-time relationships on a leaky product.** At 8% D1 / 12% date completion,
+   a creator whose audience bounces does not post twice. In a niche this small there is
+   roughly ONE good shot per creator — do not spend them before retention holds.
+
+**THE CHEAP TEST THAT COMES FIRST (no programme, no contracts, no revenue share):** 3–5
+micro-creators, gifted collaborations. Track with **App Store Connect campaign links**
+(`?pt=…&ct=<creator>`) — **free, no SDK, no MMP**, per-campaign installs reported in ASC —
+paired with a **custom product page** so their audience lands on matching screenshots. Then
+measure install → paywall → purchase PER CREATOR. If creator traffic converts materially
+better than ASA (e.g. 4% vs 1.5%), that is both the evidence AND the LTV needed to design
+real commissions.
+
+**Asset already owned:** our own content pipeline is a channel with NO revenue share — the
+natural place to prove the creative angle before asking anyone else to carry it.
+
+**GATE: do not offer revenue share until install→paid is measured.**
+
 ### PARKED — localization / Spanish (raised 2026-08-11)
 
 **There is ZERO localization infrastructure today:** no `.lproj`, no `.xcstrings`, no
