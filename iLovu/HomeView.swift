@@ -236,11 +236,10 @@ struct HomeView: View {
     // wall never appears mid-celebration. Hard vs. soft (block vs. dismiss-
     // through) is decided in the .sheet onDismiss above via paywallGate.hardMode.
     private func openMission(_ mission: Mission) {
-        // Signed out — never gate.
-        guard let scopeId = coupleService.paywallScopeId else {
-            missionToOpen = mission
-            return
-        }
+        // Was: "signed out — never gate", which opened the mission ungated whenever
+        // the scope was nil. Same fail-open hole as the swipe cap; a device scope
+        // keeps the gate honest until a uid exists.
+        let scopeId = coupleService.paywallScope("mission_open")
         // Feed the gate the current mission count BEFORE asking. This is the
         // SOLO-reachable arming input (PaywallGate condition C); recording it at
         // the open point needs no extra listener — by the time someone opens a

@@ -60,6 +60,35 @@ final class CoupleService {
         return "solo.\(uid)"
     }
 
+    /// Scope key used by the DEVICE fallback below. Deliberately not a uid: it
+    /// exists precisely for the moments when there isn't one.
+    static let deviceScopeId = "device"
+
+    /// The scope every paywall check should use — never nil.
+    ///
+    /// WHY THIS EXISTS (found 2026-08-16, from BigQuery): all three gate call
+    /// sites used to `guard let paywallScopeId else { …skip… }`, so a nil scope
+    /// meant the gate silently did not run — no wall, no log, no error. Two of
+    /// the six heaviest users in the app's history escaped the paywall entirely
+    /// that way: 42 swipes in a day from Munich and 30 from Accra, both with
+    /// `paywall_shown` = 0, against a cap of 20. A monetization gate must fail
+    /// CLOSED; failing open is unbounded and, worse, invisible.
+    ///
+    /// The trade is deliberate: after signing in, the scope moves from "device"
+    /// to "solo.<uid>" and that day's allowance restarts, so a user can get up to
+    /// one extra day of swipes across that boundary. Being over-generous by a day
+    /// beats today's behaviour of being over-generous forever.
+    ///
+    /// `context` labels WHERE the fallback happened, because the root cause is
+    /// still open: either Near You is reachable before Auth restores on a cold
+    /// launch, or those users were genuinely signed out. One day of this event
+    /// answers it.
+    func paywallScope(_ context: String) -> String {
+        if let id = paywallScopeId { return id }
+        AppAnalytics.log("paywall_scope_missing", ["context": context])
+        return Self.deviceScopeId
+    }
+
     /// The partner's display name from the shared couple doc, or nil if unpaired
     /// or they haven't set one yet. Reads the signed-in uid here so views (HomeView)
     /// don't have to touch Auth/Firebase themselves.

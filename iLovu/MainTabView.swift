@@ -216,9 +216,11 @@ struct MainTabView: View {
         // Safe against the couple path: noteScopeActive only writes when the stamp
         // is ABSENT unless given an explicit date, and syncCoupleListeners passes
         // the authoritative server createdAt, which always wins regardless of order.
+        // The `guard let … else { return }` this replaces meant a nil scope never
+        // stamped "first seen", so the 14-day backstop clock never STARTED for
+        // those users — the third of the three fail-open gate paths.
         .task(id: coupleService.paywallScopeId) {
-            guard let scopeId = coupleService.paywallScopeId else { return }
-            paywallGate.noteScopeActive(scopeId: scopeId)
+            paywallGate.noteScopeActive(scopeId: coupleService.paywallScope("launch"))
         }
         // When a match celebration cover dismisses, see if a warm push ask is
         // queued. Watched on both decks because either celebration can be the

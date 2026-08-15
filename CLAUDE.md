@@ -753,6 +753,54 @@ CF-only since the hardening sprint, so it has to be server-side regardless.
 
 ---
 
+## Long distance — PLANNED FOR 1.1.0 (2026-08-15, cards only)
+
+Two independent scrapes (TikTok via Apify, YouTube via Data API — see
+`~/ilovu-content/TRENDS.md`) surfaced long-distance as the sub-niche where the smallest
+accounts get the largest reach: @layla.yapss at 1,212 followers and 663k median views,
+"LDR Clique" second on YouTube. The content machine now runs LDR carousels at DOUBLE
+weight.
+
+**The app has zero LDR cards.** `DateCard.Category` is `cosy, foodie, adventure,
+creative, intimate` — all 170 sample cards assume both people are in the same room. So
+LDR content currently sends people to a deck that contradicts its own hook.
+
+### The change — data only, no new screens
+
+1. `DateCard.Category` — add `case distance`. Safe for Codable: adding a case cannot
+   break decoding of missions saved with the existing five. Do NOT rename or reorder the
+   others; those strings are persisted in UserDefaults and matched cross-device.
+2. `SampleCards.swift` — port the 12 cards from `~/ilovu-content/ilovu/cards.json`
+   (`"category": "distance"`). Field mapping is 1:1 — title, description, emoji,
+   cost→estimatedCost, difficulty, why→whyItWorks, tips. `cardId` slugs from the title,
+   so both partners derive the same key with no extra work.
+3. Anywhere Category is switched over exhaustively (colour, icon, label) will fail to
+   compile until `distance` is handled — that is the compiler doing the audit for you.
+4. Whatever surfaces category filters in the UI gets one more chip.
+
+### Acceptance
+
+- 182 cards total, 12 of them `distance`
+- A mission saved on 1.0.8 still loads after upgrading (the Codable check that matters)
+- Both partners swiping a distance card still produce a match — `cardId` is the key,
+  nothing distance-specific touches matching
+
+### Measurement — the reason for shipping it
+
+Tag installs arriving from LDR content and compare D7 retention against the rest. That is
+the test of whether the structural argument below is real. Without the cards there is
+nothing to measure, which is the whole reason this ships as data first.
+
+**NOT in 1.1.0 — do not let this grow:** an LDR mode — distance onboarding, separate deck,
+timezones, countdown widgets. Evidence says LDR people CONSUME date-idea content; it does
+not say they convert. And the bottleneck is the activation gate, not audience segments.
+
+**The structural argument for it, worth revisiting:** the core loop is both partners swipe
+and a match makes the plan. Co-located couples can just talk instead. Long-distance ones
+cannot — asynchronous deciding is the only option they have. It may be a better fit than
+the primary audience. Test by shipping the cards and watching whether LDR-sourced installs
+retain differently, BEFORE building anything mode-shaped.
+
 ## ASA WORLDWIDE + 1.1.0 PLAN (2026-08-11) — read this before the next build
 
 **Apple Search Ads went WORLDWIDE on 2026-08-08** (was US/UK/AU/NZ at ~€2.6 CPI).
@@ -1030,7 +1078,25 @@ price, not an oversight.** See Pricing below. Do not re-propose the founding SKU
 reported *"latest version already up to date"* — the open item was stale, the `config/{key}`
 rule has been live all along). ✅ **`config/paywall` created** with `soloSwipeCap: 20` — the
 remote dial is now LIVE. 20 was chosen to EXACTLY MATCH the built-in default, so creating it
-changed no behaviour; it only proves the pipe. **Retune with one API write, no release.**
+changed no behaviour; it only proves the pipe. **⚠️ THE GATE FAILED OPEN IN THREE PLACES — FIXED 2026-08-16.** All three paywall call
+sites did `guard let paywallScopeId else { …skip… }`, so a **nil scope meant the gate did
+not run at all: no wall, no log, no error.** Found via BigQuery, not GA4 — two of the six
+heaviest users in the app's history escaped the paywall completely: **Munich 42 swipes in
+one day → `paywall_shown` 0**, **Accra 30 → 0**, against a cap of 20. (It fired correctly
+for the other four: 45→2, 21→1, 21→1, 20→3, so the cap itself was never broken.) Sites:
+`NearYouView.completeSwipe` (swipe cap), `HomeView.openMission` (mission trigger, which
+opened the mission ungated), `MainTabView` `.task` (**`noteScopeActive` never stamped, so
+the 14-day backstop clock never STARTED**). Fix: `CoupleService.paywallScope(_ context:)`
+returns `paywallScopeId ?? "device"` and logs **`paywall_scope_missing`** when it falls
+back — the bug was invisible precisely because a nil scope emitted nothing. Accepted
+trade: signing in moves the scope `device → solo.<uid>` and restarts that day's allowance,
+so up to one extra day of swipes across the boundary — over-generous by a day beats
+over-generous forever. **ROOT CAUSE STILL OPEN:** either Near You is reachable before Auth
+restores on a cold launch, or those users were signed out; one day of
+`paywall_scope_missing` answers it. **This is the 2026-08-12 lesson repeating — "that
+mechanic existed in two decks; grep for the PATTERN, not the file." It was three this time.**
+
+**Retune with one API write, no release.**
 **DECIDED 2026-08-14 (founder call): STAY AT 20.** Verified working on device. This
 overrides the "Swipe cap — design" section below, which argued for opening at **40 or off**
 on the grounds that the number cannot be chosen from data we have and Near You is the ONLY

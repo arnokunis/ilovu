@@ -426,8 +426,10 @@ struct NearYouView: View {
         // Swipe cap — evaluated BEFORE the card is consumed, so hitting the wall
         // never costs the user a venue. The card snaps back instead of flying off,
         // and the swipe is neither counted nor logged: it didn't happen.
-        if let scopeId = coupleService.paywallScopeId,
-           paywallGate.registerSwipeAndShouldPresent(scopeId: scopeId) {
+        // paywallScope, not paywallScopeId: an `if let` here let a nil scope skip
+        // the cap silently, and 42- and 30-swipe days went unwalled because of it.
+        if paywallGate.registerSwipeAndShouldPresent(
+            scopeId: coupleService.paywallScope("swipe")) {
             withAnimation(LouvAnimation.spring) { dragOffset = .zero }
             showPaywall = true
             AppAnalytics.log("paywall_shown", [
