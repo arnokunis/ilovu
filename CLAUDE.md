@@ -810,6 +810,45 @@ questionnaire answer rather than a real content requirement, a re-rate is free r
 **do NOT re-rate below 18+ if the dating layer is ever built** (see PARKED below) — and note
 the questionnaire is the honest-answer obligation of guideline 2.3.6.
 
+### ASA STOREFRONT AUDIT (2026-08-14/15, via `~/.apple-ads/apple-ads.mjs report countries`)
+
+**THERE ARE TWO CAMPAIGNS, and nothing in this file said so.** Aug 8–14:
+
+    2144425241  ALL WORLD (81 countries)   €35.05   102 inst   CPI €0.34
+    2144268568  US/UK/AU/CA/EN (5)         €6.82      1 inst   CPI €6.82   ← 16% of spend, 1% of installs
+
+**→ PAUSE the English campaign.** At €6.82 CPI, break-even needs ~**18% install→paid** (the
+world campaign needs 1.3%). Nothing converts at 18%, and at 1 install/week it cannot teach us
+anything either — ~€680 to reach 100 installs. Pausing also removes **AU**, the 18+ age-gate
+market, for free. **Accepted trade: ZERO presence in US/UK/CA/AU/NZ**, since those five exist
+in NO other campaign. They are the highest-ARPU markets, so revisit them — but only AFTER a
+conversion rate exists from somewhere cheaper. Buying the most expensive traffic we own
+before knowing whether anyone pays is the wrong order.
+
+**→ EXCLUDE 34 storefronts from the world campaign** — 32 that cannot plausibly pay €49.99/yr,
+plus the only two markets with enough volume to be *proven* bad (**TR**: 51 taps → 3 installs,
+6% tap→install; **IN**: 15 taps → 0 installs):
+
+    AL,AM,AZ,BO,CO,DO,DZ,EC,EG,GH,GT,HN,ID,IN,IQ,JO,KE,KG,KH,KZ,LB,LK,
+    MA,MN,NP,PE,PH,PK,PY,SV,TR,UA,UZ,VN
+
+That is **€22.94 of €41.86 (55% of spend) buying 67 installs with no realistic path to a
+subscription** — and it is the whole reason blended CPI fell €2.60 → €0.41 while revenue
+stayed at €0. **This is what "read CPI per storefront, never blended" actually cashes out to.**
+
+**⚠️ DO NOT cut the low-spend high-income markets** (FR, ES, JP, KR, PL, CZ, EE, HR, GR, HU,
+RO, TW, SG, QA…). They look like zero-converters but got **€0.04–€0.27 and 1–3 taps each** —
+they are UNTESTED, not bad, and they are exactly the markets that can pay. Zero installs on
+one tap is not evidence.
+
+**Best storefronts on current evidence:** **IT €3.55/11 inst/€0.32 CPI/24% tap→install** (the
+standout, now confirmed twice) · **PT €1.16/5/€0.23/22%** · MX €0.35 CPI · CL €0.16 · ZA €0.19.
+
+**STILL NOT ENOUGH.** Post-cut this is ~45 markets on ~€35/week ≈ **€0.78 each** — it fixes
+WHO we buy, not the density problem. **The version that produces a readable result is IT + PT
+ONLY** (~€17/week each → ~150 installs in about a week from ONE comparable market). The income
+filter is a good first cut; concentration is what yields an answer.
+
 ### Couples: still 3, and ~1 alive
 
 `invite_redeemed` all-time = **3** (AU 1 / LT 1 / UK 1), the country split summing exactly
