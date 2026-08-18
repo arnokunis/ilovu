@@ -1363,6 +1363,65 @@ KZ €0.92, TR €0.82, KG €0.80, IN 14 taps → 0 downloads.
 those installs cannot convert however cheap they are. Italy and Portugal are cheap AND
 able to pay** — concentrate there. Caveat: 5 days; only Italy's 11 downloads has weight.
 
+### 2026-08-16 — 1.0.9 LIVE, and the FIRST REAL REVENUE
+
+**£/$ ON THE BOARD: 1 active subscription, $9 MRR** (RevenueCat Overview, Sandbox
+toggle OFF, so production). It is the **MONTHLY** (€7.99 ≈ $9), not the annual —
+worth watching, since "push annual" is the locked strategy and the paywall already
+defaults to annual selected. **The whole path is proven in production for the first
+time:** install → paywall → purchase → entitlement → webhook grant → couple flag.
+**⚠️ I twice called this sandbox and was wrong** — `app_store_subscription_renew`
+firing 15× in 5 days is a real sandbox tell, but a genuine purchase existed
+alongside it. Check the RevenueCat Overview before declaring revenue, not GA4.
+
+**FIRST FUNNEL ON A WORKING PAYWALL (Aug 12–16, Vilnius EXCLUDED so it is real
+users, not founder testing):**
+
+    67 installs → 54 signed in (81%) → 54 onboarded → 40 Near You (60%)
+    → 28 created a Mission (42%) → 10 invited → 3 SAW THE PAYWALL (4.5%)
+
+- **Engagement is real and strong:** 26 users made **479 swipes (18.4 each)** and 28
+  users saved **347 Missions (12.4 each)**. Save-on-swipe worked.
+- **Conversion so far ≈ 0.45% install→paid** (1 sub / 220 RevenueCat customers in
+  28d) against the **1.3% needed** at €0.50 CPI — a third of the way, and earned
+  while the wall reached only 4.5%.
+
+**THE BINDING CONSTRAINT WAS REACH, AND THE DIAL FIXED IT WITHOUT A BUILD.** The cap
+sat at 20 while users average **18.4 swipes** — it was set just above where people
+stop, so almost nobody tripped it. **`config/paywall.soloSwipeCap` lowered 20 → 10
+on 2026-08-16** (verified `integerValue`, applies on next launch). This is exactly
+why it was built remote. **If `near_you_opened` / `swipe_made` DROP, the wall is
+landing too early — go to 12–15.**
+
+**GA4 custom dimensions registered 2026-08-16:** `reason`, `trigger`, `scope`, all
+**EVENT-scoped** (`is_paired` remains user-scoped). NOT retroactive — the 10
+`invite_redeem_failed` events already collected stay unreadable. From now on:
+`paywall_shown` splits by `trigger` (swipe_limit vs mission_start) and `scope`
+(solo vs couple), and `invite_redeem_failed` splits by reason, which finally
+separates "never tried" from "it broke".
+
+**LIVE BUG, FIXED BUT NOT YET SHIPPED (both fixes land after build 14):** tapping a
+category pill sometimes opens a VENUE PHOTO instead of selecting the category, and
+the pills only work again after swiping a card away. That symptom is the card's own
+tap handler firing for a touch in the pill row — the card stack is receiving touches
+outside its box. Two fixes: the card was a fixed `.frame(height: 480)` inside a
+`maxHeight: 480` container, so it could not shrink and overflowed upward
+(→ `maxWidth/maxHeight`); and the container now `.clipped().contentShape(Rectangle())`
+so a touch outside the box can never reach a card regardless of column height.
+**Note this layout has bitten before** — the `deckCategories` snapshot exists
+because a reflowing pill row "shifted the card stack up into the tap".
+**Not reproduced on device**; if it survives the next build, the next suspect is
+gesture state left over when the detail sheet interrupts the touch sequence.
+
+**DATE CARDS — still unmeasurable, parked by the founder 2026-08-16.** All-time:
+`near_you_opened` **65 users (36% of 182 installs)** vs `card_liked` **6 users** and
+`match_created` **3**. But `card_liked` is NOT date-deck-specific — it fires inside
+`MatchService.recordLike`, which both decks call, and only when PAIRED, which is why
+it is tiny. **To settle it: add the `deck` param to NearYouView's `swipe_made` (only
+SwipeView has it today) and register `deck` as a 4th event-scoped dimension.** Then
+dates-vs-places splits by user within days. Consistent with the July read (3 users
+ever swiped a card) and with Fix 4 already being settled.
+
 ### PARKED — a dating layer for solo users (raised 2026-08-11; researched + gated 2026-08-11)
 
 Prompted by BPM (French sports dating app, €140k MRR in 6 months). Idea: let solo users
