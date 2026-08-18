@@ -1418,8 +1418,10 @@ outside its box. Two fixes: the card was a fixed `.frame(height: 480)` inside a
 so a touch outside the box can never reach a card regardless of column height.
 **Note this layout has bitten before** — the `deckCategories` snapshot exists
 because a reflowing pill row "shifted the card stack up into the tap".
-**Not reproduced on device**; if it survives the next build, the next suspect is
-gesture state left over when the detail sheet interrupts the touch sequence.
+**CONFIRMED FIXED on device 2026-08-16** after both changes shipped together — so
+which one did the work is unknown, and both should stay. If anything like it
+returns, the next suspect is gesture state left over when the detail sheet
+interrupts the touch sequence.
 
 **DATE CARDS — still unmeasurable, parked by the founder 2026-08-16.** All-time:
 `near_you_opened` **65 users (36% of 182 installs)** vs `card_liked` **6 users** and
