@@ -463,7 +463,10 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionLabel("Your Missions")
 
-            let upcoming = missionStore.upcoming
+            // Matches float to the top. Since a right-swipe now saves a plan on
+            // its own, this list mixes "I saved this" with "we both want this" —
+            // the higher-intent one should not be buried under a shortlist.
+            let upcoming = missionStore.matchesFirst(missionStore.upcoming)
             if upcoming.isEmpty {
                 missionsEmptyState
             } else {
@@ -504,7 +507,14 @@ struct HomeView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.deepRose)
                         .multilineTextAlignment(.leading)
-                    if let date = mission.scheduledDate {
+                    // Tells the two kinds of row apart. Before a right-swipe saved
+                    // anything on its own, every mission WAS a match and no label
+                    // was needed; now the list is mixed and this is the signal.
+                    if missionStore.matchedCardIds.contains(mission.cardId) {
+                        Text("💕 You both liked this")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.louvCoral)
+                    } else if let date = mission.scheduledDate {
                         Text(date.formatted(date: .abbreviated, time: .shortened))
                             .font(.system(size: 12))
                             .foregroundStyle(.gray)

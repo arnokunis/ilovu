@@ -22,6 +22,26 @@ final class MissionStore {
 
     var missions: [Mission] = []
 
+    /// cardIds the couple has BOTH liked. Rebuilt from the authoritative
+    /// `couples/{id}/matches` listener on every attach, never persisted here —
+    /// Firestore is the source of truth and the snapshot replays existing docs.
+    ///
+    /// WHY (2026-08-12): a right-swipe now saves a plan immediately, so the
+    /// Missions list mixes "I saved this" with "we both want this". Before the
+    /// change every mission WAS a match, and that distinction was the signal.
+    /// This restores it WITHOUT touching the Mission model or the Firestore
+    /// mission doc — the match state already exists, it just was not reachable
+    /// from the list.
+    var matchedCardIds: Set<String> = []
+
+    /// Matches first, then everything else — each group keeping its own order.
+    /// A match is the higher-intent thing in a mixed list, so it should not be
+    /// buried under a shortlist.
+    func matchesFirst(_ items: [Mission]) -> [Mission] {
+        items.filter { matchedCardIds.contains($0.cardId) }
+            + items.filter { !matchedCardIds.contains($0.cardId) }
+    }
+
     // Versioned key so a future model change can ship a new "v2" key
     // and skip a broken decode of old data without losing the user's
     // missions through silent corruption.

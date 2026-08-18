@@ -447,6 +447,12 @@ struct MainTabView: View {
     /// so it never replays. The match doc is id-only, so we rebuild the full card
     /// from local sample data via SampleCards/SampleEvents.byId.
     private func handleMatch(_ match: CardMatch) {
+        // Record the match for the Missions list BEFORE the celebrated guard —
+        // that guard returns early for matches already celebrated in a previous
+        // session, so anything after it would never see them and the badge would
+        // vanish on relaunch.
+        missionStore.matchedCardIds.insert(match.cardId)
+
         guard !celebrated.contains(match.cardId) else { return }
         celebrated.insert(match.cardId)
         persistCelebrated()
