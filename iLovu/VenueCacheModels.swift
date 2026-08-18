@@ -60,6 +60,12 @@ struct CachedVenue: Codable, Identifiable {
     var websiteUri: String?
     var googleMapsUri: String?
 
+    /// Local-format phone number, for the mission's Call button. OPTIONAL and
+    /// deliberately NOT schema-bumped: venues cached before 2026-08-12 decode nil
+    /// and simply show no Call button, filling in naturally as they refresh. A
+    /// bump would force every venue to re-fetch and bill for it.
+    var phoneNumber: String?
+
     /// Deck category (LocalEvent.Category rawValue) + the raw Google primary type,
     /// set ONLY when this venue was resolved for the Near You places deck (via
     /// PlaceCuration). nil for venues resolved by detail-screen text search, which
@@ -123,6 +129,7 @@ extension CachedVenue {
             reviews: reviews,
             websiteUri: place.websiteUri,
             googleMapsUri: place.googleMapsUri,
+            phoneNumber: place.nationalPhoneNumber,
             category: category?.rawValue,
             primaryType: place.primaryType,
             fetchedAt: nil,

@@ -50,13 +50,24 @@ final class MissionStore {
     // Every mutation goes through these helpers so save() is never
     // forgotten. Direct manipulation of `missions` would skip persistence.
 
-    func add(_ mission: Mission) {
+    /// Adds a mission, ignoring one whose card is already planned. Returns true
+    /// when it actually added.
+    ///
+    /// IDEMPOTENT ON cardId (2026-08-12): a right-swipe now saves the plan
+    /// immediately, but a PAIRED couple can also reach the same card through the
+    /// mutual-match celebration's "Plan This Date". Without this guard that card
+    /// would land twice — once from each path. cardId is the same stable identity
+    /// mergeFromRemote keys on.
+    @discardableResult
+    func add(_ mission: Mission) -> Bool {
+        guard !missions.contains(where: { $0.cardId == mission.cardId }) else { return false }
         missions.append(mission)
         save()
         remoteUpsert?(mission)
         // Local creations only — remote-synced missions arrive via
         // mergeFromRemote, so the partner's device doesn't double-count.
         AppAnalytics.log("mission_created")
+        return true
     }
 
     func update(_ mission: Mission) {

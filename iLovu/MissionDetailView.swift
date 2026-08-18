@@ -73,6 +73,12 @@ struct MissionDetailView: View {
     // missions, or until the async lookup lands.
     @State private var venueInfo: LocalEvent?
 
+    /// Maps link and phone straight off the cached venue rather than through
+    /// LocalEvent — its `bookingURL` collapses googleMapsUri and websiteUri into
+    /// one field, so a "Maps" button built on it could silently open a website.
+    @State private var venueMapsURI: String?
+    @State private var venuePhone: String?
+
     // Presents the full venue detail (EventDetailView) as a sheet — Route A.
     @State private var showVenueDetails = false
 
@@ -92,6 +98,7 @@ struct MissionDetailView: View {
                     scheduleCard
                     budgetCard
                     checklistCard
+                    venueActionsRow
                     invitePartnerCard
                     calendarButton
                     completeButton
@@ -120,7 +127,17 @@ struct MissionDetailView: View {
             // sync/schema touch. Date-card missions resolve in SampleCards → skip.
             .task {
                 guard SampleCards.byId(mission.cardId) == nil else { return }
-                venueInfo = await VenueCache().venue(forId: mission.cardId)?.asLocalEvent()
+                // Pass the hero photo through — asLocalEvent defaults firstPhotoURL
+                // to nil, so until now a venue mission resolved with photos: [] and
+                // the screen showed a generic emoji for a real place we already had
+                // pictures of. The names are already cached; building the URL is free.
+                let places = PlacesService()
+                let cached = await VenueCache().venue(forId: mission.cardId)
+                venueInfo = cached?.asLocalEvent(
+                    firstPhotoURL: cached?.photoURLStrings(using: places, limit: 1).first
+                )
+                venueMapsURI = cached?.googleMapsUri
+                venuePhone   = cached?.phoneNumber
             }
             .onChange(of: mission) { _, newValue in
                 missionStore.update(newValue)
@@ -157,8 +174,24 @@ struct MissionDetailView: View {
 
     private var headerCard: some View {
         VStack(spacing: 14) {
-            Text(mission.card.emoji)
-                .font(.system(size: 64))
+            // Real venue photo when we have one — a picture of the place beats a
+            // generic category emoji, and for a mission you are about to go on it
+            // is the most useful thing on the screen. Falls back to the emoji for
+            // date-card missions and any venue with no cached photo.
+            if let photo = venueInfo?.photos.first {
+                BundledRemoteImage(urlString: photo) {
+                    ZStack {
+                        LouvGradient.coral
+                        Text(mission.card.emoji).font(.system(size: 56))
+                    }
+                }
+                .frame(height: 180)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                Text(mission.card.emoji)
+                    .font(.system(size: 64))
+            }
 
             Text(mission.card.title)
                 .font(.system(size: 24, weight: .bold))
@@ -507,6 +540,44 @@ struct MissionDetailView: View {
     // A quiet, destructive text button — deliberately understated so it never
     // competes with "Date completed". Removing a planned date drops it off BOTH
     // partners' dashboards (MissionStore.delete → remoteDelete). Confirmed first.
+    /// Directions and a phone call — the two things you actually need once a plan
+    /// exists and you are standing in a city you do not know. Both come free from
+    /// data already cached with the venue; neither costs an API call.
+    ///
+    /// Call hides for venues cached before the phone number joined the field mask
+    /// (2026-08-12) and for date-card missions, which have no venue at all.
+    @ViewBuilder
+    private var venueActionsRow: some View {
+        if venueMapsURI != nil || venuePhone != nil {
+            HStack(spacing: 12) {
+                if let maps = venueMapsURI, let url = URL(string: maps) {
+                    Link(destination: url) {
+                        venueActionLabel("Directions", systemImage: "map.fill")
+                    }
+                }
+                if let phone = venuePhone,
+                   let url = URL(string: "tel://" + phone.filter({ $0.isNumber || $0 == "+" })) {
+                    Link(destination: url) {
+                        venueActionLabel("Call", systemImage: "phone.fill")
+                    }
+                }
+            }
+        }
+    }
+
+    private func venueActionLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage).font(.system(size: 14, weight: .semibold))
+            Text(title).font(.system(size: 15, weight: .semibold))
+        }
+        .foregroundStyle(Color.louvCoral)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.white)
+        .clipShape(Capsule())
+        .louvShadow()
+    }
+
     /// Unpaired-only: invite the partner FROM the plan, carrying it.
     ///
     /// The generic invite is "install my app" — abstract, no urgency. From here

@@ -46,7 +46,13 @@ struct PlacesService {
         "places.regularOpeningHours",
         "places.reviews",
         "places.websiteUri",
-        "places.googleMapsUri"
+        "places.googleMapsUri",
+        // Phone number (added 2026-08-12) powers the mission's Call button — the
+        // missing step between planning a place and actually going. `reviews`
+        // above already puts this request in the top Places SKU, so this field
+        // does not move the billing tier; verify against the pricing table if
+        // that ever changes.
+        "places.nationalPhoneNumber"
     ].joined(separator: ",")
 
     // Nearby Search needs everything searchText returns PLUS the signals
@@ -259,6 +265,7 @@ struct Place: Codable, Identifiable {
     let reviews: [Review]?
     let websiteUri: String?
     let googleMapsUri: String?
+    let nationalPhoneNumber: String?
 
     // Nearby-search extras (nil on a searchText result — that mask omits them).
     // Drive PlaceCuration's category mapping, ranking, and open/closed gate.

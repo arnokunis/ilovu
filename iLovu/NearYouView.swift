@@ -470,22 +470,28 @@ struct NearYouView: View {
             // don't set matchedEvent here). SOLO saves the venue straight to
             // Missions; see below.
             if direction == .right, let event = topEvent {
+                // SAVE FIRST, ALWAYS — paired or not (2026-08-12, founder hit this
+                // in Madrid). Before today a PAIRED right-swipe only recorded a
+                // like and waited for the partner to like the same card, so
+                // someone swiping alone in a city they don't know saved literally
+                // NOTHING. Swiping now builds YOUR shortlist; a mutual match is a
+                // bonus on top rather than the toll gate in front. add() is
+                // idempotent on cardId, so the match flow's "Plan This Date"
+                // cannot double-add the same venue.
+                if missionStore.add(Mission(from: DateCard(fromVenue: event))) {
+                    withAnimation(LouvAnimation.spring) { savedVenueName = event.venue }
+                }
+                // Paired: also record the like, so a card you BOTH swiped still
+                // lights up as a match. Recorded under the card's OWN deck
+                // (.places / .events) so the partner rebuilds it from the right
+                // cache; samples (nil) stay .events.
+                //
+                // (This branch previously held a `Bool.random()` placeholder for
+                // the solo case that faked "It's a Match! 🎉" half the time and
+                // silently dropped the rest — removed 2026-08-11.)
                 if let coupleId {
-                    // Record under the card's OWN deck (.places / .events), so the
-                    // partner rebuilds it from the right cache. Samples (nil) stay
-                    // .events, as before.
                     let deck = event.sourceDeck ?? .events
                     Task { await matchService.recordLike(coupleId: coupleId, cardId: event.cardId, deck: deck) }
-                } else {
-                    // SOLO — deterministic. This REPLACED a `Bool.random()`
-                    // placeholder that showed a FAKE "It's a Match! 🎉" half the
-                    // time and silently dropped the other half, which both lied to
-                    // the user and threw away ~50% of solo intent (CLAUDE.md,
-                    // 2026-08-11). A right-swipe now always saves the venue as a
-                    // Mission — mission_created fires inside MissionStore.add, and
-                    // PaywallGate condition C arms on the 2nd one.
-                    missionStore.add(Mission(from: DateCard(fromVenue: event)))
-                    withAnimation(LouvAnimation.spring) { savedVenueName = event.venue }
                 }
             }
         }

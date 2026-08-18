@@ -239,16 +239,18 @@ struct SwipeView: View {
                     "deck": "dates",
                     "scope": coupleId == nil ? "solo" : "couple"
                 ])
+                // SAVE FIRST, ALWAYS — paired or not, matching NearYouView. A
+                // paired right-swipe used to only record a like and wait for the
+                // partner to like the same card, so swiping alone saved nothing.
+                // Swiping now builds YOUR shortlist; a mutual match is a bonus.
+                // add() is idempotent on cardId, so the match flow's "Plan This
+                // Date" cannot double-add.
+                if missionStore.add(Mission(from: card)) {
+                    withAnimation(LouvAnimation.spring) { savedCardTitle = card.title }
+                }
+                // Paired: still record the like so a mutual one lights up as a match.
                 if let coupleId {
                     Task { await matchService.recordLike(coupleId: coupleId, cardId: card.cardId, deck: .dates) }
-                } else {
-                    // SOLO — deterministic, matching NearYouView. This branch was
-                    // ALSO a `Bool.random()` fake match: the 1.0.8 fix landed on the
-                    // venue deck only, so the date-card deck kept showing "It's a
-                    // Match!" to users with no partner half the time, and silently
-                    // dropping the other half. Found on-device 2026-08-12.
-                    missionStore.add(Mission(from: card))
-                    withAnimation(LouvAnimation.spring) { savedCardTitle = card.title }
                 }
             }
         }
