@@ -88,6 +88,9 @@ struct SwipeView: View {
                 // maxWidth/maxHeight (not fixed width/height) so the card
                 // shrinks on narrow phones and doesn't look lost on iPad.
                 .frame(maxWidth: 340, maxHeight: 480)
+                // Same hit-area clip as NearYouView — see the note there.
+                .clipped()
+                .contentShape(Rectangle())
                 .padding(.horizontal, 24)
 
                 Spacer()

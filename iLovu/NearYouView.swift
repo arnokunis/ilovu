@@ -160,6 +160,15 @@ struct NearYouView: View {
                     }
                 }
                 .frame(maxWidth: 340, maxHeight: 480)
+                // Hard-clip the card stack's HIT AREA to its own box (2026-08-16).
+                // Reported: tapping a category pill sometimes opened a venue photo
+                // instead — i.e. the card's tap handler fired for a touch up in the
+                // pill row. contentShape + clipped means a touch outside these
+                // bounds can never reach a card, whatever the column height does.
+                // Belt and braces with the maxHeight change on the card itself:
+                // that stops the overflow, this stops it mattering.
+                .clipped()
+                .contentShape(Rectangle())
                 .padding(.horizontal, 24)
 
                 Spacer()
