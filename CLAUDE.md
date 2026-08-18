@@ -1363,16 +1363,23 @@ KZ €0.92, TR €0.82, KG €0.80, IN 14 taps → 0 downloads.
 those installs cannot convert however cheap they are. Italy and Portugal are cheap AND
 able to pay** — concentrate there. Caveat: 5 days; only Italy's 11 downloads has weight.
 
-### 2026-08-16 — 1.0.9 LIVE, and the FIRST REAL REVENUE
+### 2026-08-16 — 1.0.9 LIVE, and the production purchase path proven
 
-**£/$ ON THE BOARD: 1 active subscription, $9 MRR** (RevenueCat Overview, Sandbox
-toggle OFF, so production). It is the **MONTHLY** (€7.99 ≈ $9), not the annual —
-worth watching, since "push annual" is the locked strategy and the paywall already
-defaults to annual selected. **The whole path is proven in production for the first
-time:** install → paywall → purchase → entitlement → webhook grant → couple flag.
-**⚠️ I twice called this sandbox and was wrong** — `app_store_subscription_renew`
-firing 15× in 5 days is a real sandbox tell, but a genuine purchase existed
-alongside it. Check the RevenueCat Overview before declaring revenue, not GA4.
+**REVENUE FROM CUSTOMERS IS STILL €0.** RevenueCat shows 1 active subscription and
+$9 MRR with the Sandbox toggle OFF — but **the founder bought it himself** to test
+the live path. Do not read that $9 as a customer. **Conversion to date is 0 of ~220
+RevenueCat customers.**
+
+**What it DOES prove, and this was genuinely open until now:** the whole chain works
+in PRODUCTION with real money, not just sandbox — install → paywall → purchase →
+entitlement → webhook grant → couple flag. Nobody had ever completed that outside
+sandbox. It was the **MONTHLY** (€7.99 ≈ $9); "push annual" remains the locked
+strategy and the paywall already defaults to annual selected.
+
+**⚠️ LESSON, cost me two wrong calls in one session:** I first declared this sandbox
+(from `app_store_subscription_renew` firing 15× in 5 days — a real sandbox tell),
+then declared it a real customer (from the RevenueCat Overview). Both wrong. **The
+dashboard cannot tell you WHOSE purchase it is. Ask before attributing revenue.**
 
 **FIRST FUNNEL ON A WORKING PAYWALL (Aug 12–16, Vilnius EXCLUDED so it is real
 users, not founder testing):**
@@ -1382,9 +1389,10 @@ users, not founder testing):**
 
 - **Engagement is real and strong:** 26 users made **479 swipes (18.4 each)** and 28
   users saved **347 Missions (12.4 each)**. Save-on-swipe worked.
-- **Conversion so far ≈ 0.45% install→paid** (1 sub / 220 RevenueCat customers in
-  28d) against the **1.3% needed** at €0.50 CPI — a third of the way, and earned
-  while the wall reached only 4.5%.
+- **Conversion so far is 0%** — no customer has bought. The only subscription is the
+  founder's own test purchase. Against the **1.3% needed** at €0.50 CPI, the honest
+  statement is that conversion is still UNMEASURED: only 3 real users have ever
+  reached the wall, which is far too few to produce a rate either way.
 
 **THE BINDING CONSTRAINT WAS REACH, AND THE DIAL FIXED IT WITHOUT A BUILD.** The cap
 sat at 20 while users average **18.4 swipes** — it was set just above where people
