@@ -337,7 +337,15 @@ struct NearYouView: View {
         let nopeOpacity = isTop ? min(max(-dragOffset.width / swipeThreshold, 0), 1) : 0
 
         EventCardContent(event: event)
-            .frame(width: 340, height: 480)
+            // maxWidth/maxHeight, NOT a fixed frame (2026-08-16). A fixed
+            // .frame(height: 480) does not shrink when the column is short, so the
+            // card OVERFLOWED its maxHeight-480 container and slid up under the
+            // filter pills — while still receiving touches. Because the gesture
+            // below uses minimumDistance 0, it then claimed horizontal drags meant
+            // for the pills' ScrollView and the category row stopped scrolling.
+            // Worst under Food & Drink, the one category that adds a cuisine
+            // sub-row (~40pt), and on paired accounts, which also show locationBar.
+            .frame(maxWidth: 340, maxHeight: 480)
             .background(Color.white)
             .overlay(alignment: .topLeading) {
                 SwipeStamp(text: "LIKE", color: .matchGreen, rotation: -18)
