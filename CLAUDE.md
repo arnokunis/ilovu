@@ -8,6 +8,8 @@ Project context for Claude Code sessions. Read this first.
 
 **iLovu is LIVE on the App Store** as of ~July 11 2026: https://apps.apple.com/app/id6781237573 — **post-launch phase, NOT pre-launch.** Any "pre-launch" framing below is historical (the hardening sprint etc. happened before launch); read it as done-before-launch, not still-pending-for-launch.
 
+- **🛑 EVERYTHING IS PAUSED AS OF 2026-08-31 — read "THE 2026-08-31 READ" near the bottom BEFORE restarting anything.** Both Apple Search Ads campaigns are PAUSED (€0/day) and the daily content job is CAROUSELS-ONLY. This was deliberate, not neglect: **the paywall gate is still broken after the 1.0.9 fix**, so every euro of ad spend was buying installs into an experiment whose measuring instrument does not work. **Do not resume ads until no user-day exceeds the swipe cap without a `paywall_shown`.** The pivot decision (three options, see that section) is open and unmade.
+
 - **⬅ BEFORE THE NEXT SHIP: read "Solo-first funnel fix (PROPOSED)" near the bottom.** A structural alternative to patching the sign-in and pairing leaks one at a time — it attacks the reason both leaks exist (a signed-in user has nowhere to store anything until pairing). Not locked; decide deliberately.
 - **⬅ START HERE BEFORE ANYTHING: read "ASA WORLDWIDE + 1.1.0 PLAN (2026-08-11)" near the bottom.** ASA went worldwide 2026-08-08 and blended CPI is now ~€0.50 (the ~€2.6 figure below is OBSOLETE). It carries the worldwide-cohort funnel (sign-in leak 45% → 15%), **four measurement bugs that make current numbers partly fog**, the **`Bool.random()` fake match shipping to production**, proof that **solo users already plan Missions**, the €0.50 unit economics (break-even = 1.3% install→paid, blocked ONLY by the per-couple paywall), and the build plan. **1.0.8 (branch `solo-paywall-1.0.8`) is BUILT**: the paywall is now
 reachable solo via two triggers (2nd Mission, and a remotely tunable 20/day swipe cap),
@@ -1656,3 +1658,144 @@ Shipped feature inventory: Auth ✓, invite/couple pairing ✓, real matching �
 **Widgets ✓ (WIRED + BUILDING, on-device verified):** three static home-screen widgets — **Days Together**, **Next Date** (soonest upcoming Mission), **Latest Memory** (most recent proof photo). Architecture: the `iLovuWidgetExtension` target reads an **App Group** (`group.com.ilovu.app`) snapshot + a downscaled JPEG that the APP writes via `WidgetDataWriter` (digest-driven `.task(id: widgetDigest)` in `iLovuApp` → rewrites on couple/mission/memory change, then `WidgetCenter.reloadAllTimelines()`). Widget renders OFFLINE (no Firebase/network). **`WidgetShared.swift` is the ONE file in BOTH targets** (app + extension); `WidgetDataWriter.swift` stays app-only (UIKit/ImageCache). The extension uses a **synchronized folder group**, so every `.swift` in `iLovuWidget/` is auto-member — only `WidgetShared.swift` needs the manual cross-membership tick. App Group capability + entitlement on BOTH targets (confirmed in `iLovu.entitlements` + `iLovuWidgetExtension.entitlements`). `WidgetShared.containerURL == nil` → everything no-ops (pre-setup safe). Days-together recomputes from a stored `datingDate` at midnight (correct across day boundary without an app open). Setup steps: `WIDGETS_SETUP.md`. **NOT gated by premium — deliberate: widgets are a re-engagement surface, free = more app opens = more paywall exposure.** Copy is WARM, never guilt/streak-based.
 
 **Onboarding (SHIPPED, lite):** `OnboardingView.swift` — welcome + concept + name/vibe collection (`@AppStorage`), gated by `hasCompletedOnboarding`. Relationship status is NOT collected there (set later via `CoupleService.setRelationshipStage`); progressive collection of dates after first match/memory stays the design. No spark rating (off-brand). **Flow is auth-FIRST** (ContentView routes signed-out → `SignInView`, then signed-in + not-onboarded → `OnboardingView`), so the welcome screen's old "Already have an account? Sign in" line was **dead/vestigial** (non-tappable Text; user is already signed in by then) and was **removed** — leaving just the working "Get Started →" CTA. Don't re-add a sign-in affordance to onboarding unless the funnel is deliberately flipped to marketing-first.
+
+---
+
+## THE 2026-08-31 READ — the holiday fortnight, founder excluded, and why everything is paused
+
+Two weeks (18–31 Aug) ran completely unattended: 1.1.0 live since 18 Aug, ASA at €5/day on
+the cut storefront list, no commits, no intervention. A clean natural experiment.
+
+### The founder had to be removed first, and that changed the numbers
+
+**GA4 `user_id` is NEVER set — 0 of 8,822 events carry one.** There is no uid→analytics link,
+so isolating founder traffic takes detective work every time. **Worth fixing:** set the
+Firebase uid as the GA4 user_id.
+
+The founder device is **`…4D6BBC13`** (1,466 events over 29 days, an order of magnitude above
+anyone else; secondary device `…7FE77CC1`). **It shows as Lithuania throughout even though the
+founder was in Croatia and Spain** — roaming traffic exits via the home carrier, so geo cannot
+be used to find it. All figures below EXCLUDE both devices. The earlier "8% D1 retention" was
+measured WITH the founder included and was therefore flattered.
+
+### The real funnel — 282 installs
+
+    first_open              282   100%
+    sign_in                 216    77%   <- the old 45% sign-in leak IS fixed
+    onboarding_complete     211    75%
+    near_you_opened         136    48%
+    mission_created          91    32%   <- a third plan a real date
+    reached_pairing_screen   93    33%
+    invite_created           38    14%
+    invite_redeemed           6     2%
+    match_created             3     1%
+    paywall_shown            13     5%   <- the entire revenue problem
+    purchase_success          0     0%
+    memory_completed          3     1%
+
+**Retention (257-user cohort, 7-day maturity): D1 6.2% · returned days 2–7 7.8% · EVER
+returned 14.8% — 85% one-and-done.** Unchanged by 1.0.9 and 1.1.0.
+
+### ZERO REVENUE IS A REACH PROBLEM, NOT A CONVERSION PROBLEM
+
+**91 people planned a date. 13 ever saw a paywall.** 0/13 is not evidence that nobody will
+pay; it is evidence we barely asked. The arithmetic that matters:
+
+    at  4.6% paywall reach → 10 subs/month needs ~4,300 installs ≈ €2,600/mo in ads
+    at 40%   paywall reach → 10 subs/month needs   ~500 installs ≈   €300/mo
+
+**Same product, same price, same conversion — reach changes the business ~9x.**
+
+### ⚠️ THE PAYWALL GATE IS STILL BROKEN AFTER 1.0.9
+
+`registerSwipeAndShouldPresent` increments then returns true at cap+1, and that path returns
+BEFORE `swipe_made` is logged — so **the cap is a hard ceiling on swipe_made per user-day.**
+Since 18 Aug with `soloSwipeCap = 10` (already lowered on 18 Aug — that lever is SPENT):
+
+    22 user-days with >=10 swipes -> only 10 showed a paywall
+    12 user-days blew past the cap with ZERO paywall
+    F8D382  95 swipes 0 paywall · B04A94 55/0 · 3DF3F4 43/0 · 96507C 179 swipes 2 paywalls
+
+179 swipes against a cap of 10 means the counter is resetting ~18x in a day.
+**`paywall_scope_missing` fired ZERO times, so it is NOT the nil-scope path fixed in 1.0.9.**
+Unexplored suspects: `resetLocalDataForAccountSwitch` wiping UserDefaults on a spurious uid
+change, and the scope flipping between `solo.<uid>` and a couple id mid-session (each scope
+keeps its own counter). **Investigate before proposing another fix.**
+
+### THE KEYWORD MISMATCH — we were buying the wrong audience entirely
+
+ASA search-terms report, August (Apple withholds most literal queries; the keyword that
+matched is what shows):
+
+    spend taps inst  keyword                     visible search terms included:
+     9.14  130   23  love app                      love8 / love 8 / love 8 app for couples
+     7.66  110   21  couple joy                    love messages & romantic texts
+     7.45  105   17  couple widget                 виджет любви
+     6.56   95   12  relationship
+     5.58   71   15  relationship tracker
+     5.14   55    6  relationship counter
+     ...
+     1.50   20    3  date ideas          <- €1.50 of €68
+
+**We bought love-counter / widget / tracker intent and shipped a date planner** — plus paid
+for brand searches for a COMPETITOR (Love8). Mechanically: Max Conversions with zero purchase
+signal can only optimise for INSTALLS, installs are cheapest on counter intent, so the
+algorithm walked the whole budget to the audience least likely to want the product. It did
+what we asked. **This is a strong candidate explanation for 85% one-and-done: people installed
+expecting a counter and found a venue swiper.** Note `date ideas` converted taps→installs at
+15%, in line with the counter terms — date intent does not perform badly, it never got spend.
+
+### THE PLACES BILL — the cache bucket is 10x finer than the search radius
+
+GCP is running ~€45/mo against a €20 budget, on €0 revenue. August: **11,840 Places calls**
+(vs 34,661 Firestore, which is trivially cheap). Firestore holds **143 `placeDeckQueries`
+buckets and 11,153 `venues`** — so the calls ARE populating a cache that works; the problem is
+the denominator.
+
+**Bucket keys are `lat,lon` at 2 decimals ≈ 1.1 km, but the search radius is 10–30 km.** Every
+neighbourhood is a fresh full curated fetch that can never be reused — 143 buckets, all
+unique, none shared. **"Scales with venues, not users" only holds if users CLUSTER**; ads
+across 52 storefronts made cities scale with users, so the cache is permanently cold-start.
+**→ Coarsen the bucket to ~1 decimal (~11 km, a city). Going one-city fixes the bill as a
+side effect.** The 18–20 Aug spike (1,130/1,628/920 vs a ~250/day baseline) is 1.1.0 launch
+plus the founder's own travel creating fresh buckets.
+
+**Also:** the search field mask requests `places.reviews` and `places.regularOpeningHours` on
+EVERY search, which pushes the SKU into the most expensive tier — yet both are shown only in
+the venue DETAIL sheet. Fetch them lazily via Place Details on open instead.
+
+### WHAT IS PAUSED, AND WHAT MUST BE TRUE TO RESUME
+
+- **ASA campaign `2144425241` (world) — PAUSED 2026-08-31.** `2144268568` (English) was
+  already paused 2026-08-16. Spend €0/day.
+  **Resume condition: no user-day exceeds the swipe cap without a `paywall_shown`.**
+- **Daily content job — CAROUSELS ONLY** (`isabella.cook --carousels`; old plist backed up at
+  `/tmp/cook-daily.plist.bak`). The video half failed 14 of 18 runs while unattended, burned
+  Higgsfield credits per attempt, produced 2 posts in 14 days, and **the blacklist bug
+  destroyed 5 more good scripts (5 → 10)**. Carousels cost zero credits and self-post.
+  **Pinterest is the ONE asset that compounds — 29 → 922 impressions in two weeks, unattended**
+  — which is why pins stay on.
+
+### THE OPEN DECISION — three products, one budget
+
+1. **Narrow to what works.** Near You + Daily Questions only, drop the 165-card deck (which
+   also removes ~1/3 of the localisation burden), one city, Spanish, and buy `date ideas` /
+   `planes en Madrid` intent. 1–2 weeks. Tests "will the RIGHT audience pay for date planning"
+   — never yet tested, because we bought counter intent.
+2. **The singles vertical** (founder proposal, 2026-08-31): onboarding forks couple/single;
+   singles swipe PARTNERS filtered by interest tags (running, swimming, bike, hike, zodiac);
+   on match they enter the existing couple funnel; new-couple Daily Questions 3/day; add chat;
+   drop the date-ideas deck. **The arithmetic problem is unchanged and filters make it worse:**
+   at Spain's real €0.56 CPI, €5/day = ~270 installs/mo × 15% ever-return ÷ 2 genders ÷ an
+   interest filter ≈ **4 people in the deck**. ~500 active singles in Madrid needs ~3,300
+   installs ≈ **12 months at €5/day**, empty the whole time. Plus guideline 1.2 moderation for
+   chat, and 6.2% D1 carried into a product that needs return visits more, not less.
+   **BPM (the model) arrived with a run club, a 3k waitlist and 500 first-weekend installs,
+   and scaled on META, not ASA.** → **The €0 first step is a Madrid waitlist**; under ~300
+   sign-ups without spend, the marketplace does not exist and 3 months are saved.
+3. **Follow the demand.** "love counter" is the #1 ASA keyword AND `/love-counter` is the
+   stickiest page on the site (55s/user vs 7s for the homepage). Two independent signals that
+   the market wants a counter. Days Together widgets already ship. Make the counter the front
+   door, date planning the depth behind it.
+
+**Not decided. Do not drift into one by inertia.**
