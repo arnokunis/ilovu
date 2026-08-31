@@ -1799,3 +1799,214 @@ the venue DETAIL sheet. Fetch them lazily via Place Details on open instead.
    door, date planning the depth behind it.
 
 **Not decided. Do not drift into one by inertia.**
+
+---
+
+## THE PIVOT WORK-UP (2026-08-31) — angle, evidence, spec, and what to do first
+
+Written up from a long working session the day the founder returned. **Nothing here is built.
+The three options in "THE 2026-08-31 READ" above are still open — this section is the research
+that should decide between them.** Plan doc (shareable):
+https://claude.ai/code/artifact/ed85588f-5330-4a00-9114-6a92978ed1f4
+
+### THE ANGLE (recommended): company, not romance
+
+**Every hard problem with the singles pivot is a DATING-CATEGORY problem:**
+
+    Meta          dating ads need PRIOR WRITTEN PERMISSION (application, can be refused), 18+
+    Google Ads    dating needs CERTIFICATION; banned outright in 18 countries
+                  (DZ BH LK PS IQ JO KW LB LY MA OM NP PK QA SA TN EG YE)
+    Apple Ads     no pre-approval, BUT competitive categories (dating named) run
+                  $5-20+ PER TAP vs the €0.07/tap we pay on couples keywords
+    App Store     4.3(b) names dating as saturated
+
+**→ Sell it as "find people to do things with", not dating.** *"Quedadas para correr en
+Madrid."* No Meta permission, no Google certification, uncontested keywords, a less contested
+App Store category — and it is honest about what the product does. **It also WIDENS the pool,
+which attacks the top risk (density): positioned as company you also recruit people who just
+want a training partner, not only singles seeking romance.**
+**The trade, stated honestly:** company converts to paid worse than romance does. Start on
+company to build liquidity; let the romantic framing surface later once the deck has depth and
+the Meta permission has landed. Bumble went dating→friends; this goes the other way.
+**Apply for Meta dating permission NOW anyway** — free, runs on their clock, wanted later.
+**Nothing in Stage 1 or the launch may depend on it arriving.**
+
+### BPM TEARDOWN — the model, and two findings that cut against us
+
+    $140K MRR in 6 months · €1M ARR in 4.5 months · 75,000+ downloads
+    bootstrapped, ZERO VC · France only · scaled primarily on META
+    App Store: 4.53 from 2,318 ratings, released 2025-12-17, shipping weekly (v1.1.15)
+
+**1. THEY ALREADY CLAIM OUR DIFFERENTIATOR.** Their own listing copy: *"Plus de small talk
+inutiles. Ici, le date commence avec une séance de sport."* / *"On brise la glace en bougeant."*
+**The gap is NOT "nobody converts a match into an activity."** The narrower open question — and
+the single most important thing to check when tearing the app down — is **whether they pick a
+specific PLACE and TIME, or just tell you to go train together.** If the latter, our venue deck
++ mission is still the unclaimed part. If they have venue suggestions, we need a different wedge.
+
+**2. THEY ARE CATEGORISED "Lifestyle, Health & Fitness" — NOT Dating.** Independent confirmation
+of the angle above; they made the same call deliberately.
+
+**THE MONETISATION MATHS, which is the most decision-relevant thing found all day:**
+
+    $140K MRR ÷ 75K downloads = $1.87 monthly revenue PER DOWNLOAD
+    at typical dating pricing (€10-30/mo) → 6-12% of installs become PAYING
+    our break-even                        → 1.4%
+
+**They run 4-8x our break-even. And "bootstrapped, no VC" means ad spend CANNOT exceed revenue
+— so the unit economics genuinely work**, which is a stronger signal than the headline MRR.
+
+**WHY dating monetises and couples date-planning does not — this is structural, not execution:**
+**urgency** (you want to meet someone now) · **scarcity** (someone liked you, you cannot see who)
+· **competition** (others are messaging them). A couples date-planner has none: nothing is
+scarce, nobody competes for your partner, and you can plan a date for free anywhere.
+**This is the strongest argument that €0 revenue is not only a broken paywall.**
+All BPM figures are founder-reported in a podcast, not audited.
+
+### DOES ANYONE ACTUALLY USE NEAR YOU? — yes, but once (founder excluded, since 1.0.8)
+
+    83 swipers · 1,683 swipes
+    mean 20.3 · p25/median/p75 = 3 / 8 / 21 · max 364
+    DAYS SPENT SWIPING: 1.11        <- one session, essentially never again
+    missions per swipe: 0.76        <- 3 of 4 swipes mean "I want to go here"
+
+    1-4 swipes   30 users     63      10-19  17 users  240
+    5-9          15 users    103      20-49  13 users  379
+    50+           8 users    898      <- 8 people = 53% of ALL swiping
+
+136 opened Near You, **1.47 opens per person**, and only ~half of those who opened ever swiped.
+**Read: real intent (76% become a planned mission), no habit (1.11 days).** For venue-overlap
+matching the ~15 likes/person model holds ON THE MEAN — but it is carried by a handful of heavy
+users; the median contributes ~6.
+
+### THE ONE RETURNING USER, AND THE GATE EVIDENCE
+
+    …2A96507C  Malaysia  364 swipes · 247 missions · 9 DAYS ACTIVE (18-29 Aug) · 16 paywall views · did NOT buy
+    …7F190D4C  Chile     155 swipes in ONE day · 155 missions · 0 paywall
+    …FDF8D382  Slovakia   95 swipes in ONE day ·  93 missions · 0 paywall
+    …4D6BBC13  founder   492 swipes · 29 days · 8 paywall · the ONLY completed memory in the dataset
+
+**The Malaysian user is an existence proof that the product CAN hold someone** — nine days, 247
+places planned. **But he saw the paywall 16 times and did not buy** (Malaysia: €49.99/yr is a
+very heavy ask; and 247 missions from 364 swipes suggests he used it as a PLACES WISHLIST, not
+a date planner). **Chile and Slovakia blew past a cap of 10 with ZERO paywalls — two of the
+heaviest users were never asked at all.**
+
+### ⭐ THE RECOMMENDATION — fix three things in the app we HAVE, before pivoting
+
+**We never actually tested whether people will pay.** The gate is broken, and the price does not
+fit where the engaged users actually are. Roughly two weeks:
+
+1. **Fix the paywall gate.** Until it fires reliably, no revenue conclusion is valid and every
+   future euro of ad spend measures nothing. A bug, not a strategy.
+2. **Add local price tiers.** Engaged users are in Malaysia, Chile, Slovakia. €49.99 is the
+   wrong number there. App Store Connect setting, not a product decision.
+3. **Ship push for solo users** (solo-first storage). 247 missions were planned and nobody was
+   ever reminded of one. `sendDateReminders` is ALREADY DEPLOYED — it simply cannot reach users
+   who never paired. This is the only thing that turns "one session" into "came back".
+
+**Then measure with ~€85 in ONE market.** If people still do not pay with a working paywall, a
+sane local price and a reason to return, **the couples thesis is genuinely dead** and the pivot
+proceeds on evidence with a working foundation underneath. **The Madrid marketplace is not
+wrong — it is expensive and unproven, and needs a waitlist, a raise, moderation and a two-sided
+cold start.**
+
+### THE APP SPEC, IF THE PIVOT PROCEEDS (people-matching first — founder's call)
+
+**Onboarding forks:** in a relationship → existing invite/pairing flow, unchanged. Single →
+light profile (name, photos, age, gender, looking-for, interest tags). **Matching is a stage
+couple-mode SKIPS, not a second product.**
+
+**Matching is the primary surface.** Swipe people, ordered by shared tags, overlap shown on the
+card ("you both run and hike"). **⚠️ TAGS MUST RANK, NOT EXCLUDE, UNTIL DENSITY EARNS IT:**
+
+    150 active in one city, HARD filter (gender then tag)  ->  ~4 people in the deck
+    150 active, SOFT ranking (whole city, ordered by tags) ->  ~75
+
+**Getting this wrong is the single most likely way the launch fails** — a deck that runs dry in
+90 seconds is indistinguishable from a broken app. Harden to true filters per-city later.
+
+**Near You is the floor that always works** — functions with ONE user and zero matches, which is
+why an empty deck is a disappointment rather than a dead end. No other dating app has anything
+to show a user with no matches.
+
+**Venue overlap = OPTIONAL, SECONDARY** (founder's call; not the mechanic). "3 people want to go
+here" free, names + message paid, **opt-in per venue**, never exact location or timing.
+
+**After a match:** chat (with the match and inside a mission) · shared Near You swiping → Mission
+with date/time · new-pair Daily Questions (3/day) · Memory Vault KEPT.
+
+**DATA MODEL — do NOT create a couple doc on match.** `couples` is built for ONE durable pair
+(two frozen members holding the subscription, memories, missions) and most matches go nowhere.
+
+    profiles/{uid}   NEW  photos, age, gender, looking-for, tags (couples never need one)
+    venueLikes       NEW  the inventory the marketplace runs on
+    matches/{id}     NEW  two uids, status, lastActivityAt; chat + shared swiping hang off this
+    couples/{id}     EXISTING — created only on PROMOTION (they met / confirmed)
+
+Unmatch = a status change, not an orphaned couple. Stale matches expire ~14d.
+**And it yields the fundable metric: `match → met → became a couple`.** Fold matches into
+couples and that number can never be measured.
+
+**PRICING** (built against 13-of-282 paywall reach):
+
+    people swipes        ~15/day free      unlimited paid
+    WHO LIKED YOU        hidden            visible        <- strongest paywall in dating
+    venue swipes         ~15/day free      unlimited paid <- also caps the Places bill
+    who liked this venue count only        names+message
+    Daily Questions      1/day             3/day
+    CHAT WITH A MATCH    unlimited         unlimited      <- NEVER gate this
+
+**Arm after the FIRST MATCH, not before** — someone who has not matched has received nothing.
+**Gate the QUANTITY of Daily Questions, never access** — they are a retention mechanic.
+
+### THE STAGED TEST — ~€100 at risk before any real money moves
+
+    1  2-3 wk  €0-100  WAITLIST, one city, by hand into 15-20 local communities
+                       (+ €50-100 Meta ONLY as a message test, not to build the list)
+                       capture: email · interest tags · gender · looking-for · neighbourhood
+                       tag every link ?src= to learn which community produced sign-ups
+                       KILL <150 · PASS 300 with split no worse than 65/35
+    2  2 wk    €0      CONCIERGE: hand-match the list in a spreadsheet, email each pair
+                       "you both run in Retiro, here are 3 places, pick one" — then ASK IF THEY MET.
+                       NO CODE. Produces `match → met`, the number no dating app publishes.
+                       KILL <5% met · STRONG at 20%
+    3  4-6 wk  build   solo-first storage+push · gate fix · user_id in GA4 · Places bucket fix
+                       then profiles, venue likes, discovery, chat, new-pair questions
+    4  3 wk    €1,000  LAUNCH TO THE WAITLIST ALL AT ONCE. Spend inside 3 weeks, not 3 months —
+                       CONCENTRATION IN TIME matters as much as in geography. Dripped, nobody
+                       ever sees more than a handful. ASA exact-match Spanish activity terms.
+                       ⚠️ SEARCH MATCH OFF — it is what found "couple widget".
+
+**Buying the waitlist with ads answers the WRONG QUESTION** — it proves emails can be bought,
+which was never in doubt, and spends a third of the launch budget. **If sign-ups can ONLY be got
+by paying, that is itself the answer**: no community pull, and a marketplace's second side fills
+through people telling their friends.
+
+### LANDING PAGE SPEC (English draft; Spanish for Madrid)
+
+Lives at **ilovu.io/madrid** — own domain, no new vendor. **⚠️ Netlify deploys `main` ONLY.**
+Backend: a small HTTP Cloud Function → `waitlist` collection (function-only writes; never open
+Firestore rules to public writes or you curate spam instead of a list).
+
+    HERO      "Find someone to run with in Madrid."
+              "Match on what you actually do — running, padel, hiking, climbing.
+               Agree on a place. Go this week."   [email] [Join the list]
+    COUNTER   "147 people in Madrid already on the list"   <- social proof drives the next signup
+    HOW       1 tell us what you do · 2 we match you with people nearby · 3 pick a place and go
+    LINE      "Most apps end in a chat that goes nowhere. This one ends with a plan and a place."
+    FORM      email · activities (pills) · I'm · looking to meet · where do you train
+    AFTER     "You're #148. Share to move up" + ?ref=  <- cheapest virality; BPM reached 3,000 this way
+
+**Deliberately absent:** no App Store link (nothing to download), no mention of dating/romance
+(keeps Meta + Google out of restricted territory), no long copy.
+
+### CITY — the foothold decides it, not language or CPI
+
+Spanish chosen (founder call): **ES €0.56 / MX €0.56 / AR €0.45 CPI**, and the Spanish cluster
+was historically our best deep-funnel cohort — one translation opens Spain AND LatAm.
+**Caveat: €49.99/yr needs local price tiers for LatAm.**
+**Spanish also partly solves the foothold problem** — Madrid running/padel groups, Strava, Meetup
+and r/madrid can be reached ONLINE in Spanish from Vilnius.
+**You do NOT need to localise the app for Stages 1-2** — only the landing page and the matching
+emails. App localisation is Stage 3, and dropping the 165-card deck removes ~1/3 of the burden.
