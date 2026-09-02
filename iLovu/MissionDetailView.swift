@@ -682,7 +682,9 @@ struct MissionDetailView: View {
             Button("Delete mission", role: .destructive) { deleteMission() }
             Button("Keep it", role: .cancel) { }
         } message: {
-            Text("This removes the planned date for both of you. Your completed memories are never affected.")
+            Text(coupleService.coupleId == nil
+                     ? "This removes it from your saved places. Anything you have already completed is never affected."
+                     : "This removes the planned date for both of you. Your completed memories are never affected.")
         }
     }
 

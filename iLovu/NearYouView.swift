@@ -326,11 +326,13 @@ struct NearYouView: View {
     }
 
     /// Subtitle reflects the active deck source (venues at launch, not events).
+    /// "picked for two" until 2026-09-02 — couples framing sitting at the top of
+    /// the app's main screen, where ~98% of users have no second person.
     private var headerSubtitle: String {
         switch NearYouConfig.source {
-        case .places: return "Cosy spots near you, picked for two"
+        case .places: return "Good places near you, worth the trip"
         case .events: return "Events near you this week"
-        case .both:   return "Date spots & events near you"
+        case .both:   return "Places & events near you"
         }
     }
 
