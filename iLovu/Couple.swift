@@ -89,7 +89,7 @@ struct Couple: Codable, Identifiable {
     /// When the subscription flag last changed. Audit/cache-bust only.
     var subscriptionUpdatedAt: Timestamp? = nil
 
-    /// SHARED ~1km location bucket ("%.2f,%.2f") for the Near You event deck. Both
+    /// SHARED ~11km city-scale location bucket ("%.1f,%.1f") for the Near You event deck. Both
     /// partners build their event-cache query key from THIS, so they fetch the
     /// SAME curated deck and their swipe cardIds line up for matching — instead of
     /// each phone's GPS producing two disjoint decks (which would silently kill

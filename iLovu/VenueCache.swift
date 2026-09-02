@@ -483,9 +483,14 @@ struct VenueCache {
             .filter { !$0.isEmpty }
             .joined(separator: "-")
 
+        // Route through LocationBucket rather than formatting here. This line used
+        // its own "%.2f,%.2f" until 2026-09-02 — a second, divergent definition of
+        // the grid, which is precisely what LocationBucket exists to prevent. When
+        // the shared grid was coarsened to ~11km this would have silently kept
+        // keying venue queries at ~1km, so the two caches would have disagreed.
         let bucket: String
         if let bias = locationBias {
-            bucket = String(format: "%.2f,%.2f", bias.latitude, bias.longitude)
+            bucket = LocationBucket.of(latitude: bias.latitude, longitude: bias.longitude)
         } else {
             bucket = "none"
         }

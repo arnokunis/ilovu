@@ -182,7 +182,7 @@ final class CoupleService {
         }
     }
 
-    /// The couple's SHARED Near You location bucket ("%.2f,%.2f"), or nil until a
+    /// The couple's SHARED Near You location bucket ("%.1f,%.1f"), or nil until a
     /// partner has claimed one. NearYouView reads this to fetch the shared deck.
     var eventLocationBucket: String? { couple?.eventLocationBucket }
 

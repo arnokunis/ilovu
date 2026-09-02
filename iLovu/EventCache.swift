@@ -41,7 +41,7 @@ struct EventCache {
 
     // MARK: - Public: the deck for a location bucket
 
-    /// The curated event deck near `bucket` (a "%.2f,%.2f" location bucket — the
+    /// The curated event deck near `bucket` (a "%.1f,%.1f" location bucket — the
     /// SHARED one stored on the couple doc, so both partners get the same deck).
     /// Empty when nothing's near, the cache + search both miss, or there's no API
     /// key (caller falls back to SampleEvents). `now` is injected for testability.
@@ -261,7 +261,7 @@ struct EventCache {
         LocationBucket.of(latitude: latitude, longitude: longitude)
     }
 
-    /// Parse a "%.2f,%.2f" bucket back to its centre for the Ticketmaster search.
+    /// Parse a "%.1f,%.1f" bucket back to its centre for the Ticketmaster search.
     /// The search radius (25km) comfortably absorbs the 2-decimal rounding.
     static func center(fromBucket bucket: String) -> (lat: Double, lng: Double)? {
         LocationBucket.center(of: bucket)
