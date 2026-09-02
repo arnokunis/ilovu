@@ -46,7 +46,23 @@ final class PaywallGate {
     private let matchThreshold = 2      // condition A: 2nd match reached
     private let memoryThreshold = 1     // condition A: 1st memory saved
     private let backstopDays = 14       // condition B: 14-day backstop
-    private let missionThreshold = 2    // condition C: 2nd mission planned (works solo)
+    // Condition C: places saved in this scope. Was 2 until the 2026-09-02 pivot,
+    // lowered to 1 because the median user saves fewer than two: of 83 swipers,
+    // 30 made 1-4 swipes in total and half of everyone who opened Near You never
+    // swiped at all. At a threshold of 2 the typical user was never armed, and so
+    // was never asked to pay — paywall reach was 4.6% of installs.
+    // Arming is NOT showing: the wall still waits for a calm entry point (the
+    // swipe cap, or opening a saved place), so nothing interrupts the save itself.
+    // Condition C stays at 2 — deliberately, after trying 1 on 2026-09-02.
+    // Arming at the FIRST save sounds right (the median user saves fewer than two,
+    // so a threshold of 2 leaves most people unarmed and unasked). But `hardMode`
+    // BLOCKS the gated action, so arming at 1 means: save a place, tap it, and be
+    // refused access to your own saved place on the very first interaction. That
+    // walls the activation surface we just promoted to the home tab.
+    // Reach should come from more people swiping — Near You is now the default tab —
+    // not from walling the first thing anyone does. Revisit only with a soft first
+    // open (allow N opens before blocking), never by lowering this alone.
+    private let missionThreshold = 2    // condition C: 2nd place saved (works solo)
 
     // MARK: - Entitlement (PLACEHOLDER)
     /// Whether either partner is subscribed. While false the wall can arm and
