@@ -693,7 +693,9 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Dismiss")
                 }
-                Text("Touch and hold your home screen → tap ➕ → search iLovu → add **Days Together**.")
+                Text(isPaired
+                     ? "Touch and hold your home screen → tap ➕ → search iLovu → add **Days Together**."
+                     : "Touch and hold your home screen → tap ➕ → search iLovu → add **Next Date**.")
                     .font(.system(size: 13))
                     .foregroundStyle(.gray)
                     .fixedSize(horizontal: false, vertical: true)

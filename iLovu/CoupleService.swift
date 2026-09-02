@@ -152,6 +152,22 @@ final class CoupleService {
     private(set) var soloRelationshipStatus: String? =
         UserDefaults.standard.string(forKey: CoupleService.soloStatusKey)
 
+    // Solo Near You location, parked locally for exactly the reason the dating
+    // date is: it lives on the couple doc, so before 2026-09-02 an unpaired user
+    // had nowhere to put it — and the whole "search a city / plan a trip" bar was
+    // therefore hidden from them. After the places pivot that is ~98% of users,
+    // and searching another city is a headline feature, so it parks here instead.
+    private static let soloBucketKey = "solo.eventLocationBucket"
+    private static let soloManualKey = "solo.eventLocationManual"
+    private static let soloLabelKey  = "solo.eventLocationLabel"
+
+    private(set) var soloEventBucket: String? =
+        UserDefaults.standard.string(forKey: CoupleService.soloBucketKey)
+    private(set) var soloEventManual: Bool =
+        UserDefaults.standard.bool(forKey: CoupleService.soloManualKey)
+    private(set) var soloEventLabel: String? =
+        UserDefaults.standard.string(forKey: CoupleService.soloLabelKey)
+
     /// Dating date to DISPLAY: the couple's when paired, the locally parked one
     /// when not. Use this for widgets and UI; `datingDate` stays couple-only.
     var effectiveDatingDate: Date? { couple?.milestoneDate(.dating) ?? soloDatingDate }
@@ -184,13 +200,13 @@ final class CoupleService {
 
     /// The couple's SHARED Near You location bucket ("%.1f,%.1f"), or nil until a
     /// partner has claimed one. NearYouView reads this to fetch the shared deck.
-    var eventLocationBucket: String? { couple?.eventLocationBucket }
+    var eventLocationBucket: String? { couple?.eventLocationBucket ?? soloEventBucket }
 
     /// When the shared event-location bucket was last set, or nil if never. Used
     /// by NearYouView's re-anchor debounce (only override an older stored bucket).
     var eventLocationUpdatedAt: Date? { couple?.eventLocationUpdatedAt?.dateValue() }
-    var eventLocationManual: Bool { couple?.eventLocationManual ?? false }
-    var eventLocationLabel: String? { couple?.eventLocationLabel }
+    var eventLocationManual: Bool { couple?.eventLocationManual ?? soloEventManual }
+    var eventLocationLabel: String? { couple?.eventLocationLabel ?? soloEventLabel }
 
     /// The signed-in user's birthday, or nil if unset / unpaired.
     var myBirthday: Date? {
@@ -806,6 +822,22 @@ final class CoupleService {
     /// mirror shape as the setters above; rides observeCouple to the partner live,
     /// and the existing couples update rule already permits it (members frozen).
     func setEventLocation(bucket: String, manual: Bool = false, label: String? = nil) async {
+        // Unpaired: park it locally. updateCoupleField below no-ops without a
+        // couple, so without this branch a solo city search silently did nothing.
+        guard couple != nil else {
+            soloEventBucket = bucket
+            soloEventManual = manual
+            soloEventLabel = label
+            UserDefaults.standard.set(bucket, forKey: Self.soloBucketKey)
+            UserDefaults.standard.set(manual, forKey: Self.soloManualKey)
+            if let label {
+                UserDefaults.standard.set(label, forKey: Self.soloLabelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.soloLabelKey)
+            }
+            return
+        }
+
         // In auto mode the label is cleared (FieldValue.delete removes the field).
         let labelValue: Any = label ?? FieldValue.delete()
         await updateCoupleField([

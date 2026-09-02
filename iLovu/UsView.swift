@@ -571,11 +571,15 @@ struct UsView: View {
     private var notificationsSubtitle: String {
         switch pushStatus {
         case .authorized, .provisional, .ephemeral:
-            return "On — all nudges & reminders are active"
+            return isPaired ? "On — all nudges & reminders are active"
+                            : "On — reminders about your plans are active"
         case .denied:
             return "Off — tap to turn on in Settings"
         default:
-            return "One tap turns on all nudges & special-date reminders"
+            // "nudges & special-date reminders" are anniversary/partner features;
+            // a solo user gets reminded about the places they planned, nothing else.
+            return isPaired ? "One tap turns on all nudges & special-date reminders"
+                            : "One tap to get reminded about the places you plan"
         }
     }
 
@@ -701,7 +705,7 @@ struct UsView: View {
             ZStack {
                 LouvGradient.coral
                 Text(userName.trimmingCharacters(in: .whitespaces).isEmpty
-                     ? "💕"
+                     ? (isPaired ? "💕" : "📍")
                      : String(userName.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)

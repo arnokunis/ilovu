@@ -137,11 +137,12 @@ struct NearYouView: View {
                 header
                     .padding(.top, 16)
 
-                // Trip planning + "search here" — a paired-only surface (a solo
-                // deck already follows live GPS, so there's nothing to override).
-                if coupleId != nil {
-                    locationBar
-                }
+                // Trip planning + "search here". Paired-only until 2026-09-02, on
+                // the reasoning that a solo deck already follows live GPS so there
+                // was nothing to override. That held for a couples app; for a places
+                // app "search a city before you travel" is a headline feature, and
+                // hiding it from unpaired users hid it from ~98% of them.
+                locationBar
 
                 filterPills
 
@@ -188,7 +189,7 @@ struct NearYouView: View {
             Button("Search", action: searchTown)
             Button("Cancel", role: .cancel) { townQuery = "" }
         } message: {
-            Text("See date spots there and plan a trip together.")
+            Text("See good places there and plan a trip.")
         }
         // Load the deck once on appear (real events via EventCache, or the
         // SampleEvents fallback). .task is cancelled automatically on disappear.
