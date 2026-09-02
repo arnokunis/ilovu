@@ -70,6 +70,9 @@ struct UsView: View {
     // The user's display name (same key as onboarding + the Home greeting).
     @AppStorage("userName") private var userName: String = ""
 
+    // Saved places power the solo header subtitle.
+    @Environment(MissionStore.self) private var missionStore
+
     // Drives the full-screen memory viewer when a card is tapped.
     @State private var selectedMemory: Memory?
 
@@ -279,12 +282,15 @@ struct UsView: View {
                     .padding(.bottom, 10)
             }
 
-            Text("Your Story Together 💕")
+            // Couples get their story; everyone else gets their own account header.
+            // "Your Story Together 💕 · 0 memories" sat above Sign Out and Delete
+            // Account for solo users, which is the couples app the pivot removed.
+            Text(isPaired ? "Your Story Together 💕" : headerTitle)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
 
-            Text(memoryCountText)
+            Text(isPaired ? memoryCountText : savedCountText)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
         }
@@ -307,6 +313,18 @@ struct UsView: View {
             )
         )
         .ignoresSafeArea(edges: .top)
+    }
+
+    /// Solo header title — their name when set, a neutral fallback otherwise.
+    private var headerTitle: String {
+        userName.isEmpty ? "Your account" : userName
+    }
+
+    /// Solo subtitle: how many places they have saved, which is the thing this
+    /// app is actually about for them.
+    private var savedCountText: String {
+        let count = missionStore.missions.count
+        return count == 1 ? "1 place saved" : "\(count) places saved"
     }
 
     private var memoryCountText: String {
