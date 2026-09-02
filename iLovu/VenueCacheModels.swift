@@ -38,6 +38,11 @@ struct CachedVenue: Codable, Identifiable {
     var userRatingCount: Int?
     var priceLevel: String?
 
+    /// Real price band from Places (New), e.g. "€20-40". Preferred over the
+    /// priceLevel symbols wherever Google provides it. Optional and defaulted, so
+    /// venues cached before 2026-09-02 still decode.
+    var priceText: String?
+
     /// Raw Google photo "resource names" (Place.Photo.name), e.g.
     /// "places/{id}/photos/{id}" — the ONLY photo data persisted. Fetchable URLs
     /// are rebuilt on demand via `photoURLStrings(using:)`, so the API key is
@@ -124,6 +129,7 @@ extension CachedVenue {
             rating: place.rating,
             userRatingCount: place.userRatingCount,
             priceLevel: place.priceLevel,
+            priceText: Self.priceRangeLabel(place.priceRange),
             photoNames: names,
             openingHoursWeekday: place.regularOpeningHours?.weekdayDescriptions,
             reviews: reviews,
@@ -185,7 +191,7 @@ extension CachedVenue {
             title:         displayName,
             venue:         Self.typeLabel(primaryType: primaryType, category: cat),
             date:          "",                       // venues have no date; the card joins non-empty parts
-            price:         Self.priceLabel(priceLevel),
+            price:         priceText ?? Self.priceLabel(priceLevel),
             category:      cat,
             emoji:         Self.emoji(for: cat),
             description:   blurb,
@@ -208,6 +214,30 @@ extension CachedVenue {
             .split(separator: "_")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
+    }
+
+    /// Format Google's price range as money the user can act on: "€20-40", or
+    /// "from €20" when only a lower bound exists. nil when absent, so the caller
+    /// falls back to the € symbols.
+    private static func priceRangeLabel(_ range: Place.PriceRange?) -> String? {
+        guard let range else { return nil }
+        let symbol: (String?) -> String = { code in
+            switch code {
+            case "EUR": return "€"
+            case "USD": return "$"
+            case "GBP": return "£"
+            default:    return code.map { $0 + " " } ?? ""
+            }
+        }
+        let lo = range.startPrice?.units
+        let hi = range.endPrice?.units
+        let cur = symbol(range.startPrice?.currencyCode ?? range.endPrice?.currencyCode)
+        switch (lo, hi) {
+        case let (lo?, hi?): return "\(cur)\(lo)-\(hi)"
+        case let (lo?, nil): return "from \(cur)\(lo)"
+        case let (nil, hi?): return "up to \(cur)\(hi)"
+        default:             return nil
+        }
     }
 
     /// Map the Places (New) priceLevel enum to a compact symbol. "" when absent —

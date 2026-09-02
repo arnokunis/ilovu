@@ -42,6 +42,11 @@ struct PlacesService {
         "places.rating",
         "places.userRatingCount",
         "places.priceLevel",
+        // Actual money, not symbols. Half of cached venues return no priceLevel at
+        // all and most of the rest are "MODERATE", which does not help anyone decide
+        // where to eat. priceRange gives e.g. €20-40. Same SKU tier as `rating`,
+        // which we already request, so this adds no cost.
+        "places.priceRange",
         "places.photos",
         "places.regularOpeningHours",
         "places.reviews",
@@ -260,6 +265,7 @@ struct Place: Codable, Identifiable {
     let rating: Double?
     let userRatingCount: Int?
     let priceLevel: String?
+    let priceRange: PriceRange?
     let photos: [Photo]?
     let regularOpeningHours: OpeningHours?
     let reviews: [Review]?
@@ -273,6 +279,16 @@ struct Place: Codable, Identifiable {
     let types: [String]?
     let location: LatLng?
     let businessStatus: String?
+
+    /// Google returns Money objects; `units` is a STRING in the JSON (int64 as text).
+    struct PriceRange: Codable {
+        let startPrice: Money?
+        let endPrice: Money?
+        struct Money: Codable {
+            let currencyCode: String?
+            let units: String?
+        }
+    }
 
     struct LocalizedText: Codable {
         let text: String
