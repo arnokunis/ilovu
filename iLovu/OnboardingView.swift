@@ -105,12 +105,12 @@ private struct WelcomeScreen: View {
             Spacer()
 
             VStack(spacing: 12) {
-                Text("For couples who actually go")
+                Text("Good places, actually near you")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Color.deepRose)
                     .multilineTextAlignment(.center)
 
-                Text("Swipe date ideas together. When you both pick one, it becomes a plan — and a memory you actually made.")
+                Text("Real places worth going, chosen from what is actually around you. Swipe, save the ones you like, and go.")
                     .font(.system(size: 16))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -164,13 +164,13 @@ private struct HowItWorksScreen: View {
             Spacer().frame(height: 24)
 
             VStack(spacing: 12) {
-                Text("Swipe. Match. Make it happen.")
+                Text("Swipe. Save. Go.")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundStyle(Color.deepRose)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
-                Text("Both of you swipe through date ideas on your own phones. When you both like the same one — it's a match, and it becomes a plan.")
+                Text("Swipe through places near you — cafés, restaurants, viewpoints, trails. Anything you like is saved to your list, with what it costs.")
                     .font(.system(size: 16))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -269,12 +269,12 @@ private struct ProfileScreen: View {
             Spacer().frame(height: 24)
 
             VStack(spacing: 12) {
-                Text("Tell us about you two")
+                Text("What should we call you?")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundStyle(Color.deepRose)
                     .multilineTextAlignment(.center)
 
-                Text("So we can tailor the ideas we send your way.")
+                Text("So the app feels like yours.")
                     .font(.system(size: 16))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)

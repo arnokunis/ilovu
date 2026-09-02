@@ -46,7 +46,7 @@ struct SignInView: View {
                             withAnimation(LouvAnimation.spring) { showDemoLogin = true }
                         }
 
-                    Text("Sign in to save your dates and pick up right where you left off.")
+                    Text("Sign in to save the places you like and pick up right where you left off.")
                         .font(.system(size: 16))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.center)
