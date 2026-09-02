@@ -369,9 +369,11 @@ struct HomeView: View {
         case 12..<18: part = "afternoon"
         default:      part = "evening"
         }
+        // 💕 only for couples — for everyone else this is a places app.
+        let emoji = isPaired ? "💕" : "📍"
         return userName.isEmpty
-            ? "Good \(part) 💕"
-            : "Good \(part), \(userName) 💕"
+            ? "Good \(part) \(emoji)"
+            : "Good \(part), \(userName) \(emoji)"
     }
 
     // MARK: - Spark Score
@@ -475,7 +477,7 @@ struct HomeView: View {
 
     private var missionsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionLabel("Your Missions")
+            sectionLabel(isPaired ? "Your Missions" : "Your Places")
 
             // Matches float to the top. Since a right-swipe now saves a plan on
             // its own, this list mixes "I saved this" with "we both want this" —
@@ -499,7 +501,8 @@ struct HomeView: View {
     }
 
     private var missionsEmptyState: some View {
-        Text("No missions yet — swipe to match on a date idea 💕")
+        Text(isPaired ? "No missions yet — swipe to match on a date idea 💕"
+                          : "Nothing saved yet — swipe a place you like in Near You 📍")
             .font(.system(size: 14))
             .foregroundStyle(.gray)
             .multilineTextAlignment(.leading)
@@ -705,7 +708,7 @@ struct HomeView: View {
 
     private var quickStatsRow: some View {
         HStack(spacing: 12) {
-            statCard(number: missionsCompletedCount, label: "Missions")
+            statCard(number: missionsCompletedCount, label: isPaired ? "Missions" : "Visited")
             // "Days Together" whenever a dating date exists — effectiveDaysTogether
             // so it also works for an unpaired user who set one.
             //
@@ -720,7 +723,11 @@ struct HomeView: View {
             if let days = coupleService.effectiveDaysTogether {
                 statCard(number: days, label: "Days Together")
             }
-            statCard(number: memoriesSavedCount,     label: "Memories")
+            if isPaired {
+                statCard(number: memoriesSavedCount, label: "Memories")
+            } else {
+                statCard(number: missionStore.missions.count, label: "Saved")
+            }
         }
     }
 

@@ -125,7 +125,7 @@ struct PaywallView: View {
                 price: "$39.99/yr",
                 perMonth: "just $3.33/mo",
                 badge: "Founding member — first 500 only",
-                terms: "$39.99/year, auto-renews. Cancel anytime. One plan covers both partners."
+                terms: "Auto-renews yearly. Cancel anytime."
             )
         } else {
             // Real RevenueCat price when fed; static copy as the offline fallback.
@@ -135,7 +135,7 @@ struct PaywallView: View {
                 price: annualPriceText ?? "$49.99/yr",
                 perMonth: annualPerMonthText ?? "just $4.17/mo",
                 badge: "Best value — save 40%",
-                terms: "Auto-renews yearly. Cancel anytime. One plan covers both partners."
+                terms: "Auto-renews yearly. Cancel anytime."
             )
         }
     }
@@ -147,7 +147,7 @@ struct PaywallView: View {
             price: monthlyPriceText ?? "$6.99/mo",
             perMonth: nil,
             badge: nil,
-            terms: "Auto-renews monthly. Cancel anytime. One plan covers both partners."
+            terms: "Auto-renews monthly. Cancel anytime."
         )
     }
 
@@ -159,9 +159,9 @@ struct PaywallView: View {
     // The three things subscribing unlocks. Tight by design — a thesis, not a
     // feature dump. (SF Symbol, label).
     private let unlocks: [(icon: String, text: String)] = [
-        ("infinity",     "Unlimited missions & matches"),
-        ("heart.fill",   "Your shared Memory Vault, forever"),
-        ("apps.iphone",  "Home-screen widgets: next date, days together, latest memory")
+        ("infinity",     "Unlimited swipes, every day"),
+        ("bookmark.fill","Save as many places as you like"),
+        ("apps.iphone",  "Home-screen widgets for what is next")
     ]
 
     // MARK: - Body
@@ -221,13 +221,13 @@ struct PaywallView: View {
     private var hero: some View {
         VStack(spacing: 14) {
             // Small warm motif — purely decorative, hidden from VoiceOver.
-            Text("💕")
+            Text("📍")
                 .font(.system(size: 44))
                 .accessibilityHidden(true)
 
             Text(isPaired
                  ? "Keep building your story together."
-                 : "Keep every date you plan.")
+                 : "Keep exploring, without limits.")
                 .font(.system(size: heroSize, weight: .bold))
                 .foregroundStyle(Color.deepRose)
                 .multilineTextAlignment(.center)
@@ -237,7 +237,7 @@ struct PaywallView: View {
             // to satisfy first.
             Text(isPaired
                  ? "One subscription unlocks everything — for both of you."
-                 : "Unlocks everything now — and covers your partner too, whenever you connect.")
+                 : "Removes the daily swipe limit and unlocks everything in the app.")
                 .font(.system(size: bodySize))
                 .foregroundStyle(.gray)
                 .multilineTextAlignment(.center)
@@ -382,7 +382,7 @@ struct PaywallView: View {
                     if isPurchasing {
                         ProgressView().tint(.white)
                     } else {
-                        Text(isPaired ? "Start together" : "Start planning")
+                        Text(isPaired ? "Start together" : "Keep exploring")
                             .font(.system(size: ctaSize, weight: .semibold))
                             .foregroundStyle(.white)
                     }

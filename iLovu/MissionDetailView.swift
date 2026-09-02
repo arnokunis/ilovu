@@ -593,7 +593,7 @@ struct MissionDetailView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color.deepRose)
 
-                Text("Send them this plan — they'll see the date you made before they even install.")
+                Text("Send them this plan — they'll see where you're going before they even install.")
                     .font(.system(size: 13))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -607,7 +607,7 @@ struct MissionDetailView: View {
                             when: mission.scheduledDate,
                             senderName: userName.isEmpty ? nil : userName
                         ),
-                        subject: Text("I've planned something for us 💕")
+                        subject: Text("I've planned something 📍")
                     ) {
                         inviteLabel("Send the invitation", systemImage: "square.and.arrow.up")
                     }

@@ -118,9 +118,9 @@ private struct WelcomeScreen: View {
             }
 
             HStack(spacing: 12) {
-                featurePill(systemImage: "heart.fill",   label: "Connect")
-                featurePill(systemImage: "calendar",     label: "Plan")
-                featurePill(systemImage: "star.fill",    label: "Remember")
+                featurePill(systemImage: "map.fill",     label: "Discover")
+                featurePill(systemImage: "bookmark.fill", label: "Save")
+                featurePill(systemImage: "figure.walk",  label: "Go")
             }
             .padding(.horizontal, 24)
 
@@ -185,8 +185,8 @@ private struct HowItWorksScreen: View {
             // "you both picked the same thing → that's a match".
             VStack(spacing: 18) {
                 HStack(spacing: 24) {
-                    partnerCard(label: "You")
-                    partnerCard(label: "Your partner")
+                    partnerCard(label: "Saved")
+                    partnerCard(label: "Saved")
                 }
 
                 Image(systemName: "arrow.down")
@@ -244,7 +244,7 @@ private struct HowItWorksScreen: View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles")
                 .font(.system(size: 13, weight: .bold))
-            Text("It's a Match!")
+            Text("On your list")
                 .font(.system(size: 15, weight: .bold))
         }
         .foregroundStyle(.white)
