@@ -10,6 +10,14 @@ Project context for Claude Code sessions. Read this first.
 
 - **🛑 EVERYTHING IS PAUSED AS OF 2026-08-31 — read "THE 2026-08-31 READ" near the bottom BEFORE restarting anything.** Both Apple Search Ads campaigns are PAUSED (€0/day) and the daily content job is CAROUSELS-ONLY. This was deliberate, not neglect: **the paywall gate is still broken after the 1.0.9 fix**, so every euro of ad spend was buying installs into an experiment whose measuring instrument does not work. **Do not resume ads until no user-day exceeds the swipe cap without a `paywall_shown`.** The pivot decision (three options, see that section) is open and unmade.
 
+- **✅ 1.2.0 SUBMITTED 2026-09-02 (build 16) — THE PLACES PIVOT IS SHIPPED AND IN REVIEW.** State
+  `WAITING_FOR_REVIEW`, uploaded 12:07. This is option 1 from "THE OPEN DECISION" below,
+  executed: **iLovu stopped being a couples app and became a places app.** Near You is the
+  default tab; saving, planning, city search and account controls all work solo; couples
+  features appear only once a partner is connected. See "THE 1.2.0 LISTING REWRITE" near the
+  bottom for the store copy and the App Review gotchas — **read that section before the next
+  submission, it contains a trap that will recur.**
+
 - **⬅ BEFORE THE NEXT SHIP: read "Solo-first funnel fix (PROPOSED)" near the bottom.** A structural alternative to patching the sign-in and pairing leaks one at a time — it attacks the reason both leaks exist (a signed-in user has nowhere to store anything until pairing). Not locked; decide deliberately.
 - **⬅ START HERE BEFORE ANYTHING: read "ASA WORLDWIDE + 1.1.0 PLAN (2026-08-11)" near the bottom.** ASA went worldwide 2026-08-08 and blended CPI is now ~€0.50 (the ~€2.6 figure below is OBSOLETE). It carries the worldwide-cohort funnel (sign-in leak 45% → 15%), **four measurement bugs that make current numbers partly fog**, the **`Bool.random()` fake match shipping to production**, proof that **solo users already plan Missions**, the €0.50 unit economics (break-even = 1.3% install→paid, blocked ONLY by the per-couple paywall), and the build plan. **1.0.8 (branch `solo-paywall-1.0.8`) is BUILT**: the paywall is now
 reachable solo via two triggers (2nd Mission, and a remotely tunable 20/day swipe cap),
@@ -2010,3 +2018,107 @@ was historically our best deep-funnel cohort — one translation opens Spain AND
 and r/madrid can be reached ONLINE in Spanish from Vilnius.
 **You do NOT need to localise the app for Stages 1-2** — only the landing page and the matching
 emails. App localisation is Stage 3, and dropping the 165-card deck removes ~1/3 of the burden.
+
+
+---
+
+## THE 1.2.0 LISTING REWRITE (2026-09-02) — store copy, screenshots, and a review trap
+
+Written when 1.2.0 was submitted. Source files kept in the repo:
+**`LISTING-1.2.0.md`** (name/subtitle/keywords/description/what's-new) and
+**`REVIEW-NOTES-1.2.0.txt`** (what was pasted into App Review notes).
+
+### The listing now sells places, and deliberately stops buying counter intent
+
+    Name       iLovu: Date Ideas Near You                       26/30
+    Subtitle   Places to Go, Things to Do                       26/30
+    Keywords   restaurant,bar,cafe,hike,trail,weekend,night,city,guide,
+               explore,local,couple,plan,trip,spot,map,eat       99/100
+
+The previous listing was "iLovu: Couples Date Ideas" / "Plan Real Dates, Together" with
+keywords `widget, love counter, relationship tracker, anniversary, days together`. **Those
+keywords are the documented August keyword mismatch** (see THE 2026-08-31 READ) — they buy
+people who want a counter and hand them a venue swiper, which is the strongest candidate
+explanation for 85% one-and-done. **All of them are dropped. Do not put them back to chase
+free organic volume: an install that churns on day one is not free.**
+
+`date ideas` went into the NAME — the highest-weight ASO field — because it is the only term
+that ever converted for us (15% tap→install on €1.50 of €68 in August) and it never got
+budget, because Max Conversions walked the money to cheaper counter intent.
+
+**Keywords are single words only.** Apple combines them into phrases automatically, so
+`night out` would spend a character on the space and buy nothing, and repeating a word from
+the name or subtitle wastes the slot entirely.
+
+### ⚠️ THE REVIEW TRAP — the paywall is NOT reachable on a fresh install, and the old notes claimed it was
+
+The 1.1.x review notes said *"go to the HOME tab, tap ANY Mission card — the paywall appears
+immediately."* **That is false in 1.2.0 and was arguably always fragile.**
+
+`PaywallGate` arms on **2 saved places** (`missionThreshold = 2`, condition C) and **the count
+lives in device-local UserDefaults, not on the account** — so it does NOT travel with the demo
+login. A reviewer signing in on a clean device has a mission count of zero, finds an empty
+Saved tab, and rejects under 3.1.2 having never seen a paywall.
+
+**Every future submission's notes MUST walk the reviewer through saving two places first**,
+then opening one from the Saved tab. That is the only fast, reliable path in. (The swipe-cap
+route also works but needs ~10 swipes and depends on the remote `config/paywall.soloSwipeCap`
+value, which is a worse thing to promise a reviewer in writing.)
+
+**Two more stale claims fixed in the same pass, both created by the pivot:**
+- **Tab names.** For an UNPAIRED account the tabs are **`Near You` · `Saved` · `You`**.
+  "Home" and "Us" only exist once paired (`MainTabView.swift:139`). Notes that say "the US
+  tab" send a reviewer looking for a tab that is not on screen.
+- **The hidden long-press demo login is no longer necessary.** A public
+  **"Continue with Email"** button has been on the sign-in screen since 1.0.6
+  (`SignInView.swift:91`). The 1.5s wordmark long-press still works, but **telling a reviewer
+  to perform a secret timed gesture is a rejection you do not need** — point them at the
+  public button. The screen's copy also changed; "sign in to save your sparks" no longer exists.
+
+**GENERAL LESSON: review notes rot exactly like code comments, and nothing compiles them.**
+Every claim in them was true once. Re-verify each instruction against the current source
+before every submission, not just the ones about features you changed.
+
+### Screenshots — tooling, and the size ASC actually wanted
+
+Five images, composed from real simulator screenshots: brand gradient, Montserrat Bold
+headline + a muted subline, the screenshot scaled to fit (never cropped, never squashed) with
+rounded corners and a soft shadow. **No device frame** — frameless gives the UI more pixels,
+and the UI is what people judge. **No Higgsfield / generated backgrounds**: Apple requires
+screenshots to show the actual app, and generated art competes with the product for attention.
+
+    1  Good places near you     the deck, a real venue card
+    2  Know what it costs       the detail sheet with its price band
+    3  Save the ones you like   the saved list
+    4  Works in any city        city search, outdoors filters
+    5  Turn it into a plan      a mission with date and budget
+
+Order is deliberate — most people never swipe past image two, so image one carries the promise
+and image two carries the price band, which is the one thing Google Maps does not show and the
+actual reason to install.
+
+**⚠️ ASC asked for the 6.5" slot (1284×2778), NOT the 6.9" size (1320×2868) the simulator
+produces.** Both sets exist: `~/ilovu-listing-images/` and `~/ilovu-listing-images/6.5-inch/`.
+
+**`scripts/make_listing_images.py`** regenerates them (Pillow, in `~/ilovu-content/.venv`);
+edit `W, H` for a different slot. Takes `<src_dir> <out_dir> 'N|Headline|Subline' …` where N
+indexes the sorted source screenshots.
+
+**`scripts/ocr_screenshots.swift`** reads the text off screenshots via the macOS Vision
+framework (`swift scripts/ocr_screenshots.swift *.png`). **This is how to identify which
+screenshot is which without opening them** — genuinely useful, and it was the only way to do
+it in a session where the images could not be viewed directly.
+
+### Still open at submission
+
+- **Prices activate 2026-09-04** (€3.99 monthly / €19.99 annual). Nothing in the listing
+  quotes a price, deliberately — so the copy does not go stale on the 4th.
+- **VERIFY `appreview@ilovu.app` is not subscribed** before each submission. If that account
+  ever purchases during a review, the paywall stops appearing and the notes become false in
+  the worst possible place.
+- **Age rating is 17+ (18+ Brazil).** A places app with no chat, profiles or user-generated
+  content has no obvious reason to carry it, and 18+ is download-blocked in BR/AU/SG — free
+  reach in three storefronts. **But the parked singles layer needs 18+, so decide that first.**
+- **ASA is still PAUSED and the resume condition is unchanged:** no user-day may exceed the
+  swipe cap without a `paywall_shown`. After approval, the plan is ~€85 in Italy, exact match,
+  **Search Match OFF**.

@@ -1,0 +1,70 @@
+SIGN-IN FOR REVIEW
+
+iLovu offers Sign in with Apple, which the review team cannot complete, so we
+have provided a demo account that signs in with an email and password.
+
+The email option is public and needs no special gesture. On the first screen
+("Sign in to save the places you like and pick up right where you left off"),
+tap the white "Continue with Email" button directly below the Apple button.
+Choose the "Sign in" tab in the sheet that opens, then enter:
+
+  Email:    appreview@ilovu.app
+  Password: ilovu123
+
+USING THE APP WITHOUT A PARTNER
+
+iLovu works fully on its own. The demo account is deliberately not connected to
+a partner, so the app opens on the "Near You" tab and the bottom tabs read
+"Near You", "Saved", "You". Nothing in this review requires a second person or
+a second device.
+
+REACHING THE SUBSCRIPTION PAYWALL (Guideline 3.1.2)
+
+The demo account is NOT subscribed. The paywall arms once two places have been
+saved, so please save two places first:
+
+  1. Sign in with the demo account. The app opens on the "Near You" tab.
+     If asked for location permission, either answer is fine — the deck falls
+     back to a default city when location is unavailable.
+  2. Swipe RIGHT on two places (or tap the heart). Each one is saved and a
+     "Saved to your plans" confirmation appears.
+  3. Open the "Saved" tab.
+  4. Tap either saved place. The subscription paywall appears immediately.
+
+The paywall shows, in the app itself:
+  - The title and length of each plan — "Annual" (auto-renews yearly) and
+    "Monthly" (auto-renews monthly)
+  - The price of each plan, both visible upfront with nothing behind an extra tap
+  - "Cancel anytime" alongside each plan
+  - Working links to the Terms of Use / EULA (https://ilovu.io/terms) and the
+    Privacy Policy (https://ilovu.io/privacy) in the footer, next to Restore
+
+Either purchase completes in the Apple sandbox environment and unlocks Premium,
+or the paywall can be dismissed with the X in the top corner. The in-app
+purchases are not restricted by storefront or device.
+
+The App Description also contains a working Terms of Use (EULA) link, and the
+Privacy Policy URL is set in App Store Connect.
+
+ACCOUNT DELETION (Guideline 5.1.1(v))
+
+Account deletion is available in the app:
+
+  1. Sign in (the demo account, or a new account created with an email).
+  2. Open the "You" tab — the rightmost tab. It is labelled "Us" once a partner
+     is connected; on the demo account it reads "You".
+  3. Scroll to the bottom and tap "Delete Account".
+  4. A confirmation alert explains exactly what will be deleted.
+  5. Confirming permanently deletes the account and its data and returns to the
+     Sign In screen.
+
+This is a full deletion, not a deactivation. No email, phone call or website
+visit is required.
+
+WHAT CHANGED IN THIS VERSION
+
+iLovu was previously a couples app that required connecting with a partner
+before it was useful. In 1.2.0 the place discovery, saving and planning features
+all work for a single user, and the couples features appear only after a partner
+is connected. This is why the first tab, the tab names and the onboarding
+screens differ from the previous version.
