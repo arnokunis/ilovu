@@ -140,18 +140,23 @@ struct MainTabView: View {
                                  systemImage: isPaired ? "house" : "bookmark") }
                 .tag(AppTab.home)
 
-            // The 165-card couples deck and the relationship hub are PAIRED-ONLY.
-            // Not deleted — the code and content survive intact for the matching
-            // phase, and the three existing couples lose nothing at all.
+            // The 165-card couples deck is PAIRED-ONLY. Not deleted — the deck and
+            // its content survive intact for the matching phase.
             if isPaired {
                 SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow, coupleId: coupleId)
                     .tabItem { Label("Cards", systemImage: "square.stack") }
                     .tag(AppTab.cards)
-
-                UsView()
-                    .tabItem { Label("Us", systemImage: "heart.circle") }
-                    .tag(AppTab.us)
             }
+
+            // ALWAYS present. This tab holds Sign Out, Delete Account (App Store
+            // 5.1.1(v)) and Manage Subscription (3.1.2). It was briefly paired-only
+            // on 2026-09-02, which would have shipped an unpaired user no way to
+            // delete their account or manage the subscription they had just bought.
+            // UsView hides its own couples sections instead.
+            UsView()
+                .tabItem { Label(isPaired ? "Us" : "You",
+                                 systemImage: isPaired ? "heart.circle" : "person.circle") }
+                .tag(AppTab.us)
         }
         // Selected tab takes our brand coral. Unselected items use
         // iOS's default grey, which already matches the "soft grey"

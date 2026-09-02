@@ -417,41 +417,56 @@ struct UsView: View {
     // Daily question always shown; the vault below either lists
     // memories or shows the warm "first memory waiting" empty state.
 
+    /// A real, live couple. Couples sections show only for them; account and
+    /// subscription controls show for everyone.
+    private var isPaired: Bool {
+        coupleService.coupleId != nil && !coupleService.isOrphaned
+    }
+
     private var contentBelowHeader: some View {
         VStack(spacing: 16) {
             profileRow
 
-            // Partner gone → a gentle, honest notice replaces the "Connect" button
-            // (which would dead-end, since re-pairing ships later). Otherwise the
-            // normal connect entry point.
-            if coupleService.isOrphaned {
-                partnerLeftNotice
-            } else {
-                connectButton
+            // PIVOT 2026-09-02 — everything couples-specific is gated on isPaired,
+            // but this tab must NEVER be hidden outright: it holds Sign Out, Delete
+            // Account (App Store 5.1.1(v)) and Manage Subscription (3.1.2). Hiding
+            // it from unpaired users would strip account deletion and subscription
+            // management from the ~98% who are the only people able to subscribe —
+            // a near-certain rejection.
+            if isPaired {
+                // Partner gone → a gentle, honest notice replaces the "Connect"
+                // button (which would dead-end, since re-pairing ships later).
+                if coupleService.isOrphaned {
+                    partnerLeftNotice
+                } else {
+                    connectButton
+                }
+
+                // Optional, dismissible invitation right after connecting; once
+                // it's gone the permanent "Your story" row takes over.
+                if showSetupCard {
+                    setupCard
+                } else if coupleService.coupleId != nil {
+                    coupleStoryRow
+                }
             }
 
-            // Optional, dismissible invitation right after connecting; once it's
-            // gone (set or dismissed), the permanent "Your story" row takes over.
-            if showSetupCard {
-                setupCard
-            } else if coupleService.coupleId != nil {
-                coupleStoryRow
-            }
-
+            // Required for everyone, paired or not.
             subscriptionRow
 
             notificationsRow
 
-            // Daily Question moved to the Home dashboard (the daily-habit surface).
-            bucketListRow
+            if isPaired {
+                bucketListRow
 
-            if memoryStore.memories.isEmpty {
-                emptyState
-            } else {
-                mapRow
-                yearInReviewRow
-                ForEach(memoryStore.sortedByDate) { memory in
-                    memoryCard(memory)
+                if memoryStore.memories.isEmpty {
+                    emptyState
+                } else {
+                    mapRow
+                    yearInReviewRow
+                    ForEach(memoryStore.sortedByDate) { memory in
+                        memoryCard(memory)
+                    }
                 }
             }
 
