@@ -194,6 +194,17 @@ struct iLovuApp: App {
             Task { _ = try? await coupleService.currentCouple() }
         }
         syncRevenueCatIdentity(status)
+        // Tie GA4/BigQuery to the uid. Never set before 2026-09-02, which is why
+        // every cohort analysis began by guessing which device was the founder —
+        // and geo could not settle it, since a roaming phone reports its home
+        // country. Taken from `status` rather than Auth so this file needs no
+        // FirebaseAuth import; nil on sign-out stops a shared device attributing
+        // later events to the previous account.
+        if case .signedIn(let uid) = status {
+            AppAnalytics.setUser(uid)
+        } else {
+            AppAnalytics.setUser(nil)
+        }
         // Seed the is_paired analytics property for the current state; the
         // coupleId onChange below corrects it once the couple resolves async.
         AppAnalytics.setPaired(coupleService.coupleId != nil && !coupleService.isOrphaned)

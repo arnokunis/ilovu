@@ -38,6 +38,18 @@ struct SwipeView: View {
     @Environment(MatchService.self) private var matchService
     // Solo right-swipes save a plan locally, same as the Near You deck.
     @Environment(MissionStore.self) private var missionStore
+    // The swipe cap lives here too. It did NOT until 2026-09-02, and that was
+    // the bug: `swipe_made` is logged from TWO decks — this one and NearYouView —
+    // but only NearYouView ever called the gate. So every card-deck swipe was
+    // free and unlogged against the cap, and users hit 155, 95 and 364 swipes a
+    // day against a cap of 10 without ever seeing the wall. Two of the heaviest
+    // users in the app's history were never asked to pay at all.
+    // The gate is scope-keyed, so both decks share ONE daily allowance — which is
+    // what "10 swipes a day" was always meant to mean.
+    @Environment(CoupleService.self) private var coupleService
+    @Environment(PaywallGate.self) private var paywallGate
+    @Environment(SubscriptionService.self) private var subscriptionService
+    @State private var showPaywall = false
 
     /// Card just saved by a solo right-swipe — drives the confirmation toast.
     @State private var savedCardTitle: String? = nil
@@ -122,6 +134,26 @@ struct SwipeView: View {
                         withAnimation(LouvAnimation.spring) { self.savedCardTitle = nil }
                     }
             }
+        }
+        // Swipe-cap wall. Identical to NearYouView's so the purchase path is the
+        // same wherever the wall fires.
+        .sheet(isPresented: $showPaywall, onDismiss: {
+            AppAnalytics.log("paywall_dismissed", ["trigger": "swipe_limit"])
+        }) {
+            PaywallView(
+                isPaired:           coupleId != nil,
+                annualPriceText:    subscriptionService.annualDisplay?.priceText,
+                annualPerMonthText: subscriptionService.annualDisplay?.perMonthText,
+                monthlyPriceText:   subscriptionService.monthlyDisplay?.priceText,
+                onPurchase: { plan in
+                    switch plan {
+                    case .annual:  await subscriptionService.purchaseAnnual()
+                    case .monthly: await subscriptionService.purchaseMonthly()
+                    }
+                },
+                onRestore: { await subscriptionService.restore() }
+            )
+            .task { await subscriptionService.loadOfferings() }
         }
     }
 
@@ -220,6 +252,20 @@ struct SwipeView: View {
         // the master `deck` — otherwise the filtered card wouldn't actually
         // get marked as swiped.
         let topCard = visibleDeck.first
+
+        // Swipe cap — evaluated BEFORE the card is consumed, so hitting the wall
+        // never costs the user a card. Mirrors NearYouView exactly; the shared
+        // scope key means the two decks draw on the same daily allowance.
+        if paywallGate.registerSwipeAndShouldPresent(
+            scopeId: coupleService.paywallScope("swipe")) {
+            withAnimation(LouvAnimation.spring) { dragOffset = .zero }
+            showPaywall = true
+            AppAnalytics.log("paywall_shown", [
+                "trigger": "swipe_limit",
+                "scope": coupleId == nil ? "solo" : "couple"
+            ])
+            return
+        }
 
         // Subtle vibration so the swipe feels physical, not just visual.
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()

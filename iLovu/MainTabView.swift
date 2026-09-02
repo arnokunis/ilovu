@@ -50,8 +50,10 @@ struct MainTabView: View {
     // (mine OR the shared flag) is pushed into the paywall gate.
     @Environment(SubscriptionService.self) private var subscriptionService
 
-    // Cards is the headline feature so it's the default landing tab.
-    @State private var selectedTab: AppTab = .cards
+    // Near You is the default landing tab (was .cards until the 2026-09-02 pivot).
+    // It has to be: the Cards tab no longer exists for unpaired users, so landing
+    // there would select a tag that isn't in the TabView.
+    @State private var selectedTab: AppTab = .nearYou
 
     // The current couple's id now lives on the shared CoupleService (observable),
     // so it updates the instant pairing completes — including for the partner who
@@ -116,23 +118,40 @@ struct MainTabView: View {
     @State private var pushAskPending = false
     @State private var showPushAsk = false
 
+    /// A real, live couple. Solo users get a two-tab places app; couples keep all four.
+    private var isPaired: Bool {
+        coupleService.coupleId != nil && !coupleService.isOrphaned
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            HomeView(selectedTab: $selectedTab)
-                .tabItem { Label("Home", systemImage: "house") }
-                .tag(AppTab.home)
-
-            SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow, coupleId: coupleId)
-                .tabItem { Label("Cards", systemImage: "square.stack") }
-                .tag(AppTab.cards)
-
+            // PIVOT 2026-09-02 — Near You is FIRST and default. 48% of users open
+            // it and 76% of their swipes save a place; it is the only surface with
+            // real usage, and it works with one person, which nothing else here does.
             NearYouView(matchedEvent: $matchedEvent, eventToShow: $eventToShow, coupleId: coupleId)
                 .tabItem { Label("Near You", systemImage: "mappin.and.ellipse") }
                 .tag(AppTab.nearYou)
 
-            UsView()
-                .tabItem { Label("Us", systemImage: "heart.circle") }
-                .tag(AppTab.us)
+            // "Saved" for solo users — HomeView hides every couples ritual behind
+            // its own isPaired check, so this is a saved-places list for the ~98%
+            // who never pair and the full dashboard for those who do.
+            HomeView(selectedTab: $selectedTab)
+                .tabItem { Label(isPaired ? "Home" : "Saved",
+                                 systemImage: isPaired ? "house" : "bookmark") }
+                .tag(AppTab.home)
+
+            // The 165-card couples deck and the relationship hub are PAIRED-ONLY.
+            // Not deleted — the code and content survive intact for the matching
+            // phase, and the three existing couples lose nothing at all.
+            if isPaired {
+                SwipeView(matchedCard: $matchedCard, cardToShow: $cardToShow, coupleId: coupleId)
+                    .tabItem { Label("Cards", systemImage: "square.stack") }
+                    .tag(AppTab.cards)
+
+                UsView()
+                    .tabItem { Label("Us", systemImage: "heart.circle") }
+                    .tag(AppTab.us)
+            }
         }
         // Selected tab takes our brand coral. Unselected items use
         // iOS's default grey, which already matches the "soft grey"

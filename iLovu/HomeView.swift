@@ -110,6 +110,12 @@ struct HomeView: View {
     // Presents the pairing sheet from the unpaired-only connect card.
     @State private var showPairing: Bool = false
 
+    /// True only for a real, live couple. Drives the pivot's split: solo users get
+    /// a saved-places list, paired users keep the full dashboard unchanged.
+    private var isPaired: Bool {
+        coupleService.coupleId != nil && !coupleService.isOrphaned
+    }
+
     var body: some View {
         ZStack {
             Color.blushCream.ignoresSafeArea()
@@ -120,35 +126,43 @@ struct HomeView: View {
                 VStack(spacing: 24) {
                     greetingSection
 
-                    // The primary action for a couples app, made impossible to miss:
-                    // an unpaired user (never connected — orphaned survivors keep a
-                    // coupleId) sees a prominent invite card right on the dashboard,
-                    // not buried in the Us tab. Disappears the moment they pair.
-                    if coupleService.coupleId == nil {
-                        connectPartnerCard
+                    // PIVOT 2026-09-02 — this tab is "Saved" for the ~98% who never
+                    // pair: their saved places and nothing else. Every couples ritual
+                    // below is gated behind `isPaired` rather than deleted, so the
+                    // three existing couples keep the dashboard they have today and
+                    // the code survives for the matching phase.
+                    // The invite card is gone for solo users on purpose: pushing an
+                    // unpaired person to recruit a partner was the old thesis, and
+                    // 38 invites produced 6 pairs.
+                    if isPaired {
+                        sparkScoreCard
                     }
-
-                    sparkScoreCard
 
                     // Daily couple rituals, on the dashboard where daily attention
                     // lands. Orphaned → pass nil so answering falls back to local
                     // journaling instead of a perpetual "waiting for partner" lock.
-                    DailyQuestionCard(
-                        coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
-                        isOrphaned: coupleService.isOrphaned
-                    )
+                    if isPaired {
+                        DailyQuestionCard(
+                            coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
+                            isOrphaned: coupleService.isOrphaned
+                        )
+                    }
 
-                    WouldYouRatherCard(
-                        coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
-                        isOrphaned: coupleService.isOrphaned
-                    )
+                    if isPaired {
+                        WouldYouRatherCard(
+                            coupleId: coupleService.isOrphaned ? nil : coupleService.coupleId,
+                            isOrphaned: coupleService.isOrphaned
+                        )
+                    }
 
-                    gentleReminder
-                    thisWeeksSuggestionCard
+                    if isPaired {
+                        gentleReminder
+                        thisWeeksSuggestionCard
+                    }
                     missionsSection
                     // Hidden once the partner has deleted their account — there's
                     // no one to nudge (the call would ghost / error out).
-                    if !coupleService.isOrphaned {
+                    if isPaired && !coupleService.isOrphaned {
                         nudgeButton
                     }
                     quickStatsRow

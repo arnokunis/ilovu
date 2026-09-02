@@ -48,4 +48,16 @@ enum AppAnalytics {
     static func setPaired(_ paired: Bool) {
         Analytics.setUserProperty(paired ? "true" : "false", forName: "is_paired")
     }
+
+    /// Ties analytics to the Firebase uid.
+    ///
+    /// This was NEVER set until 2026-09-02, and the cost was real: with no uid on
+    /// any event, separating the founder's own usage from real users meant guessing
+    /// from event volume and geo — and geo lies, because a roaming phone reports its
+    /// home country. Every cohort read so far needed that detective work first.
+    /// Setting it makes founder traffic, support lookups and per-user funnels exact.
+    /// Passing nil on sign-out stops a shared device attributing to the last account.
+    static func setUser(_ uid: String?) {
+        Analytics.setUserID(uid)
+    }
 }
