@@ -451,20 +451,31 @@ struct UsView: View {
             // it from unpaired users would strip account deletion and subscription
             // management from the ~98% who are the only people able to subscribe —
             // a near-certain rejection.
-            if isPaired {
-                // Partner gone → a gentle, honest notice replaces the "Connect"
-                // button (which would dead-end, since re-pairing ships later).
-                if coupleService.isOrphaned {
-                    partnerLeftNotice
-                } else {
-                    connectButton
-                }
-
+            // FIX 2026-09-07 — this block had the pairing on-ramp INVERTED, and
+            // two of its branches were unreachable.
+            //
+            // `isPaired` is `coupleId != nil && !isOrphaned`, so inside `if isPaired`
+            // the orphaned test can never be true: `partnerLeftNotice` never rendered,
+            // and `connectButton` — the ONLY manual route to PairingView, where an
+            // invite is created or a code redeemed — showed exclusively to people who
+            // were ALREADY paired. An unpaired user had no way in at all, since
+            // HomeView.connectPartnerCard is defined and never rendered either. The
+            // only surviving path was an `ilovu://invite/<token>` deep link somebody
+            // else had to send. GA4 for 1.2.0 shows the result: 0 redemption attempts.
+            //
+            // The 2026-09-02 pivot correctly hid couples FEATURES behind `isPaired`;
+            // the connect button is not a feature, it is the door. Branch on the three
+            // real states instead of two overlapping ones.
+            if coupleService.coupleId == nil {
+                connectButton
+            } else if coupleService.isOrphaned {
+                partnerLeftNotice
+            } else {
                 // Optional, dismissible invitation right after connecting; once
                 // it's gone the permanent "Your story" row takes over.
                 if showSetupCard {
                     setupCard
-                } else if coupleService.coupleId != nil {
+                } else {
                     coupleStoryRow
                 }
             }

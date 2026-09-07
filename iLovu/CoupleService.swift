@@ -283,8 +283,14 @@ final class CoupleService {
     /// Redeems an invite by token: consumes it, then creates the couple doc
     /// linking creator + redeemer. Returns the new couple's id.
     @discardableResult
-    func redeem(token: String) async throws -> String {
+    func redeem(token rawToken: String) async throws -> String {
         guard Auth.auth().currentUser != nil else { throw InviteError.notSignedIn }
+
+        // Normalise here rather than at each call site: this is the only path to
+        // redemption, and typed / pasted / deep-linked codes all funnel through it.
+        // A deep-link token is already clean, so this is a no-op for that path.
+        let token = Self.normalizeInviteCode(rawToken)
+        guard !token.isEmpty else { throw InviteError.inviteNotFound }
 
         // Atomic redemption is a Cloud Function now: it consumes the invite AND
         // creates the couple doc in ONE Firestore transaction (Admin SDK), so the

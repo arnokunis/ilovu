@@ -43,9 +43,9 @@ struct PaywallView: View {
     // Real localized prices from RevenueCat packages, fed by the caller. nil →
     // the static fallback copy in annualInfo/monthlyInfo is used, so the screen
     // renders fully (and previews) without RevenueCat.
-    var annualPriceText:    String? = nil   // e.g. "€19.99/yr"
-    var annualPerMonthText: String? = nil   // e.g. "just $4.17/mo"
-    var monthlyPriceText:   String? = nil   // e.g. "€3.99/mo"
+    var annualPriceText:    String? = nil   // e.g. "€49.99/yr"
+    var annualPerMonthText: String? = nil   // e.g. "just €4.17/mo"
+    var monthlyPriceText:   String? = nil   // e.g. "€9.99/mo"
 
     /// Purchases the plan the user has selected. Returns the outcome so this view
     /// can dismiss on success, ignore a cancel, or surface a friendly error.
@@ -109,7 +109,7 @@ struct PaywallView: View {
     private struct PlanInfo {
         let plan: Plan
         let title: String
-        let price: String       // headline price, e.g. "€19.99/yr"
+        let price: String       // headline price, e.g. "€49.99/yr"
         let perMonth: String?   // softer per-month framing, e.g. "just $4.17/mo"
         let badge: String?      // floats on the card; annual-only
         let terms: String       // fine print shown under the CTA for this plan
@@ -133,15 +133,20 @@ struct PaywallView: View {
             // "save 40%", which after the 2026-09-04 repricing would have shown the
             // OLD price while charging the new one. A number that can rot into a lie
             // is worse than no number, so:
-            //   - the fallbacks now match the real prices (€19.99 / €3.99)
+            //   - the fallbacks now match the real prices (€49.99 / €9.99)
+            //     Repriced again 2026-09-07: monthly €3.99 -> €9.99, annual
+            //     €22.99 -> €49.99. At €3.99 the ads could never pay back —
+            //     breakeven needed 5.06% install-to-paid against a 2.8% market
+            //     median. At €9.99 breakeven is 2.10%. If you reprice again,
+            //     THESE THREE STRINGS MUST MOVE WITH IT.
             //   - the badge no longer quotes a percentage. The real saving is 58%,
             //     but any hardcoded figure is one price change away from being wrong
             //     again, and nobody remembers to update a badge.
             PlanInfo(
                 plan: .annual,
                 title: "Annual",
-                price: annualPriceText ?? "€19.99/yr",
-                perMonth: annualPerMonthText ?? "just €1.67/mo",
+                price: annualPriceText ?? "€49.99/yr",
+                perMonth: annualPerMonthText ?? "just €4.17/mo",
                 badge: "Best value",
                 terms: "Auto-renews yearly. Cancel anytime."
             )
@@ -152,7 +157,7 @@ struct PaywallView: View {
         PlanInfo(
             plan: .monthly,
             title: "Monthly",
-            price: monthlyPriceText ?? "€3.99/mo",
+            price: monthlyPriceText ?? "€9.99/mo",
             perMonth: nil,
             badge: nil,
             terms: "Auto-renews monthly. Cancel anytime."

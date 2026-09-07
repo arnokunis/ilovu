@@ -35,6 +35,38 @@
 			</array>
 		</dict>
 	</array>
+	<!-- SKAdNetwork — install attribution for the networks that will ADVERTISE this
+	     app. Added 2026-09-07, deliberately WITHOUT any SDK: SKAdNetwork postbacks
+	     go from Apple directly to the ad network, so an advertised app only has to
+	     declare the network's id here. No Facebook SDK, no ATT prompt, no privacy
+	     nutrition-label change is required for install-level attribution.
+	     (An SDK is only needed for post-install CONVERSION VALUES and user-level
+	     attribution — deliberately deferred until paid conversion is proven.)
+
+	     ONLY the networks that will run our campaigns belong here. This is NOT the
+	     long AdMob mediation list: that list is for apps which SHOW ads, and iLovu
+	     shows none. Apple Search Ads is absent on purpose — ASA attributes through
+	     Apple's own AdServices/AdAttributionKit, not SKAdNetwork, so it needs no id.
+	     Re-verify these against the networks' own docs before trusting them; the
+	     lists do change. Fetched 2026-09-07 from developers.facebook.com/docs/SKAdNetwork
+	     and developers.google.com. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<!-- Meta / Facebook -->
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+		<!-- Google Ads -->
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
