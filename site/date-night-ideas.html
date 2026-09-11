@@ -8,6 +8,26 @@
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
   gtag('config', 'G-BY93CRYSZK');
+
+  // Outbound App Store clicks -> GA4. 2026-09-11: the site has carried GA4 since
+  // launch but NOTHING fired when someone left for the App Store, so every content
+  // channel was unmeasurable — `app_store_click` had zero events in the app's whole
+  // history. Delegated on document so it covers every store link on the page,
+  // including ones added later, without editing each anchor.
+  document.addEventListener('click', function (e) {
+    var n = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+    var a = n && n.closest ? n.closest('a[href*="apps.apple.com"]') : null;
+    if (!a) return;
+    var q = new URLSearchParams(location.search);
+    gtag('event', 'app_store_click', {
+      link_url:  a.href,
+      page_path: location.pathname,
+      utm_source:   q.get('utm_source')   || '(none)',
+      utm_medium:   q.get('utm_medium')   || '(none)',
+      utm_campaign: q.get('utm_campaign') || '(none)'
+    });
+  }, true);
+
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
