@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>iLovu Madrid — early access</title>
-<meta name="description" content="Save the places you want to go in Madrid, put a time on one, and see who else wants to go. Join the early access list.">
-<link rel="canonical" href="https://ilovu.io/madrid">
+<title>iLovu — early access</title>
+<meta name="description" content="Save places and meet people. Save the places you want to go, put a time on one, and see who else wants to go.">
+<link rel="canonical" href="https://ilovu.io/early">
 <meta name="robots" content="noindex">
-<meta property="og:title" content="iLovu Madrid — early access">
-<meta property="og:description" content="Put a time on a place. See who else wants to go.">
-<meta property="og:url" content="https://ilovu.io/madrid">
+<meta property="og:title" content="iLovu — early access">
+<meta property="og:description" content="Save places and meet people. Put a time on a place, and see who else wants to go.">
+<meta property="og:url" content="https://ilovu.io/early">
 <meta property="og:type" content="website">
 
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-BY93CRYSZK"></script>
@@ -111,30 +111,39 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
 <body>
 <div class="wrap">
 
-  <div class="brand"><span>iLovu</span><span class="dot"></span><span class="city">Madrid</span></div>
+  <div class="brand"><span>iLovu</span><span class="dot"></span><span class="city">Early access</span></div>
 
   <main id="form-view">
-    <h1 id="head">You moved to Madrid.<br><em>Now you need people.</em></h1>
+    <h1 id="head">You moved to a new city.<br><em>Now you need people.</em></h1>
     <p class="sub" id="sub">Save the places you actually want to go. Put a time on one. See who else wants to go, and go together.</p>
 
-    <div class="count" id="count" hidden><span class="live"></span><span><b id="cnum">0</b> people in Madrid already on the list</span></div>
+    <div class="count" id="count" hidden><span class="live"></span><span><b id="cnum">0</b> people already on the list</span></div>
 
     <form id="f" novalidate>
       <label for="email">Get early access</label>
       <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@email.com" required>
 
+      <label for="city" style="margin-top:22px">Which city?</label>
+      <input id="city" name="city" type="text" autocomplete="address-level2" placeholder="Barcelona, Bali, Lisbon…" list="cities" required>
+      <datalist id="cities">
+        <option>Barcelona</option><option>Madrid</option><option>Lisbon</option><option>Bali (Canggu)</option>
+        <option>Bangkok</option><option>Chiang Mai</option><option>Mexico City</option><option>Berlin</option>
+        <option>Amsterdam</option><option>Valencia</option><option>Medellín</option><option>Cape Town</option>
+      </datalist>
+      <p class="fine" style="text-align:left;margin-top:7px">We open one city at a time. Yours moves up the queue with every person who asks for it.</p>
+
       <label for="tags" style="margin-top:22px">What would you actually do?</label>
       <div class="pills" id="tags"></div>
 
       <button class="cta" type="submit" id="go">Join the list</button>
-      <p class="fine">No app to download yet. We'll email you when Madrid opens.</p>
+      <p class="fine">No app to download yet. We'll email you when your city opens.</p>
       <p class="err" id="err" hidden></p>
     </form>
 
     <section class="how">
       <h2>How it works</h2>
       <div class="steps">
-        <div class="step"><div class="n">1</div><div><h3>Swipe places you like</h3><p>Rooftops, tapas bars, parks, football pitches. Every one you save lands on your map.</p></div></div>
+        <div class="step"><div class="n">1</div><div><h3>Swipe places you like</h3><p>Rooftops, bars, parks, football pitches, viewpoints. Every one you save lands on your map.</p></div></div>
         <div class="step"><div class="n">2</div><div><h3>Put a time on one</h3><p>Tonight, this weekend, Thursday at eight. That's the whole thing — a place plus a time.</p></div></div>
         <div class="step"><div class="n">3</div><div><h3>Anyone can join</h3><p>A group chat opens for that place. No requests, no approvals, no one-to-one messaging strangers.</p></div></div>
       </div>
@@ -148,7 +157,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
   <section class="done" id="done-view">
     <div class="big" id="pos">#1</div>
     <h2>You're on the list</h2>
-    <p id="donetext">We'll email you when Madrid opens. Bring someone — a map works better when the people on it know the city.</p>
+    <p id="donetext">We'll email you when your city opens. Bring someone — a map works better when the people on it know the city.</p>
     <div class="share">
       <button id="sh">Share the link</button>
       <button id="cp">Copy link</button>
@@ -169,12 +178,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
      so the DATA picks the sentence instead of us guessing which one travels. */
   var HOOKS = {
     moved: {
-      h: 'You moved to Madrid.<br><em>Now you need people.</em>',
+      h: 'You moved to a new city.<br><em>Now you need people.</em>',
       s: 'Save the places you actually want to go. Put a time on one. See who else wants to go, and go together.'
     },
     list: {
       h: 'Your saved list has 40 places.<br><em>You’ve been to three.</em>',
-      s: 'Going alone is the part nobody plans. Put a time on one place in Madrid and see who else wants to go.'
+      s: 'Going alone is the part nobody plans. Put a time on one of them and see who else wants to go.'
     }
   };
   var hook = HOOKS[q.get('h')] ? q.get('h') : 'moved';
@@ -210,6 +219,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
   f.addEventListener('submit', function(e){
     e.preventDefault();
     var email = document.getElementById('email').value.trim();
+    var city  = document.getElementById('city').value.trim();
+    if(city.length < 2){
+      err.textContent = "Tell us which city — it decides where we open first."; err.hidden = false; return;
+    }
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)){
       err.textContent = "That email doesn't look right — check it and try again."; err.hidden = false; return;
     }
@@ -218,7 +231,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
     fetch(API + '/joinWaitlist', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        email: email, hook: hook, tags: chosen,
+        email: email, city: city, hook: hook, tags: chosen,
         source: q.get('s') || q.get('utm_source') || '(direct)',
         referrer: document.referrer || ''
       })
@@ -226,10 +239,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
     .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
     .then(function(res){
       if(!res.ok) throw new Error(res.d && res.d.error || 'failed');
-      gtag('event','waitlist_signup',{city:'madrid',hook:hook,tags:chosen.join('|'),source:q.get('s')||'(direct)'});
+      gtag('event','waitlist_signup',{city:city,hook:hook,tags:chosen.join('|'),source:q.get('s')||'(direct)'});
       document.getElementById('pos').textContent = '#' + res.d.position;
       if(res.d.returning) document.getElementById('donetext').textContent =
-        "You were already on it — nothing lost. We'll email you when Madrid opens.";
+        "You were already on it — nothing lost. We'll email you when your city opens.";
       document.getElementById('form-view').hidden = true;
       document.getElementById('done-view').style.display = 'block';
       window.scrollTo({top:0,behavior:'smooth'});
@@ -240,10 +253,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
     });
   });
 
-  var link = 'https://ilovu.io/madrid';
+  var link = 'https://ilovu.io/early';
   document.getElementById('sh').onclick = function(){
     gtag('event','waitlist_share',{method:'native'});
-    if(navigator.share) navigator.share({title:'iLovu Madrid', text:'Places in Madrid, and people to go with.', url:link}).catch(function(){});
+    if(navigator.share) navigator.share({title:'iLovu', text:'Places you want to go, and people to go with.', url:link}).catch(function(){});
     else copy();
   };
   document.getElementById('cp').onclick = function(){ gtag('event','waitlist_share',{method:'copy'}); copy(); };
