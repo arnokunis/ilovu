@@ -156,6 +156,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
 
   <section class="done" id="done-view">
     <div class="big" id="pos">#1</div>
+    <div id="posline" style="font-size:14px;font-weight:600;color:var(--soft);letter-spacing:.02em;margin-top:2px"></div>
     <h2>You're on the list</h2>
     <p id="donetext">We'll email you when your city opens. Bring someone — a map works better when the people on it know the city.</p>
     <div class="share">
@@ -240,9 +241,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
     .then(function(res){
       if(!res.ok) throw new Error(res.d && res.d.error || 'failed');
       gtag('event','waitlist_signup',{city:city,hook:hook,tags:chosen.join('|'),source:q.get('s')||'(direct)'});
-      document.getElementById('pos').textContent = '#' + res.d.position;
-      if(res.d.returning) document.getElementById('donetext').textContent =
-        "You were already on it — nothing lost. We'll email you when your city opens.";
+      var cityPos = res.d.cityPosition || res.d.position;
+      document.getElementById('pos').textContent = '#' + cityPos;
+      document.getElementById('posline').textContent = 'in ' + city;
+      document.getElementById('donetext').textContent = res.d.returning
+        ? "You were already on it \u2014 nothing lost. We'll email you when " + city + " opens."
+        : "We open the city that fills up first. Send this to someone in " + city + " \u2014 it moves you both up.";
       document.getElementById('form-view').hidden = true;
       document.getElementById('done-view').style.display = 'block';
       window.scrollTo({top:0,behavior:'smooth'});
