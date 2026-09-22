@@ -27,15 +27,15 @@
 :root{
   --coral:#FF6B6B;--orange:#FF8E53;--rose:#B8554A;--cream:#F6F2EE;
   --ground:#FCFAF8;--surface:#fff;--ink:#1B1917;--soft:#68625D;--faint:#97908A;
-  --line:#E9E3DD;--green:#34C759;
+  --line:#E9E3DD;--green:#34C759;--mapland:#EFEAE2;--mapgreen:#DCE4CE;--mapwater:#CBDCE2;--maproad:rgba(255,255,255,.92);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --cream:#1E1C1A;--ground:#131211;--surface:#1E1C1A;--ink:#F2EFEB;--soft:#A39C95;
-  --faint:#78716B;--line:#2C2926;--rose:#E89080;
+  --faint:#78716B;--line:#2C2926;--rose:#E89080;--mapland:#211F1C;--mapgreen:#262B20;--mapwater:#1D282B;--maproad:rgba(255,255,255,.055);
 }}
 :root[data-theme="dark"]{
   --cream:#1E1C1A;--ground:#131211;--surface:#1E1C1A;--ink:#F2EFEB;--soft:#A39C95;
-  --faint:#78716B;--line:#2C2926;--rose:#E89080;
+  --faint:#78716B;--line:#2C2926;--rose:#E89080;--mapland:#211F1C;--mapgreen:#262B20;--mapwater:#1D282B;--maproad:rgba(255,255,255,.055);
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -106,6 +106,32 @@ footer{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);font-si
 footer a{color:var(--faint)}
 [hidden]{display:none!important}
 button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
+
+/* ---- hero map: the product, above the fold. Pure CSS so it paints instantly
+   on video traffic instead of waiting on an image. ---- */
+.heromap{
+  position:relative;margin:18px -22px 0;height:250px;overflow:hidden;
+  background:var(--mapland);border-block:1px solid var(--line);
+}
+.heromap .grid{position:absolute;inset:-20%;
+  background:
+    repeating-linear-gradient(31deg,transparent 0 34px,var(--maproad) 34px 38px),
+    repeating-linear-gradient(121deg,transparent 0 46px,var(--maproad) 46px 49px),
+    repeating-linear-gradient(76deg,transparent 0 88px,var(--maproad) 88px 92px);
+}
+.heromap .park{position:absolute;background:var(--mapgreen);border-radius:46% 54% 50% 50%}
+.heromap .water{position:absolute;left:-12%;top:62%;width:130%;height:26px;background:var(--mapwater);transform:rotate(-8deg)}
+.heromap .fade{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 45%,var(--ground) 100%)}
+.pin{position:absolute;transform:translate(-50%,-50%);z-index:3}
+.pin .b{position:relative;display:grid;place-items:center;border-radius:50%;background:var(--surface);box-shadow:0 2px 9px rgba(40,30,20,.24)}
+.pin.q .b{width:27px;height:27px;font-size:13px}
+.pin.q .n{position:absolute;top:-4px;right:-7px;background:var(--faint);color:var(--surface);font-size:9px;font-weight:700;border-radius:999px;padding:0 4px;line-height:15px}
+.pin.live .b{width:42px;height:42px;font-size:19px;box-shadow:0 0 0 3px var(--coral),0 3px 12px rgba(40,30,20,.3)}
+.pin.live .f{position:absolute;right:-5px;bottom:-3px;width:20px;height:20px;border-radius:50%;border:2px solid var(--surface);background:var(--orange);display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff}
+.pin.live .t{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--coral);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap;box-shadow:0 1px 4px rgba(40,30,20,.22)}
+.maplegend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--faint)}
+.maplegend b{color:var(--soft);font-weight:600}
+@media (max-width:420px){.heromap{height:216px}}
 </style>
 </head>
 <body>
@@ -114,6 +140,21 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--rose);outline-o
   <div class="brand"><span>iLovu</span><span class="dot"></span><span class="city">Early access</span></div>
 
   <main id="form-view">
+  <div class="heromap" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="park" style="left:-7%;top:6%;width:34%;height:34%"></div>
+    <div class="park" style="left:66%;top:-4%;width:40%;height:38%"></div>
+    <div class="water"></div>
+    <div class="pin q" style="left:17%;top:30%"><span class="b">☕<span class="n">4</span></span></div>
+    <div class="pin q" style="left:76%;top:26%"><span class="b">🍷<span class="n">7</span></span></div>
+    <div class="pin q" style="left:33%;top:62%"><span class="b">🎬<span class="n">3</span></span></div>
+    <div class="pin q" style="left:88%;top:58%"><span class="b">🖼<span class="n">9</span></span></div>
+    <div class="pin live" style="left:49%;top:41%"><span class="t">Sat 11:00</span><span class="b">🌳<span class="f">L</span></span></div>
+    <div class="pin q" style="left:62%;top:74%"><span class="b">⚽<span class="n">5</span></span></div>
+    <div class="fade"></div>
+  </div>
+  <p class="maplegend"><span><b>4</b> saved it</span><span><b>Lucía</b> is going Saturday</span><span><b>Join</b> — a chat opens</span></p>
+
     <h1 id="head">You moved to a new city.<br><em>Now you need people.</em></h1>
     <p class="sub" id="sub">Save the places you actually want to go. Put a time on one. See who else wants to go, and go together.</p>
 
